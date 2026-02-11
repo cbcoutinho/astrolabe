@@ -1,0 +1,75 @@
+name: Bump version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    if: "!startsWith(github.event.head_commit.message, 'bump:') && !startsWith(github.event.head_commit.message, 'chore(release):')"
+    runs-on: ubuntu-latest
+    name: "Bump version and create changelog"
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          fetch-depth: 0
+          token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Install commitizen
+        run: pip install commitizen
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        id: bump
+        run: |
+          set -euo pipefail
+
+          echo "Checking for version bump..."
+          if ! output=$(cz --config .cz.toml bump --yes 2>&1); then
+            if echo "$output" | grep -q "\[NO_COMMITS_TO_BUMP\]"; then
+              echo "No commits eligible for version bump"
+              echo "$output"
+              echo "bumped=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "Version bump failed"
+            echo "$output"
+            exit 1
+          fi
+
+          echo "$output"
+          echo "bumped=true" >> $GITHUB_OUTPUT
+
+      - name: Push tags
+        if: steps.bump.outputs.bumped == 'true'
+        run: |
+          git push
+          git push --tags
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.bump.outputs.bumped }}" == "true" ]; then
+            tag=$(git tag --sort=-creatordate | head -n 1)
+            echo "## Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Astrolabe**: \`$tag\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Tag has been pushed and release workflow will trigger automatically." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No version bump required - no relevant commits found since last release." >> $GITHUB_STEP_SUMMARY
+          fi
