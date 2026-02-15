@@ -27,18 +27,18 @@ Astrolabe connects to a semantic search service that understands the meaning of 
 2. Grant background access to allow indexing of your content
 3. Start searching with natural language in Nextcloud's search bar
 
-See [documentation](https://github.com/cbcoutinho/nextcloud-mcp-server) for configuration details.
+See [documentation](https://github.com/cbcoutinho/astrolabe) for configuration details.
 	]]></description>
 	<version>0.10.1</version>
 	<licence>agpl</licence>
 	<author homepage="https://github.com/cbcoutinho">Chris Coutinho</author>
 	<namespace>Astrolabe</namespace>
 	<category>ai</category>
-	<bugs>https://github.com/cbcoutinho/nextcloud-mcp-server/issues</bugs>
-	<repository type="git">https://github.com/cbcoutinho/nextcloud-mcp-server</repository>
-	<screenshot>https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/third_party/astrolabe/screenshots/02-semantic-search-with-plot.png?raw=1</screenshot>
-	<screenshot>https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/third_party/astrolabe/screenshots/01-unified-search-astrolabe.png?raw=1</screenshot>
-	<screenshot>https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/third_party/astrolabe/screenshots/03-chunk-viewer-open.png?raw=1</screenshot>
+	<bugs>https://github.com/cbcoutinho/astrolabe/issues</bugs>
+	<repository type="git">https://github.com/cbcoutinho/astrolabe</repository>
+	<screenshot>https://github.com/cbcoutinho/astrolabe/blob/main/screenshots/02-semantic-search-with-plot.png?raw=1</screenshot>
+	<screenshot>https://github.com/cbcoutinho/astrolabe/blob/main/screenshots/01-unified-search-astrolabe.png?raw=1</screenshot>
+	<screenshot>https://github.com/cbcoutinho/astrolabe/blob/main/screenshots/03-chunk-viewer-open.png?raw=1</screenshot>
 	<dependencies>
 		<nextcloud min-version="31" max-version="32"/>
 	</dependencies>
