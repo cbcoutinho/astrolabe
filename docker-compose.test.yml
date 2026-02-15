@@ -1,0 +1,59 @@
+version: "3.8"
+
+# Integration test stack for Astrolabe
+# Tests the app against a real Nextcloud + MCP server backend
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   ./tests/integration/smoke-test.sh
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-ppassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: nextcloud:${NEXTCLOUD_VERSION:-31}-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin
+      NEXTCLOUD_TRUSTED_DOMAINS: "app localhost"
+    volumes:
+      - ./:/var/www/html/custom_apps/astrolabe:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/status.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    ports:
+      - "8080:80"
+
+  mcp:
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:latest
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      NEXTCLOUD_URL: http://app
+      NEXTCLOUD_USERNAME: admin
+      NEXTCLOUD_PASSWORD: admin
+    ports:
+      - "8000:8000"
