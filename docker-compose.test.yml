@@ -47,7 +47,7 @@ services:
       - "8080:80"
 
   mcp:
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:latest
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.63.4
     depends_on:
       app:
         condition: service_healthy

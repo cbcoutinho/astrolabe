@@ -24,27 +24,27 @@ NC='\033[0m' # No Color
 
 pass() {
     echo -e "  ${GREEN}PASS${NC}: $1"
-    ((PASSED++))
+    ((PASSED++)) || true
 }
 
 fail() {
     echo -e "  ${RED}FAIL${NC}: $1 — $2"
-    ((FAILED++))
+    ((FAILED++)) || true
 }
 
 skip() {
     echo -e "  ${YELLOW}SKIP${NC}: $1 — $2"
-    ((SKIPPED++))
+    ((SKIPPED++)) || true
 }
 
 # Wait for Nextcloud to be ready
 echo "Waiting for Nextcloud at ${BASE_URL}..."
-for i in $(seq 1 60); do
+for i in $(seq 1 10); do
     if curl -sf "${BASE_URL}/status.php" >/dev/null 2>&1; then
         break
     fi
-    if [ "$i" -eq 60 ]; then
-        echo "ERROR: Nextcloud not ready after 60s"
+    if [ "$i" -eq 10 ]; then
+        echo "ERROR: Nextcloud not ready after 10s"
         exit 1
     fi
     sleep 1
