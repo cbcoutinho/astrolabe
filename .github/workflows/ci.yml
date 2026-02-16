@@ -235,12 +235,127 @@ jobs:
       - name: Run PHPUnit
         run: composer run test:unit
 
+  # Integration smoke tests against real Nextcloud + MCP server
+  # Pattern: nextcloud/server from source + PHP built-in server + MCP container
+  integration:
+    runs-on: ubuntu-latest
+    needs: [node-build]
+    name: Integration (NC ${{ matrix.server-version }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        server-version: ['stable31', 'stable32']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Get php version
+        id: versions
+        uses: icewind1991/nextcloud-version-matrix@58becf3b4bb6dc6cef677b15e2fd8e7d48c0908f # v1.3.1
+        with:
+          filename: appinfo/info.xml
+
+      - name: Set up PHP ${{ steps.versions.outputs.php-max }}
+        uses: shivammathur/setup-php@cf4cade2721270509d5b1c766ab3549210a39a2a # v2.33.0
+        with:
+          php-version: ${{ steps.versions.outputs.php-max }}
+          extensions: bz2, ctype, curl, dom, fileinfo, gd, iconv, intl, json, libxml, mbstring, openssl, pcntl, posix, session, simplexml, xmlreader, xmlwriter, zip, zlib, pdo_mysql
+          coverage: none
+          ini-file: development
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read package.json node and npm engines version
+        uses: skjnldsv/read-package-engines-version-actions@06d6baf7d8f41934ab630e97d9e6c0bc9c9ac5e4 # v3
+        id: node-versions
+        with:
+          fallbackNode: '^20'
+          fallbackNpm: '^10'
+
+      - name: Set up Node ${{ steps.node-versions.outputs.nodeVersion }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ steps.node-versions.outputs.nodeVersion }}
+
+      - name: Set up npm ${{ steps.node-versions.outputs.npmVersion }}
+        run: npm i -g 'npm@${{ steps.node-versions.outputs.npmVersion }}'
+
+      - name: Build frontend assets
+        env:
+          CYPRESS_INSTALL_BINARY: 0
+          PUPPETEER_SKIP_DOWNLOAD: true
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare MySQL database
+        run: |
+          sudo systemctl start mysql
+          mysql -u root -proot -e "CREATE DATABASE nextcloud;"
+          mysql -u root -proot -e "CREATE USER 'nextcloud'@'localhost' IDENTIFIED WITH mysql_native_password BY '';"
+          mysql -u root -proot -e "GRANT ALL ON nextcloud.* TO 'nextcloud'@'localhost';"
+
+      - name: Clone Nextcloud server (${{ matrix.server-version }})
+        working-directory: ../
+        run: git clone https://github.com/nextcloud/server.git --recursive --depth 1 -b ${{ matrix.server-version }}
+
+      - name: Install Nextcloud
+        working-directory: ../
+        run: |
+          cp -r astrolabe server/apps/
+          cd server
+          php occ maintenance:install \
+            --database-name nextcloud \
+            --database-user nextcloud \
+            --admin-user admin \
+            --admin-pass admin \
+            --database mysql \
+            --database-pass=''
+          php occ -V
+          php occ app:enable astrolabe
+
+      - name: Start PHP server
+        working-directory: ../server/
+        run: php -S localhost:8080 > data/php.log 2>&1 &
+
+      - name: Start MCP server
+        run: |
+          docker run -d --name mcp-server \
+            --network host \
+            -e NEXTCLOUD_URL=http://localhost:8080 \
+            -e NEXTCLOUD_USERNAME=admin \
+            -e NEXTCLOUD_PASSWORD=admin \
+            ghcr.io/cbcoutinho/nextcloud-mcp-server:0.63.4
+
+      - name: Configure Astrolabe
+        working-directory: ../server/
+        run: php occ config:system:set mcp_server_url --value http://localhost:8000
+
+      - name: Run smoke tests
+        run: |
+          chmod +x tests/integration/smoke-test.sh
+          ./tests/integration/smoke-test.sh http://localhost:8080
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Nextcloud log ==="
+          cat ../server/data/nextcloud.log 2>/dev/null | tail -50 || true
+          echo ""
+          echo "=== PHP log ==="
+          cat ../server/data/php.log 2>/dev/null | tail -50 || true
+          echo ""
+          echo "=== MCP server log ==="
+          docker logs mcp-server 2>&1 | tail -50 || true
+
   # Summary job
   summary:
     permissions:
       contents: none
     runs-on: ubuntu-latest
-    needs: [node-build, eslint, stylelint, php-cs, psalm, phpunit]
+    needs: [node-build, eslint, stylelint, php-cs, psalm, phpunit, integration]
     if: always()
     name: ci-summary
     steps:
@@ -252,6 +367,10 @@ jobs:
           fi
           if ${{ needs.php-cs.result != 'success' || needs.psalm.result != 'success' || needs.phpunit.result != 'success' }}; then
             echo "PHP checks failed"
+            exit 1
+          fi
+          if ${{ needs.integration.result != 'success' }}; then
+            echo "Integration tests failed"
             exit 1
           fi
           echo "All checks passed"
