@@ -34,7 +34,7 @@
     "@nextcloud/eslint-config": "8.4.2",
     "@nextcloud/stylelint-config": "3.1.1",
     "@vitejs/plugin-vue": "^6.0.3",
-    "sass-embedded": "^1.97.1",
+    "sass-embedded": "^1.98.0",
     "terser": "5.44.1",
     "vite": "7.2.7"
   }
