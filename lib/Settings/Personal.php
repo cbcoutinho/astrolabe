@@ -122,6 +122,22 @@ class Personal implements ISettings {
 				TemplateResponse::RENDER_AS_BLANK
 			);
 		}
+		// Single-user BasicAuth mode - show limited status (no OAuth available)
+		elseif ($authMode === 'basic') {
+			$parameters = [
+				'userId' => $userId,
+				'serverUrl' => $this->client->getPublicServerUrl(),
+				'serverStatus' => $serverStatus,
+				'authMode' => $authMode,
+				'vectorSyncEnabled' => $serverStatus['vector_sync_enabled'] ?? false,
+			];
+			return new TemplateResponse(
+				Application::APP_ID,
+				'settings/personal-basic',
+				$parameters,
+				TemplateResponse::RENDER_AS_BLANK
+			);
+		}
 		// For OAuth modes, if no token or token is expired, show OAuth authorization UI
 		elseif (!$token || $this->tokenStorage->isExpired($token)) {
 			$oauthUrl = $this->urlGenerator->linkToRoute('astrolabe.oauth.initiateOAuth');

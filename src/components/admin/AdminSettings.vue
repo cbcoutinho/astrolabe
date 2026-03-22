@@ -24,6 +24,9 @@
 						<strong>{{ t('astrolabe', 'Uptime') }}:</strong> {{ formatUptime(serverStatus.uptime_seconds) }}
 					</p>
 					<p>
+						<strong>{{ t('astrolabe', 'Auth Mode') }}:</strong> {{ serverStatus?.auth_mode || 'Unknown' }}
+					</p>
+					<p>
 						<strong>{{ t('astrolabe', 'Semantic Search') }}:</strong>
 						<span v-if="vectorSyncEnabled" class="status-badge status-enabled">
 							{{ t('astrolabe', 'Enabled') }}
@@ -34,6 +37,17 @@
 					</p>
 				</div>
 			</div>
+
+			<!-- Warning: Vector sync disabled -->
+			<NcNoteCard v-if="!vectorSyncEnabled" type="warning">
+				<p><strong>{{ t('astrolabe', 'Semantic Search Not Configured') }}</strong></p>
+				<p>{{ t('astrolabe', 'The MCP server does not have vector sync enabled. Astrolabe requires vector sync for semantic search, visualization, and webhooks.') }}</p>
+				<p>
+					<a href="https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/docs/configuration.md" target="_blank">
+						{{ t('astrolabe', 'See the Configuration Guide for details.') }}
+					</a>
+				</p>
+			</NcNoteCard>
 
 			<!-- Indexing Metrics -->
 			<div v-if="vectorSyncEnabled && vectorSyncStatus" class="admin-section">
@@ -292,19 +306,24 @@ async function loadServerStatus() {
 	error.value = null
 
 	try {
-		// Fetch server status asynchronously
-		const [statusResponse, syncResponse] = await Promise.all([
-			axios.get(generateUrl('/apps/astrolabe/api/admin/server-status')),
-			axios.get(generateUrl('/apps/astrolabe/api/admin/vector-status')),
-		])
+		// Fetch server status first (required)
+		const statusResponse = await axios.get(generateUrl('/apps/astrolabe/api/admin/server-status'))
 
 		if (statusResponse.data.success) {
 			serverStatus.value = statusResponse.data.status
 			vectorSyncEnabled.value = statusResponse.data.status?.vector_sync_enabled ?? false
 		}
 
-		if (syncResponse.data.success) {
-			vectorSyncStatus.value = syncResponse.data.status
+		// Fetch vector sync status only if enabled (non-fatal)
+		if (vectorSyncEnabled.value) {
+			try {
+				const syncResponse = await axios.get(generateUrl('/apps/astrolabe/api/admin/vector-status'))
+				if (syncResponse.data.success) {
+					vectorSyncStatus.value = syncResponse.data.status
+				}
+			} catch (syncErr) {
+				console.warn('Vector sync status unavailable:', syncErr.message)
+			}
 		}
 	} catch (err) {
 		console.error('Failed to load server status:', err)
