@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.12.0 (2026-03-22)
+
+### Feat
+
+- add Claude code review and interactive CI workflows
+
+### Fix
+
+- handle missing vector sync gracefully in admin settings (#637)
+
 ## v0.11.0 (2026-03-02)
 
 ### Feat
