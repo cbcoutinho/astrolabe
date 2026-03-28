@@ -7,11 +7,14 @@
  * These tests require:
  * - Nextcloud with Astrolabe, OIDC, and Notes apps installed
  * - MCP server running in login-flow mode with semantic search enabled
- * - Test data seeded and vector sync completed (handled by start-server.js)
+ * - Test data seeded via app-hooks (notes created in admin's Notes folder)
+ *
+ * Vector sync only begins after the user completes the authorization flow,
+ * so the search test handles auth → sync wait → search in sequence.
  */
 
 import { test, expect } from './fixtures.ts'
-import { completeAuthorization, navigateToSettings, isAlreadyAuthorized } from './helpers/authorize.ts'
+import { completeAuthorization } from './helpers/authorize.ts'
 
 test.describe('Astrolabe search', () => {
 	test.describe.configure({ timeout: 120_000 })
@@ -58,7 +61,28 @@ test.describe('Astrolabe search', () => {
 		// Step 1: Complete the Astrolabe authorization flow
 		await completeAuthorization(page)
 
-		// Step 2: Navigate to the main search UI
+		// Step 2: Wait for vector sync to index the seeded test data
+		// After auth, the MCP server begins indexing the admin user's content.
+		// Poll the vector-status API until documents are indexed.
+		const maxSyncAttempts = 60
+		for (let i = 0; i < maxSyncAttempts; i++) {
+			const response = await page.request.get('/apps/astrolabe/api/vector-status')
+			if (response.ok()) {
+				const data = await response.json()
+				const status = data.status || {}
+				const indexed = status.indexed_documents || 0
+				const pending = status.pending_documents ?? -1
+				if (indexed > 0 && pending === 0) {
+					break
+				}
+			}
+			if (i === maxSyncAttempts - 1) {
+				throw new Error('Vector sync did not complete within timeout')
+			}
+			await page.waitForTimeout(5000)
+		}
+
+		// Step 3: Navigate to the main search UI
 		await page.goto('/apps/astrolabe')
 
 		// Step 3: Perform a search for the seeded test data

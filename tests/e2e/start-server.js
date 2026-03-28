@@ -18,7 +18,6 @@ const composeFile = join(__dirname, 'docker-compose.yml')
 const NEXTCLOUD_URL = 'http://localhost:8080'
 const MCP_HEALTH_URL = 'http://localhost:8000/health'
 const OIDC_DISCOVERY_URL = `${NEXTCLOUD_URL}/.well-known/openid-configuration`
-const VECTOR_STATUS_URL = `${NEXTCLOUD_URL}/apps/astrolabe/api/vector-status`
 
 /**
  * Run docker compose with the given arguments.
@@ -122,59 +121,6 @@ async function waitForMcp() {
 	)
 }
 
-/**
- * Wait for vector sync to index the seeded test data.
- * Polls the Astrolabe vector-status API until indexed_documents > 0
- * and pending_documents === 0.
- */
-async function waitForVectorSync() {
-	const authHeader = 'Basic ' + Buffer.from('admin:admin').toString('base64')
-	const maxAttempts = 60
-	const delayMs = 5000
-
-	process.stderr.write('Waiting for vector sync to index test data...\n')
-
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
-			const response = await fetch(VECTOR_STATUS_URL, {
-				headers: {
-					Authorization: authHeader,
-					'OCS-APIREQUEST': 'true',
-				},
-			})
-
-			if (response.ok) {
-				const data = await response.json()
-				const status = data.status || {}
-				const indexed = status.indexed_documents || 0
-				const pending = status.pending_documents ?? -1
-
-				if (indexed > 0 && pending === 0) {
-					process.stderr.write(
-						`Vector sync complete: ${indexed} documents indexed.\n`,
-					)
-					return
-				}
-
-				if (attempt % 6 === 0) {
-					process.stderr.write(
-						`Sync progress: indexed=${indexed}, pending=${pending}, status=${status.status || 'unknown'}\n`,
-					)
-				}
-			}
-		} catch {
-			// Service not ready yet
-		}
-
-		await new Promise((resolve) => setTimeout(resolve, delayMs))
-	}
-
-	// Don't fail hard — tests that need sync will fail individually
-	process.stderr.write(
-		'WARNING: Vector sync did not complete within timeout. Search tests may fail.\n',
-	)
-}
-
 // Signal handlers for graceful shutdown
 process.on('SIGTERM', () => {
 	stopServices()
@@ -192,7 +138,6 @@ try {
 	await waitForNextcloud()
 	await waitForOidc()
 	await waitForMcp()
-	await waitForVectorSync()
 
 	// Signal to Playwright that services are ready
 	process.stdout.write('Services are ready\n')
