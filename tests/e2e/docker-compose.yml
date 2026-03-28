@@ -78,6 +78,7 @@ services:
       TOKEN_STORAGE_DB: /app/data/tokens.db
       ENABLE_SEMANTIC_SEARCH: "true"
       VECTOR_SYNC_SCAN_INTERVAL: "5"
+      VECTOR_SYNC_USER_POLL_INTERVAL: "5"
       VECTOR_SYNC_PROCESSOR_WORKERS: "2"
       QDRANT_LOCATION: ":memory:"
 

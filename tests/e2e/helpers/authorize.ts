@@ -17,7 +17,7 @@ import type { Page } from '@playwright/test'
 export async function navigateToSettings(page: Page): Promise<void> {
 	await page.goto('/settings/user/astrolabe', { waitUntil: 'domcontentloaded' })
 	// Wait for the settings page content to render
-	await page.locator('.section h2').first().waitFor({ timeout: 15000 })
+	await page.getByRole('heading', { name: /Astrolabe/i }).waitFor({ timeout: 15000 })
 }
 
 /**
