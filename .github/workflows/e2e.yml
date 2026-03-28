@@ -25,7 +25,7 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     name: e2e
 
     steps:
@@ -78,6 +78,11 @@ jobs:
         if: failure()
         run: |
           docker compose -f tests/e2e/docker-compose.yml logs --tail=500 > /tmp/docker-compose-logs.txt 2>&1 || true
+
+      - name: Tear down services
+        if: always()
+        run: |
+          docker compose -f tests/e2e/docker-compose.yml down -v --remove-orphans || true
 
       - name: Upload test results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

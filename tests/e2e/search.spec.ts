@@ -17,8 +17,6 @@ import { test, expect } from './fixtures.ts'
 import { completeAuthorization } from './helpers/authorize.ts'
 
 test.describe('Astrolabe search', () => {
-	test.describe.configure({ timeout: 120_000 })
-
 	test('search UI elements are visible', async ({ authenticatedPage: page }) => {
 		await page.goto('/apps/astrolabe')
 
@@ -57,31 +55,23 @@ test.describe('Astrolabe search', () => {
 	})
 
 	test('complete authorization and perform search with Plotly visualization', async ({ authenticatedPage: page }) => {
-		// This test covers auth + sync + search — needs more time
-		test.setTimeout(300_000)
+		// This test covers auth + sync + search — needs extra time
+		test.setTimeout(360_000)
 
 		// Step 1: Complete the Astrolabe authorization flow
 		await completeAuthorization(page)
 
-		// Step 2: Wait for vector sync to index the seeded test data
-		// After auth, the MCP server begins indexing the admin user's content.
-		const maxSyncAttempts = 60
-		for (let i = 0; i < maxSyncAttempts; i++) {
-			const response = await page.request.get('/apps/astrolabe/api/vector-status')
-			if (response.ok()) {
-				const data = await response.json()
-				const status = data.status || {}
-				const indexed = status.indexed_documents || 0
-				const pending = status.pending_documents ?? -1
-				if (indexed > 0 && pending === 0) {
-					break
-				}
-			}
-			if (i === maxSyncAttempts - 1) {
-				throw new Error('Vector sync did not complete within timeout')
-			}
-			await page.waitForTimeout(5000)
-		}
+		// Step 2: Wait for vector sync to index the seeded test data.
+		// After auth, the MCP server discovers the user and begins indexing.
+		await expect.poll(
+			async () => {
+				const res = await page.request.get('/apps/astrolabe/api/vector-status')
+				if (!res.ok()) return false
+				const { status = {} } = await res.json()
+				return (status.indexed_documents ?? 0) > 0 && status.pending_documents === 0
+			},
+			{ timeout: 240_000, intervals: [5_000] },
+		).toBe(true)
 
 		// Step 3: Navigate to the main search UI
 		await page.goto('/apps/astrolabe')

@@ -17,7 +17,7 @@ import type { Page } from '@playwright/test'
 export async function navigateToSettings(page: Page): Promise<void> {
 	await page.goto('/settings/user/astrolabe', { waitUntil: 'domcontentloaded' })
 	// Wait for the settings page content to render
-	await page.getByRole('heading', { name: /Astrolabe/i }).waitFor({ timeout: 15000 })
+	await page.getByRole('heading', { level: 1, name: /Astrolabe/i }).waitFor({ timeout: 15000 })
 }
 
 /**
@@ -47,13 +47,10 @@ export async function authorizeOAuth(page: Page): Promise<void> {
 	await authorizeLink.waitFor({ timeout: 10000, state: 'visible' })
 	await authorizeLink.click()
 
-	// Handle OIDC consent screen — click "Authorize" on the consent page
-	try {
-		const consentButton = page.locator('input[type="submit"][value="Authorize"], button:has-text("Authorize")')
-		await consentButton.waitFor({ timeout: 15000, state: 'visible' })
+	// Handle OIDC consent screen if present — some flows skip it
+	const consentButton = page.locator('input[type="submit"][value="Authorize"], button:has-text("Authorize")')
+	if (await consentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
 		await consentButton.click()
-	} catch {
-		// Some flows skip the consent screen
 	}
 
 	// Wait for redirect back to Astrolabe settings
