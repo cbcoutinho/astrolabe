@@ -1,0 +1,79 @@
+# Docker Compose for Astrolabe E2E tests
+#
+# Provides a complete Nextcloud + MCP server (login-flow mode) environment
+# for testing the Astrolabe frontend UI.
+#
+# Required environment variables:
+#   MCP_SERVER_TAG - The MCP server image tag (e.g. "0.66.1")
+
+services:
+  db:
+    image: docker.io/library/mariadb:lts
+    restart: "no"
+    command: --transaction-isolation=READ-COMMITTED
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+
+  redis:
+    image: docker.io/library/redis:alpine
+    restart: "no"
+
+  app:
+    image: docker.io/library/nextcloud:32
+    restart: "no"
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - redis
+      - db
+    volumes:
+      # Mount the astrolabe app (project root, already built) into Nextcloud
+      - ../../:/opt/apps/astrolabe:ro
+      # Post-installation hooks to configure Nextcloud for testing
+      - ./app-hooks:/docker-entrypoint-hooks.d:ro
+    environment:
+      NEXTCLOUD_TRUSTED_DOMAINS: "app localhost"
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_HOST: db
+      REDIS_HOST: redis
+      MCP_SERVER_URL: http://mcp:8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -Ss http://localhost/status.php | grep '\"installed\":true' || exit 1"]
+      interval: 10s
+      timeout: 30s
+      retries: 30
+
+  mcp:
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:${MCP_SERVER_TAG:?MCP_SERVER_TAG must be set}
+    restart: "no"
+    command: ["--transport", "streamable-http", "--oauth"]
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - mcp-data:/app/data
+      - mcp-oauth-storage:/app/.oauth
+    environment:
+      NEXTCLOUD_HOST: http://app:80
+      NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
+      NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
+      ENABLE_LOGIN_FLOW: "true"
+      TOKEN_ENCRYPTION_KEY: "rxJvkBf7ZBjZZDL4a1sSqjhmjawhmbRMSOGfK8HDyKU="
+      TOKEN_STORAGE_DB: /app/data/tokens.db
+      ENABLE_SEMANTIC_SEARCH: "true"
+      VECTOR_SYNC_SCAN_INTERVAL: "5"
+      VECTOR_SYNC_PROCESSOR_WORKERS: "2"
+      QDRANT_LOCATION: ":memory:"
+
+volumes:
+  mcp-data:
+  mcp-oauth-storage:
