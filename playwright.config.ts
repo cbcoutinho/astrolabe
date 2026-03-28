@@ -21,7 +21,7 @@ export default defineConfig({
 	// Retry on CI only
 	retries: process.env.CI ? 1 : 0,
 
-	// Shard on CI, parallel locally
+	// Serial on CI (single docker-compose stack), parallel locally
 	workers: process.env.CI ? 1 : undefined,
 
 	// CI: blob (mergeable), dot (quick logs), github (PR annotations)

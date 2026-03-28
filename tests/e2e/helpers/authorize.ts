@@ -4,19 +4,20 @@
  *
  * Helpers for completing the Astrolabe two-step authorization flow
  * (OAuth + app password) in login-flow mode.
+ *
+ * All navigation uses relative paths so Playwright prepends baseURL
+ * from playwright.config.ts automatically.
  */
 
 import type { Page } from '@playwright/test'
-
-const BASE_URL = 'http://localhost:8080'
 
 /**
  * Navigate to Astrolabe personal settings page.
  */
 export async function navigateToSettings(page: Page): Promise<void> {
-	await page.goto(`${BASE_URL}/settings/user/astrolabe`, {
-		waitUntil: 'networkidle',
-	})
+	await page.goto('/settings/user/astrolabe', { waitUntil: 'domcontentloaded' })
+	// Wait for the settings page content to render
+	await page.locator('.section h2').first().waitFor({ timeout: 15000 })
 }
 
 /**
@@ -65,10 +66,7 @@ export async function authorizeOAuth(page: Page): Promise<void> {
  * Returns the generated app password string.
  */
 export async function generateAppPassword(page: Page): Promise<string> {
-	// Navigate to Security settings
-	await page.goto(`${BASE_URL}/settings/user/security`, {
-		waitUntil: 'networkidle',
-	})
+	await page.goto('/settings/user/security', { waitUntil: 'domcontentloaded' })
 
 	// Find the app password input and create one
 	const appNameInput = page.locator('#app-password-name')
@@ -108,7 +106,7 @@ export async function submitAppPassword(page: Page, appPassword: string): Promis
 	await saveButton.click()
 
 	// Wait for success — page should reload showing "Active" status
-	await page.waitForLoadState('networkidle', { timeout: 15000 })
+	await page.locator('.badge-success:has-text("Active")').waitFor({ timeout: 15000 })
 }
 
 /**

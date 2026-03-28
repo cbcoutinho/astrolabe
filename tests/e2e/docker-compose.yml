@@ -46,8 +46,8 @@ services:
       MCP_SERVER_URL: http://mcp:8000
     healthcheck:
       test: ["CMD-SHELL", "curl -Ss http://localhost/status.php | grep '\"installed\":true' || exit 1"]
-      interval: 10s
-      timeout: 30s
+      interval: 15s
+      timeout: 5s
       retries: 30
 
   mcp:
@@ -67,7 +67,8 @@ services:
       NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
       NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
       ENABLE_LOGIN_FLOW: "true"
-      TOKEN_ENCRYPTION_KEY: "rxJvkBf7ZBjZZDL4a1sSqjhmjawhmbRMSOGfK8HDyKU="
+      # Generated at runtime by start-server.js
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?Must be set by start-server.js}
       TOKEN_STORAGE_DB: /app/data/tokens.db
       ENABLE_SEMANTIC_SEARCH: "true"
       VECTOR_SYNC_SCAN_INTERVAL: "5"

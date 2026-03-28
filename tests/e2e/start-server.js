@@ -8,6 +8,7 @@
  * Handles SIGTERM/SIGINT to gracefully tear down containers.
  */
 
+import { randomBytes } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const composeFile = join(__dirname, 'docker-compose.yml')
 
 const NEXTCLOUD_URL = 'http://localhost:8080'
-const MCP_HEALTH_URL = 'http://localhost:8000/health'
+const MCP_HEALTH_URL = 'http://localhost:8000/health/ready'
 const OIDC_DISCOVERY_URL = `${NEXTCLOUD_URL}/.well-known/openid-configuration`
 
 function log(msg) {
@@ -29,7 +30,7 @@ function log(msg) {
  */
 function compose(args) {
 	try {
-		const output = execSync(`docker compose -f ${composeFile} ${args}`, {
+		const output = execSync(`docker compose -f "${composeFile}" ${args}`, {
 			stdio: 'pipe',
 			encoding: 'utf-8',
 		})
@@ -45,6 +46,11 @@ function compose(args) {
 }
 
 function startServices() {
+	// Generate a fresh Fernet-compatible encryption key for token storage (test-only).
+	// Fernet requires a 32-byte key encoded as URL-safe base64 with padding.
+	const tokenEncryptionKey = randomBytes(32).toString('base64')
+	process.env.TOKEN_ENCRYPTION_KEY = tokenEncryptionKey
+
 	log('Starting docker-compose services...')
 	compose('up -d')
 	log('Docker-compose services started.')
@@ -53,7 +59,7 @@ function startServices() {
 function stopServices() {
 	log('Stopping docker-compose services...')
 	try {
-		execSync(`docker compose -f ${composeFile} down -v --remove-orphans`, {
+		execSync(`docker compose -f "${composeFile}" down -v --remove-orphans --timeout 30`, {
 			stdio: 'pipe',
 		})
 	} catch {
@@ -122,7 +128,7 @@ async function waitForMcp() {
 	await waitForService(
 		'MCP server',
 		MCP_HEALTH_URL,
-		async (response) => [200, 404, 405].includes(response.status),
+		async (response) => response.ok,
 		{ maxAttempts: 30 },
 	)
 }

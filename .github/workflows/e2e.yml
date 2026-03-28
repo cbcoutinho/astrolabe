@@ -10,6 +10,10 @@ name: E2E Tests
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -85,6 +89,7 @@ jobs:
             playwright-report/
             /tmp/docker-compose-logs.txt
           retention-days: 7
+          if-no-files-found: ignore
 
   summary:
     runs-on: ubuntu-latest
@@ -93,4 +98,7 @@ jobs:
     name: e2e-summary
     steps:
       - name: Summary status
-        run: if ${{ needs.e2e.result != 'success' && needs.e2e.result != 'skipped' }}; then exit 1; fi
+        run: |
+          if [[ "${{ needs.e2e.result }}" != "success" && "${{ needs.e2e.result }}" != "skipped" ]]; then
+            exit 1
+          fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Configure MCP server URL for Astrolabe
-set -e
+set -euox pipefail
 
 if [ -z "${MCP_SERVER_URL:-}" ]; then
     echo "MCP_SERVER_URL not set, skipping"
