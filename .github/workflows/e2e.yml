@@ -10,12 +10,6 @@ name: E2E Tests
 
 on:
   pull_request:
-  workflow_dispatch:
-    inputs:
-      mcp_server_tag:
-        description: 'MCP server image tag (e.g. 0.66.1). Defaults to latest release.'
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -70,26 +64,11 @@ jobs:
           npm ci
           npm run build
 
-      - name: Resolve MCP server tag
-        id: mcp-tag
-        run: |
-          if [ -n "${{ inputs.mcp_server_tag }}" ]; then
-            echo "tag=${{ inputs.mcp_server_tag }}" >> $GITHUB_OUTPUT
-          else
-            TAG=$(gh api repos/cbcoutinho/nextcloud-mcp-server/releases/latest --jq '.tag_name' | sed 's/^v//')
-            echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          fi
-          echo "Using MCP server tag: $(cat $GITHUB_OUTPUT | grep tag= | cut -d= -f2)"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Install Playwright
         run: npx playwright install chromium --with-deps
 
       - name: Run E2E tests
         run: npx playwright test
-        env:
-          MCP_SERVER_TAG: ${{ steps.mcp-tag.outputs.tag }}
 
       - name: Collect service logs on failure
         if: failure()

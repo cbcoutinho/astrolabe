@@ -3,8 +3,8 @@
 # Provides a complete Nextcloud + MCP server (login-flow mode) environment
 # for testing the Astrolabe frontend UI.
 #
-# Required environment variables:
-#   MCP_SERVER_TAG - The MCP server image tag (e.g. "0.66.1")
+# The MCP server image tag is pinned below and updated separately
+# (e.g. by Renovate) when new versions are released.
 
 services:
   db:
@@ -51,7 +51,7 @@ services:
       retries: 30
 
   mcp:
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:${MCP_SERVER_TAG:?MCP_SERVER_TAG must be set}
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.66.1
     restart: "no"
     command: ["--transport", "streamable-http", "--oauth"]
     depends_on:
