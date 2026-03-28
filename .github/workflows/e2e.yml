@@ -28,13 +28,7 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shardIndex: [1, 2]
-        shardTotal: [2]
-
-    name: e2e (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+    name: e2e
 
     steps:
       - name: Checkout
@@ -93,7 +87,7 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Run E2E tests
-        run: npx playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: npx playwright test
         env:
           MCP_SERVER_TAG: ${{ steps.mcp-tag.outputs.tag }}
 
@@ -106,7 +100,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: ${{ !cancelled() }}
         with:
-          name: e2e-report-shard${{ matrix.shardIndex }}
+          name: e2e-report
           path: |
             test-results/
             playwright-report/
