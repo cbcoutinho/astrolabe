@@ -23,38 +23,37 @@ test.describe('Astrolabe search', () => {
 		await page.goto('/apps/astrolabe')
 
 		// Search input
-		const searchInput = page.locator('.mcp-search-input input')
-		await expect(searchInput).toBeVisible({ timeout: 15000 })
+		await expect(page.getByRole('textbox', { name: 'Search query' })).toBeVisible({ timeout: 15000 })
 
-		// Algorithm selector
-		const algorithmSelect = page.locator('.mcp-algorithm-select')
-		await expect(algorithmSelect).toBeVisible()
+		// Algorithm selector (combobox)
+		await expect(page.getByRole('combobox', { name: 'Search for option' })).toBeVisible()
 
 		// Search button
-		const searchButton = page.getByRole('button', { name: 'Search' })
-		await expect(searchButton).toBeVisible()
+		await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible()
 
 		// Advanced options toggle
-		const advancedToggle = page.getByText('Advanced options')
-		await expect(advancedToggle).toBeVisible()
+		await expect(page.getByRole('button', { name: 'Advanced options' })).toBeVisible()
 	})
 
 	test('advanced options expand and show controls', async ({ authenticatedPage: page }) => {
 		await page.goto('/apps/astrolabe')
 
 		// Click advanced options
-		await page.getByText('Advanced options').click()
+		await page.getByRole('button', { name: 'Advanced options' }).click()
+
+		// Scope to the main content area to avoid matching nav items
+		const mainContent = page.getByRole('main')
 
 		// Verify document type filters are visible
-		await expect(page.getByText('Document Types')).toBeVisible()
-		await expect(page.getByText('Notes')).toBeVisible()
-		await expect(page.getByText('Deck Cards')).toBeVisible()
+		await expect(mainContent.getByText('Document Types')).toBeVisible()
+		await expect(mainContent.getByText('Notes')).toBeVisible()
+		await expect(mainContent.getByText('Deck Cards')).toBeVisible()
 
 		// Result limit field
-		await expect(page.getByText('Result Limit')).toBeVisible()
+		await expect(mainContent.getByText('Result Limit')).toBeVisible()
 
 		// Score threshold slider
-		await expect(page.getByText('Minimum Score')).toBeVisible()
+		await expect(mainContent.getByText('Minimum Score')).toBeVisible()
 	})
 
 	test('complete authorization and perform search with Plotly visualization', async ({ authenticatedPage: page }) => {
@@ -88,7 +87,7 @@ test.describe('Astrolabe search', () => {
 		await page.goto('/apps/astrolabe')
 
 		// Step 4: Perform a search for the seeded test data
-		const searchInput = page.locator('.mcp-search-input input')
+		const searchInput = page.getByRole('textbox', { name: 'Search query' })
 		await expect(searchInput).toBeVisible({ timeout: 15000 })
 		await searchInput.fill('kubernetes cluster architecture')
 		await searchInput.press('Enter')

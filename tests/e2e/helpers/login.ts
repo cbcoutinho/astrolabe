@@ -19,10 +19,10 @@ export async function login(
 	await page.goto('/login')
 
 	// Fill login form
-	await page.getByLabel('Username or email').fill(username)
-	await page.getByLabel('Password', { exact: true }).fill(password)
-	await page.getByRole('button', { name: 'Log in' }).click()
+	await page.getByRole('textbox', { name: 'Account name or email' }).fill(username)
+	await page.getByRole('textbox', { name: 'Password' }).fill(password)
+	await page.getByRole('button', { name: 'Log in', exact: true }).click()
 
-	// Wait for login to complete — Nextcloud redirects to dashboard or files
+	// Wait for login to complete — Nextcloud redirects to dashboard or apps
 	await page.waitForURL(/\/(apps|index\.php)/, { timeout: 30000 })
 }

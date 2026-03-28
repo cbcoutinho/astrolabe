@@ -48,17 +48,13 @@ export default defineConfig({
 	webServer: {
 		// Starts docker-compose with Nextcloud + MCP server
 		command: 'node tests/e2e/start-server.js',
-		gracefulShutdown: {
-			signal: 'SIGTERM',
-			timeout: 15000,
-		},
+		// Poll MCP health endpoint — this is the last service to start
+		// (depends on Nextcloud being healthy first)
+		url: 'http://localhost:8000/health/ready',
 		reuseExistingServer: !process.env.CI,
 		stderr: 'pipe',
 		stdout: 'pipe',
-		// Allow up to 5 minutes for containers to start and sync to complete
+		// Allow up to 5 minutes for containers to start
 		timeout: 5 * 60 * 1000,
-		wait: {
-			stdout: /Services are ready/,
-		},
 	},
 })

@@ -5,6 +5,11 @@
 #
 # The MCP server image tag is pinned below and updated separately
 # (e.g. by Renovate) when new versions are released.
+#
+# NOTE: This compose file is intended to be run via `npx playwright test`,
+# which starts it through tests/e2e/start-server.js. If running directly,
+# generate your own TOKEN_ENCRYPTION_KEY:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 services:
   db:
@@ -67,8 +72,9 @@ services:
       NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
       NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
       ENABLE_LOGIN_FLOW: "true"
-      # Generated at runtime by start-server.js
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?Must be set by start-server.js}
+      # TEST-ONLY key — do not use in production. Generate your own with:
+      # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      TOKEN_ENCRYPTION_KEY: "W6NuJUhEl2eWBvWsVAa5XRZMMvpQ7Aubr3yI55F7oKw="
       TOKEN_STORAGE_DB: /app/data/tokens.db
       ENABLE_SEMANTIC_SEARCH: "true"
       VECTOR_SYNC_SCAN_INTERVAL: "5"
