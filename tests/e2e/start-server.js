@@ -19,50 +19,68 @@ const NEXTCLOUD_URL = 'http://localhost:8080'
 const MCP_HEALTH_URL = 'http://localhost:8000/health'
 const OIDC_DISCOVERY_URL = `${NEXTCLOUD_URL}/.well-known/openid-configuration`
 
+function log(msg) {
+	process.stderr.write(`[start-server] ${msg}\n`)
+}
+
 /**
  * Run docker compose with the given arguments.
+ * All output is captured and written to stderr so Playwright can display it.
  */
-function compose(args, options = {}) {
-	return execSync(`docker compose -f ${composeFile} ${args}`, {
-		stdio: options.quiet ? 'pipe' : 'inherit',
-		encoding: 'utf-8',
-		...options,
-	})
+function compose(args) {
+	try {
+		const output = execSync(`docker compose -f ${composeFile} ${args}`, {
+			stdio: 'pipe',
+			encoding: 'utf-8',
+		})
+		if (output.trim()) {
+			process.stderr.write(output)
+		}
+		return output
+	} catch (error) {
+		if (error.stderr) process.stderr.write(error.stderr)
+		if (error.stdout) process.stderr.write(error.stdout)
+		throw error
+	}
 }
 
 function startServices() {
-	process.stderr.write('Starting docker-compose services...\n')
+	log('Starting docker-compose services...')
 	compose('up -d')
-	process.stderr.write('Docker-compose services started.\n')
+	log('Docker-compose services started.')
 }
 
 function stopServices() {
-	process.stderr.write('Stopping docker-compose services...\n')
+	log('Stopping docker-compose services...')
 	try {
-		compose('down -v --remove-orphans', { quiet: true })
+		execSync(`docker compose -f ${composeFile} down -v --remove-orphans`, {
+			stdio: 'pipe',
+		})
 	} catch {
 		// Best-effort cleanup
 	}
-	process.stderr.write('Docker-compose services stopped.\n')
+	log('Docker-compose services stopped.')
 }
 
 /**
  * Poll a URL until it returns an expected response.
  */
-async function waitForService(name, url, checkFn, { maxAttempts = 60, delayMs = 5000, fetchOptions = {} } = {}) {
+async function waitForService(name, url, checkFn, { maxAttempts = 60, delayMs = 5000 } = {}) {
+	log(`Waiting for ${name} at ${url}...`)
+
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			const response = await fetch(url, fetchOptions)
+			const response = await fetch(url)
 			if (await checkFn(response)) {
-				process.stderr.write(`${name} is ready.\n`)
+				log(`${name} is ready.`)
 				return true
 			}
 		} catch {
 			// Service not up yet
 		}
 
-		if (attempt % 6 === 0) {
-			process.stderr.write(`Waiting for ${name}... (attempt ${attempt}/${maxAttempts})\n`)
+		if (attempt % 3 === 0) {
+			log(`Still waiting for ${name}... (attempt ${attempt}/${maxAttempts})`)
 		}
 
 		await new Promise((resolve) => setTimeout(resolve, delayMs))
@@ -71,9 +89,6 @@ async function waitForService(name, url, checkFn, { maxAttempts = 60, delayMs = 
 	throw new Error(`${name} did not become ready in time.`)
 }
 
-/**
- * Wait for Nextcloud to be installed and ready.
- */
 async function waitForNextcloud() {
 	await waitForService(
 		'Nextcloud',
@@ -86,11 +101,6 @@ async function waitForNextcloud() {
 	)
 }
 
-/**
- * Wait for OIDC discovery endpoint to be available.
- * This confirms the OIDC app is installed and configured correctly,
- * which is required for login-flow mode DCR.
- */
 async function waitForOidc() {
 	await waitForService(
 		'OIDC discovery',
@@ -99,7 +109,6 @@ async function waitForOidc() {
 			if (!response.ok) return false
 			try {
 				const data = await response.json()
-				// Verify it has the required OIDC fields
 				return !!(data.issuer && data.authorization_endpoint && data.token_endpoint)
 			} catch {
 				return false
@@ -109,9 +118,6 @@ async function waitForOidc() {
 	)
 }
 
-/**
- * Wait for the MCP server health endpoint.
- */
 async function waitForMcp() {
 	await waitForService(
 		'MCP server',
@@ -140,16 +146,17 @@ try {
 	await waitForMcp()
 
 	// Signal to Playwright that services are ready
+	log('All services healthy — signaling ready.')
 	process.stdout.write('Services are ready\n')
 
 	// Idle until shutdown signal
 	await new Promise(() => {})
 } catch (error) {
-	process.stderr.write(`Error: ${error.message}\n`)
+	log(`Error: ${error.message}`)
 
 	// Dump logs for debugging
 	try {
-		process.stderr.write('\n--- Docker Compose Logs ---\n')
+		log('--- Docker Compose Logs ---')
 		compose('logs --tail=100')
 	} catch {
 		// Best effort
