@@ -63,11 +63,16 @@ test.describe('Astrolabe search', () => {
 
 		// Step 2: Wait for vector sync to index the seeded test data.
 		// After auth, the MCP server discovers the user and begins indexing.
+		// Use page.evaluate(fetch) to run in the browser context with session cookies.
 		await expect.poll(
 			async () => {
-				const res = await page.request.get('/apps/astrolabe/api/vector-status')
-				if (!res.ok()) return false
-				const { status = {} } = await res.json()
+				const result = await page.evaluate(async () => {
+					const res = await fetch('/apps/astrolabe/api/vector-status')
+					if (!res.ok) return null
+					return res.json()
+				})
+				if (!result) return false
+				const status = result.status || {}
 				return (status.indexed_documents ?? 0) > 0 && status.pending_documents === 0
 			},
 			{ timeout: 240_000, intervals: [5_000] },
