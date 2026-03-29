@@ -50,10 +50,10 @@ export async function completeAuthorization(page: Page): Promise<void> {
 	await enableLink.waitFor({ timeout: 10000, state: 'visible' })
 	await enableLink.click()
 
-	// Handle OIDC consent screen if present — some flows auto-approve
-	const consentButton = page.locator('input[type="submit"][value="Authorize"], button:has-text("Authorize")')
-	if (await consentButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-		await consentButton.click()
+	// Handle OIDC consent screen — click "Allow" to grant access
+	const allowButton = page.getByRole('button', { name: 'Allow' })
+	if (await allowButton.isVisible({ timeout: 10000 }).catch(() => false)) {
+		await allowButton.click()
 	}
 
 	// Wait for redirect back to Astrolabe settings
