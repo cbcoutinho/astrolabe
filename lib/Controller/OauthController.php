@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
+use OC\Authentication\Token\IProvider as ITokenProvider;
+use OC\Authentication\Token\IToken;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenStorage;
 use OCP\AppFramework\Controller;
@@ -20,6 +22,7 @@ use OCP\IRequest;
 use OCP\ISession;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
+use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -42,6 +45,8 @@ class OauthController extends Controller {
 	private IL10N $l;
 	private IClient $httpClient;
 	private McpServerClient $client;
+	private ITokenProvider $tokenProvider;
+	private ISecureRandom $random;
 
 	public function __construct(
 		string $appName,
@@ -55,6 +60,8 @@ class OauthController extends Controller {
 		IL10N $l,
 		IClientService $clientService,
 		McpServerClient $client,
+		ITokenProvider $tokenProvider,
+		ISecureRandom $random,
 	) {
 		parent::__construct($appName, $request);
 		$this->config = $config;
@@ -66,6 +73,8 @@ class OauthController extends Controller {
 		$this->l = $l;
 		$this->httpClient = $clientService->newClient();
 		$this->client = $client;
+		$this->tokenProvider = $tokenProvider;
+		$this->random = $random;
 	}
 
 	/**
@@ -210,6 +219,11 @@ class OauthController extends Controller {
 				time() + ($tokenData['expires_in'] ?? 3600)
 			);
 
+			// Auto-provision app password for background sync (Login Flow v2)
+			// This generates a Nextcloud app password and sends it to the MCP server
+			// so the server can access Nextcloud APIs on behalf of this user.
+			$this->provisionAppPassword($userId, $mcpServerUrl);
+
 			// Clean up session
 			$this->session->remove('mcp_oauth_code_verifier');
 			$this->session->remove('mcp_oauth_state');
@@ -271,6 +285,74 @@ class OauthController extends Controller {
 		return new RedirectResponse(
 			$this->urlGenerator->linkToRoute('settings.PersonalSettings.index', ['section' => 'astrolabe'])
 		);
+	}
+
+	/**
+	 * Generate a Nextcloud app password and provision it on the MCP server.
+	 *
+	 * Uses Nextcloud's ITokenProvider to generate an app password (same mechanism
+	 * as the Security settings UI), then sends it to the MCP server for background
+	 * sync access.
+	 *
+	 * @param string $userId Nextcloud user ID
+	 * @param string $mcpServerUrl Internal MCP server URL
+	 */
+	private function provisionAppPassword(string $userId, string $mcpServerUrl): void {
+		try {
+			$user = $this->userSession->getUser();
+			if (!$user) {
+				throw new \Exception('User session lost during app password provisioning');
+			}
+
+			// Generate a random 72-character token (same as Nextcloud's AppPasswordController)
+			$token = $this->random->generate(
+				72,
+				ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS
+			);
+
+			// Register it as a permanent app token in Nextcloud
+			$this->tokenProvider->generateToken(
+				$token,
+				$userId,
+				$user->getDisplayName(),
+				null, // password — null since we're generating from an authenticated session
+				'Astrolabe Background Sync',
+				IToken::PERMANENT_TOKEN,
+				IToken::DO_NOT_REMEMBER
+			);
+
+			$this->logger->info("Generated app password for user: $userId");
+
+			// Store locally in Nextcloud preferences (encrypted)
+			$this->tokenStorage->storeBackgroundSyncPassword($userId, $token);
+
+			// Send to MCP server with BasicAuth (proves ownership of the password)
+			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . urlencode($userId) . '/app-password';
+
+			$response = $this->httpClient->post($mcpEndpoint, [
+				'auth' => [$userId, $token],
+				'headers' => [
+					'Content-Type' => 'application/json',
+					'Accept' => 'application/json',
+				],
+				'timeout' => 10,
+			]);
+
+			$statusCode = $response->getStatusCode();
+			$body = json_decode($response->getBody(), true);
+
+			if ($statusCode === 200 && ($body['success'] ?? false)) {
+				$this->logger->info("Successfully provisioned app password to MCP server for user: $userId");
+			} else {
+				$error = $body['error'] ?? 'Unknown error';
+				$this->logger->error("MCP server rejected app password for user $userId: $error");
+			}
+		} catch (\Exception $e) {
+			// Log but don't fail the OAuth flow — the user can retry app password provisioning
+			$this->logger->error("Failed to auto-provision app password for user $userId", [
+				'error' => $e->getMessage()
+			]);
+		}
 	}
 
 	/**
