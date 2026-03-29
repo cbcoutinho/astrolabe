@@ -23,7 +23,8 @@ echo "Configuring MCP server public URL: $MCP_PUBLIC_URL"
 php /var/www/html/occ config:system:set mcp_server_public_url --value="$MCP_PUBLIC_URL"
 
 # 3. Create OIDC client for Astrolabe OAuth flow
-CLIENT_ID="astrolabe-e2e-test"
+# OIDC app requires: A-Za-z0-9, min 32 chars, max 64 chars
+CLIENT_ID="astrolabeE2eTestOidcClientId00001"
 REDIRECT_URI="http://localhost:8080/apps/astrolabe/oauth/callback"
 SCOPES="openid profile email offline_access notes:read notes:write calendar:read calendar:write contacts:read contacts:write deck:read deck:write files:read files:write"
 
