@@ -13,3 +13,8 @@ node_modules/
 js/
 css/
 .phpunit.cache/
+
+# Playwright
+test-results/
+playwright-report/
+.playwright-mcp/

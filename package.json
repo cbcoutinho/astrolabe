@@ -11,7 +11,9 @@
     "dev": "vite --mode development build",
     "watch": "vite --mode development build --watch",
     "lint": "eslint src",
-    "stylelint": "stylelint src/**/*.vue src/**/*.scss src/**/*.css"
+    "stylelint": "stylelint src/**/*.vue src/**/*.scss src/**/*.css",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "type": "module",
   "browserslist": [
@@ -30,6 +32,7 @@
     "vue-material-design-icons": "^5.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@nextcloud/browserslist-config": "3.1.2",
     "@nextcloud/eslint-config": "8.4.2",
     "@nextcloud/stylelint-config": "3.1.1",
