@@ -25,6 +25,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.0 (2026-03-29)
+
+### Feat
+
+- auto-provision app password after OAuth callback
+- add Playwright E2E integration tests with login-flow mode
+
+### Fix
+
+- poll MCP server's public vector-sync API instead of Nextcloud proxy
+- use browser fetch for vector sync polling instead of page.request
+- click 'Allow' button on OIDC consent screen, not 'Authorize'
+- use valid OIDC client_id (32+ alphanumeric chars required)
+- configure Astrolabe OAuth client in post-installation hook
+- rewrite authorization flow for login-flow mode
+- address PR review feedback
+- address PR review feedback
+- address PR review feedback
+- address PR review feedback
+- pipe all docker-compose output through stderr for CI visibility
+- move vector sync wait from startup to search test
+
 ## v0.12.0 (2026-03-22)
 
 ### Feat
