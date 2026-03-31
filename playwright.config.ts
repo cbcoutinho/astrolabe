@@ -25,10 +25,10 @@ export default defineConfig({
 	workers: process.env.CI ? 1 : undefined,
 
 	// CI: blob (mergeable), dot (quick logs), github (PR annotations)
-	// Local: html report with traces
+	// Local: html report (never auto-open — use `npx playwright show-report`)
 	reporter: process.env.CI
 		? [['blob'], ['dot'], ['github']]
-		: 'html',
+		: [['html', { open: 'never' }]],
 
 	use: {
 		baseURL: process.env.BASE_URL ?? 'http://localhost:8080/index.php/',

@@ -4,12 +4,9 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
-use OC\Authentication\Token\IProvider as ITokenProvider;
-use OC\Authentication\Token\IToken;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenStorage;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\RedirectResponse;
@@ -22,7 +19,6 @@ use OCP\IRequest;
 use OCP\ISession;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
-use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -45,8 +41,6 @@ class OauthController extends Controller {
 	private IL10N $l;
 	private IClient $httpClient;
 	private McpServerClient $client;
-	private ITokenProvider $tokenProvider;
-	private ISecureRandom $random;
 
 	public function __construct(
 		string $appName,
@@ -60,8 +54,6 @@ class OauthController extends Controller {
 		IL10N $l,
 		IClientService $clientService,
 		McpServerClient $client,
-		ITokenProvider $tokenProvider,
-		ISecureRandom $random,
 	) {
 		parent::__construct($appName, $request);
 		$this->config = $config;
@@ -73,8 +65,6 @@ class OauthController extends Controller {
 		$this->l = $l;
 		$this->httpClient = $clientService->newClient();
 		$this->client = $client;
-		$this->tokenProvider = $tokenProvider;
-		$this->random = $random;
 	}
 
 	/**
@@ -219,11 +209,6 @@ class OauthController extends Controller {
 				time() + ($tokenData['expires_in'] ?? 3600)
 			);
 
-			// Auto-provision app password for background sync (Login Flow v2)
-			// This generates a Nextcloud app password and sends it to the MCP server
-			// so the server can access Nextcloud APIs on behalf of this user.
-			$this->provisionAppPassword($userId, $mcpServerUrl);
-
 			// Clean up session
 			$this->session->remove('mcp_oauth_code_verifier');
 			$this->session->remove('mcp_oauth_state');
@@ -231,9 +216,13 @@ class OauthController extends Controller {
 
 			$this->logger->info("OAuth flow completed successfully for user: $userId");
 
-			// Redirect back to personal settings
+			// Chain into Login Flow v2 provisioning.
+			// Redirect to our own provision action (same-origin) which then
+			// redirects to the MCP server's /app/provision endpoint.
+			// This avoids cross-origin redirect issues with the OIDC consent
+			// page's fetch()-based grant flow.
 			return new RedirectResponse(
-				$this->urlGenerator->linkToRoute('settings.PersonalSettings.index', ['section' => 'astrolabe'])
+				$this->urlGenerator->linkToRoute('astrolabe.oauth.provision')
 			);
 		} catch (\Exception $e) {
 			$this->logger->error('OAuth callback failed', [
@@ -288,71 +277,87 @@ class OauthController extends Controller {
 	}
 
 	/**
-	 * Generate a Nextcloud app password and provision it on the MCP server.
+	 * Initiate Login Flow v2 provisioning via the MCP server.
 	 *
-	 * Uses Nextcloud's ITokenProvider to generate an app password (same mechanism
-	 * as the Security settings UI), then sends it to the MCP server for background
-	 * sync access.
+	 * Called after OAuth callback completes. Makes a server-to-server request
+	 * to the MCP server's /app/provision endpoint (which requires an OAuth
+	 * bearer token) and captures the redirect to Nextcloud's Login Flow v2
+	 * login page. The browser is then redirected to that login page.
 	 *
-	 * @param string $userId Nextcloud user ID
-	 * @param string $mcpServerUrl Internal MCP server URL
+	 * @return RedirectResponse|TemplateResponse
 	 */
-	private function provisionAppPassword(string $userId, string $mcpServerUrl): void {
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	public function provision() {
+		$user = $this->userSession->getUser();
+		if (!$user) {
+			return new RedirectResponse(
+				$this->urlGenerator->linkToRoute('settings.PersonalSettings.index', ['section' => 'astrolabe'])
+			);
+		}
+		$userId = $user->getUID();
+
+		$mcpServerUrl = $this->config->getSystemValue('mcp_server_url', '');
+
+		$settingsUrl = $this->urlGenerator->linkToRouteAbsolute(
+			'settings.PersonalSettings.index', ['section' => 'astrolabe']
+		);
+
+		// Retrieve the OAuth access token stored during the callback step.
+		// Both Astrolabe and the MCP server are OIDC clients of the same
+		// Nextcloud IdP, so this token is valid for the MCP server's API.
+		$accessToken = $this->tokenStorage->getAccessToken($userId);
+		if (!$accessToken) {
+			$this->logger->error("No access token available for provision (user: $userId)");
+			return new RedirectResponse(
+				$this->urlGenerator->linkToRoute('settings.PersonalSettings.index', [
+					'section' => 'astrolabe',
+					'error' => urlencode('No access token available. Please re-authorize.'),
+				])
+			);
+		}
+
+		$provisionUrl = rtrim($mcpServerUrl, '/') . '/app/provision?' . http_build_query([
+			'redirect_uri' => $settingsUrl,
+		]);
+
 		try {
-			$user = $this->userSession->getUser();
-			if (!$user) {
-				throw new \Exception('User session lost during app password provisioning');
-			}
-
-			// Generate a random 72-character token (same as Nextcloud's AppPasswordController)
-			$token = $this->random->generate(
-				72,
-				ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS
-			);
-
-			// Register it as a permanent app token in Nextcloud
-			$this->tokenProvider->generateToken(
-				$token,
-				$userId,
-				$user->getDisplayName(),
-				null, // password — null since we're generating from an authenticated session
-				'Astrolabe Background Sync',
-				IToken::PERMANENT_TOKEN,
-				IToken::DO_NOT_REMEMBER
-			);
-
-			$this->logger->info("Generated app password for user: $userId");
-
-			// Store locally in Nextcloud preferences (encrypted)
-			$this->tokenStorage->storeBackgroundSyncPassword($userId, $token);
-
-			// Send to MCP server with BasicAuth (proves ownership of the password)
-			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . urlencode($userId) . '/app-password';
-
-			$response = $this->httpClient->post($mcpEndpoint, [
-				'auth' => [$userId, $token],
+			// Call the MCP server with the bearer token. The endpoint returns
+			// a 302/307 redirect to Nextcloud's Login Flow v2 login page.
+			// We must NOT follow the redirect — we need the Location header
+			// to redirect the browser there instead.
+			$response = $this->httpClient->get($provisionUrl, [
 				'headers' => [
-					'Content-Type' => 'application/json',
-					'Accept' => 'application/json',
+					'Authorization' => 'Bearer ' . $accessToken,
 				],
-				'timeout' => 10,
+				'allow_redirects' => false,
 			]);
 
 			$statusCode = $response->getStatusCode();
-			$body = json_decode($response->getBody(), true);
 
-			if ($statusCode === 200 && ($body['success'] ?? false)) {
-				$this->logger->info("Successfully provisioned app password to MCP server for user: $userId");
-			} else {
-				$error = $body['error'] ?? 'Unknown error';
-				$this->logger->error("MCP server rejected app password for user $userId: $error");
+			// 307/302 redirect → extract Location and send browser there
+			if ($statusCode >= 300 && $statusCode < 400) {
+				$location = $response->getHeader('Location');
+				if (!empty($location)) {
+					return new RedirectResponse($location);
+				}
 			}
+
+			// 200 with redirect_uri means user already has an app password
+			// (MCP server skips provision and redirects to settings)
+			if ($statusCode === 200) {
+				return new RedirectResponse($settingsUrl);
+			}
+
+			$this->logger->error("MCP provision returned unexpected status $statusCode");
 		} catch (\Exception $e) {
-			// Log but don't fail the OAuth flow — the user can retry app password provisioning
-			$this->logger->error("Failed to auto-provision app password for user $userId", [
-				'error' => $e->getMessage()
+			$this->logger->error('Failed to initiate Login Flow v2 provision', [
+				'error' => $e->getMessage(),
 			]);
 		}
+
+		// Fallback: redirect to settings
+		return new RedirectResponse($settingsUrl);
 	}
 
 	/**

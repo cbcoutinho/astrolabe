@@ -22,6 +22,11 @@ return [
 			'verb' => 'GET',
 		],
 		[
+			'name' => 'oauth#provision',
+			'url' => '/oauth/provision',
+			'verb' => 'GET',
+		],
+		[
 			'name' => 'oauth#disconnect',
 			'url' => '/oauth/disconnect',
 			'verb' => 'POST',

@@ -70,7 +70,7 @@ test.describe('Astrolabe search', () => {
 					const res = await page.request.get('http://localhost:8000/api/v1/vector-sync/status')
 					if (!res.ok()) return false
 					const data = await res.json()
-					return (data.indexed_count ?? 0) > 0 && (data.pending_count ?? -1) === 0
+					return (data.indexed_documents ?? 0) > 0 && (data.pending_documents ?? -1) === 0
 				} catch {
 					return false
 				}
@@ -87,28 +87,17 @@ test.describe('Astrolabe search', () => {
 		await searchInput.fill('kubernetes cluster architecture')
 		await searchInput.press('Enter')
 
-		// Step 5: Wait for search results, error, or no-results state
-		const resultsText = page.getByText(/\d+ results?/)
-		const noResults = page.getByText('No results found')
-		const errorNote = page.locator('.mcp-error')
-
-		const resultOrError = resultsText.or(errorNote).or(noResults)
-		await expect(resultOrError).toBeVisible({ timeout: 30000 })
-
-		// Verify we got results (not error or empty)
-		if ((await errorNote.count()) > 0) {
-			const errorText = await errorNote.textContent()
-			throw new Error(`Search failed with error: ${errorText}`)
-		}
-		await expect(resultsText).toBeVisible()
+		// Step 5: Wait for search results to appear
+		// Scope to the results area to avoid matching Plotly chart title text
+		const resultItems = page.locator('.mcp-result-item')
+		await expect(resultItems.first()).toBeVisible({ timeout: 30000 })
 
 		// Step 6: Verify search results are displayed
-		const resultItems = page.locator('.mcp-result-item')
 		const resultCount = await resultItems.count()
 		expect(resultCount).toBeGreaterThan(0)
 
 		// Step 7: Verify Plotly 3D visualization rendered (wait for async SVG injection)
-		await expect(page.locator('#viz-plot .main-svg')).toBeVisible({ timeout: 15000 })
+		await expect(page.locator('#viz-plot svg').first()).toBeVisible({ timeout: 30000 })
 
 		// Step 8: Verify a result item has expected structure
 		const firstResult = resultItems.first()

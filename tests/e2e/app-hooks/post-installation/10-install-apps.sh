@@ -10,7 +10,10 @@ php /var/www/html/occ app:enable oidc
 # Configure OIDC Identity Provider for login-flow mode
 php /var/www/html/occ config:app:set oidc dynamic_client_registration --value='true'
 php /var/www/html/occ config:app:set oidc proof_key_for_code_exchange --value=true --type=boolean
-php /var/www/html/occ config:app:set oidc allow_user_settings --value='enabled'
+# Admin-enforced auto-consent: skips the consent page for all OIDC clients.
+# This avoids the OIDC consent page's fetch()-based grant flow which breaks
+# cross-origin redirect chains (e.g. Astrolabe OAuth → MCP server provision).
+php /var/www/html/occ config:app:set oidc allow_user_settings --value='no'
 php /var/www/html/occ config:app:set oidc default_token_type --value='jwt'
 php /var/www/html/occ config:app:set oidc default_resource_identifier --value='http://localhost:8080'
 
