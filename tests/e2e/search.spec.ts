@@ -64,14 +64,28 @@ test.describe('Astrolabe search', () => {
 		// Step 2: Wait for vector sync to index the seeded test data.
 		// After auth, the MCP server discovers the user and begins indexing.
 		// Poll the MCP server's public API directly (no CSRF token needed).
+		// Use Node fetch (not page.request) to avoid sending browser cookies.
+		let pollCount = 0
 		await expect.poll(
 			async () => {
+				pollCount++
 				try {
-					const res = await page.request.get('http://localhost:8000/api/v1/vector-sync/status')
-					if (!res.ok()) return false
+					const res = await fetch('http://localhost:8000/api/v1/vector-sync/status')
+					if (!res.ok) {
+						console.log(`vector-sync poll #${pollCount}: HTTP ${res.status}`)
+						return false
+					}
 					const data = await res.json()
-					return (data.indexed_count ?? 0) > 0 && (data.pending_count ?? -1) === 0
-				} catch {
+					// Log full response on first poll to capture API shape
+					if (pollCount === 1) {
+						console.log(`vector-sync poll #1 full response: ${JSON.stringify(data)}`)
+					}
+					const indexed = data.indexed_count ?? 0
+					const pending = data.pending_count ?? -1
+					console.log(`vector-sync poll #${pollCount}: indexed=${indexed} pending=${pending}`)
+					return indexed > 0 && pending === 0
+				} catch (e) {
+					console.log(`vector-sync poll #${pollCount} error: ${e}`)
 					return false
 				}
 			},
