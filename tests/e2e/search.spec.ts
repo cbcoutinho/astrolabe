@@ -80,8 +80,8 @@ test.describe('Astrolabe search', () => {
 					if (pollCount === 1) {
 						console.log(`vector-sync poll #1 full response: ${JSON.stringify(data)}`)
 					}
-					const indexed = data.indexed_count ?? 0
-					const pending = data.pending_count ?? -1
+					const indexed = data.indexed_documents ?? data.indexed_count ?? 0
+					const pending = data.pending_documents ?? data.pending_count ?? -1
 					console.log(`vector-sync poll #${pollCount}: indexed=${indexed} pending=${pending}`)
 					return indexed > 0 && pending === 0
 				} catch (e) {

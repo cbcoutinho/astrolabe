@@ -304,11 +304,16 @@ class OauthController extends Controller {
 				throw new \Exception('User session lost during app password provisioning');
 			}
 
-			// Generate a random 72-character token (same as Nextcloud's AppPasswordController)
-			$token = $this->random->generate(
-				72,
-				ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS
-			);
+			// Generate a token in Nextcloud app password format (xxxxx-xxxxx-xxxxx-xxxxx-xxxxx)
+			// The MCP server validates this format before accepting the password.
+			$chars = ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS;
+			$token = implode('-', [
+				$this->random->generate(5, $chars),
+				$this->random->generate(5, $chars),
+				$this->random->generate(5, $chars),
+				$this->random->generate(5, $chars),
+				$this->random->generate(5, $chars),
+			]);
 
 			// Register it as a permanent app token in Nextcloud
 			$this->tokenProvider->generateToken(
