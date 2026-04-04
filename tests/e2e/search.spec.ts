@@ -123,7 +123,7 @@ test.describe('Astrolabe search', () => {
 		expect(resultCount).toBeGreaterThan(0)
 
 		// Step 7: Verify Plotly 3D visualization rendered (wait for async SVG injection)
-		await expect(page.locator('#viz-plot .main-svg')).toBeVisible({ timeout: 15000 })
+		await expect(page.locator('#viz-plot .main-svg').first()).toBeVisible({ timeout: 15000 })
 
 		// Step 8: Verify a result item has expected structure
 		const firstResult = resultItems.first()
