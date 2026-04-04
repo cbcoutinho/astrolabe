@@ -102,7 +102,8 @@ test.describe('Astrolabe search', () => {
 		await searchInput.press('Enter')
 
 		// Step 5: Wait for search results, error, or no-results state
-		const resultsText = page.getByText(/\d+ results?/)
+		// Use .first() because the results count text also appears in the Plotly heading
+		const resultsText = page.getByText(/\d+ results?/).first()
 		const noResults = page.getByText('No results found')
 		const errorNote = page.locator('.mcp-error')
 
