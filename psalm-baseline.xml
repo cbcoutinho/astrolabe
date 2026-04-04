@@ -105,6 +105,8 @@
       <code><![CDATA[time() + ($tokenData['expires_in'] ?? 3600)]]></code>
     </MixedArgument>
     <MixedArrayAccess>
+      <code><![CDATA[$body['error']]]></code>
+      <code><![CDATA[$body['success']]]></code>
       <code><![CDATA[$discovery['authorization_endpoint']]]></code>
       <code><![CDATA[$discovery['token_endpoint']]]></code>
       <code><![CDATA[$discovery['token_endpoint']]]></code>
@@ -118,6 +120,7 @@
     </MixedArrayAccess>
     <MixedAssignment>
       <code><![CDATA[$authEndpoint]]></code>
+      <code><![CDATA[$body]]></code>
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$codeVerifier]]></code>
@@ -125,6 +128,7 @@
       <code><![CDATA[$discovery]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
+      <code><![CDATA[$error]]></code>
       <code><![CDATA[$mcpServerPublicUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
@@ -149,14 +153,38 @@
     <PossiblyInvalidArgument>
       <code><![CDATA[$response->getBody()]]></code>
       <code><![CDATA[$response->getBody()]]></code>
+      <code><![CDATA[$response->getBody()]]></code>
       <code><![CDATA[$responseBody]]></code>
       <code><![CDATA[$responseBody]]></code>
       <code><![CDATA[$statusResponse->getBody()]]></code>
       <code><![CDATA[$statusResponse->getBody()]]></code>
     </PossiblyInvalidArgument>
+    <PossiblyUnusedParam>
+      <code><![CDATA[$appName]]></code>
+      <code><![CDATA[$client]]></code>
+      <code><![CDATA[$clientService]]></code>
+      <code><![CDATA[$config]]></code>
+      <code><![CDATA[$l]]></code>
+      <code><![CDATA[$logger]]></code>
+      <code><![CDATA[$random]]></code>
+      <code><![CDATA[$request]]></code>
+      <code><![CDATA[$session]]></code>
+      <code><![CDATA[$tokenProvider]]></code>
+      <code><![CDATA[$tokenStorage]]></code>
+      <code><![CDATA[$urlGenerator]]></code>
+      <code><![CDATA[$userSession]]></code>
+    </PossiblyUnusedParam>
     <RiskyTruthyFalsyComparison>
+      <code><![CDATA[$body['success'] ?? false]]></code>
       <code><![CDATA[$error]]></code>
     </RiskyTruthyFalsyComparison>
+    <UndefinedClass>
+      <code><![CDATA[$this->tokenProvider]]></code>
+      <code><![CDATA[IToken]]></code>
+      <code><![CDATA[IToken]]></code>
+      <code><![CDATA[ITokenProvider]]></code>
+      <code><![CDATA[ITokenProvider]]></code>
+    </UndefinedClass>
     <UnusedClass>
       <code><![CDATA[OauthController]]></code>
     </UnusedClass>

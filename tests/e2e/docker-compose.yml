@@ -56,7 +56,7 @@ services:
       retries: 30
 
   mcp:
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.66.1
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.68.1
     restart: "no"
     command: ["--transport", "streamable-http", "--oauth"]
     depends_on:

@@ -64,14 +64,28 @@ test.describe('Astrolabe search', () => {
 		// Step 2: Wait for vector sync to index the seeded test data.
 		// After auth, the MCP server discovers the user and begins indexing.
 		// Poll the MCP server's public API directly (no CSRF token needed).
+		// Use Node fetch (not page.request) to avoid sending browser cookies.
+		let pollCount = 0
 		await expect.poll(
 			async () => {
+				pollCount++
 				try {
-					const res = await page.request.get('http://localhost:8000/api/v1/vector-sync/status')
-					if (!res.ok()) return false
+					const res = await fetch('http://localhost:8000/api/v1/vector-sync/status')
+					if (!res.ok) {
+						console.log(`vector-sync poll #${pollCount}: HTTP ${res.status}`)
+						return false
+					}
 					const data = await res.json()
-					return (data.indexed_count ?? 0) > 0 && (data.pending_count ?? -1) === 0
-				} catch {
+					// Log full response on first poll to capture API shape
+					if (pollCount === 1) {
+						console.log(`vector-sync poll #1 full response: ${JSON.stringify(data)}`)
+					}
+					const indexed = data.indexed_documents ?? data.indexed_count ?? 0
+					const pending = data.pending_documents ?? data.pending_count ?? -1
+					console.log(`vector-sync poll #${pollCount}: indexed=${indexed} pending=${pending}`)
+					return indexed > 0 && pending === 0
+				} catch (e) {
+					console.log(`vector-sync poll #${pollCount} error: ${e}`)
 					return false
 				}
 			},
@@ -88,7 +102,8 @@ test.describe('Astrolabe search', () => {
 		await searchInput.press('Enter')
 
 		// Step 5: Wait for search results, error, or no-results state
-		const resultsText = page.getByText(/\d+ results?/)
+		// Use .first() because the results count text also appears in the Plotly heading
+		const resultsText = page.getByText(/\d+ results?/).first()
 		const noResults = page.getByText('No results found')
 		const errorNote = page.locator('.mcp-error')
 
@@ -108,7 +123,7 @@ test.describe('Astrolabe search', () => {
 		expect(resultCount).toBeGreaterThan(0)
 
 		// Step 7: Verify Plotly 3D visualization rendered (wait for async SVG injection)
-		await expect(page.locator('#viz-plot .main-svg')).toBeVisible({ timeout: 15000 })
+		await expect(page.locator('#viz-plot .main-svg').first()).toBeVisible({ timeout: 15000 })
 
 		// Step 8: Verify a result item has expected structure
 		const firstResult = resultItems.first()
