@@ -80,12 +80,14 @@ test.describe('Astrolabe search', () => {
 					if (pollCount === 1) {
 						console.log(`vector-sync poll #1 full response: ${JSON.stringify(data)}`)
 					}
+					// Field names changed in MCP server v0.68: indexed_count → indexed_documents,
+					// pending_count → pending_documents. Fallbacks can be removed once v0.68+ is the floor.
 					const indexed = data.indexed_documents ?? data.indexed_count ?? 0
 					const pending = data.pending_documents ?? data.pending_count ?? -1
 					console.log(`vector-sync poll #${pollCount}: indexed=${indexed} pending=${pending}`)
 					return indexed > 0 && pending === 0
 				} catch (e) {
-					console.log(`vector-sync poll #${pollCount} error: ${e}`)
+					console.log(`vector-sync poll #${pollCount} error: ${e instanceof Error ? e.message : String(e)}`)
 					return false
 				}
 			},

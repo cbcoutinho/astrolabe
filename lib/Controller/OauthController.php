@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
+// TODO: These are internal OC\ classes without public OCP stubs. Psalm reports
+// UndefinedClass because it cannot resolve them. Replace with public OCP interfaces
+// if/when Nextcloud exposes a public token-provisioning API (see psalm-baseline.xml).
 use OC\Authentication\Token\IProvider as ITokenProvider;
 use OC\Authentication\Token\IToken;
 use OCA\Astrolabe\Service\McpServerClient;
