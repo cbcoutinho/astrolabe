@@ -161,9 +161,10 @@ class IdpTokenRefresher {
 				],
 			]);
 
+			/** @var array<string, mixed>|null $tokenData */
 			$tokenData = json_decode($response->getBody(), true);
 
-			if (json_last_error() !== JSON_ERROR_NONE || !isset($tokenData['access_token'])) {
+			if (!is_array($tokenData) || !isset($tokenData['access_token'])) {
 				throw new \RuntimeException('Invalid token response from IdP');
 			}
 
