@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: 'The tag to release (e.g. v0.13.3)'
+        required: true
+        type: string
 
 env:
   APP_NAME: astrolabe
@@ -15,19 +21,27 @@ jobs:
       contents: write
 
     steps:
+      - name: Resolve tag
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Get version from tag
-        id: tag
-        run: |
-          echo "TAG=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{ steps.resolve.outputs.tag }}
 
       - name: Validate version in info.xml matches tag
         run: |
           INFO_VERSION=$(sed -n 's/.*<version>\(.*\)<\/version>.*/\1/p' appinfo/info.xml | tr -d '\t')
-          if [ "$INFO_VERSION" != "${{ steps.tag.outputs.TAG }}" ]; then
-            echo "Version mismatch: info.xml has $INFO_VERSION but tag is ${{ steps.tag.outputs.TAG }}"
+          if [ "$INFO_VERSION" != "${{ steps.resolve.outputs.version }}" ]; then
+            echo "Version mismatch: info.xml has $INFO_VERSION but tag is ${{ steps.resolve.outputs.version }}"
             exit 1
           fi
           echo "Version validated: $INFO_VERSION"
@@ -70,16 +84,16 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/artifacts/${{ env.APP_NAME }}.tar.gz
-          asset_name: ${{ env.APP_NAME }}-${{ steps.tag.outputs.TAG }}.tar.gz
-          tag: ${{ github.ref }}
-          release_name: Astrolabe ${{ steps.tag.outputs.TAG }}
-          prerelease: ${{ contains(steps.tag.outputs.TAG, '-alpha') || contains(steps.tag.outputs.TAG, '-beta') || contains(steps.tag.outputs.TAG, '-rc') }}
+          asset_name: ${{ env.APP_NAME }}-${{ steps.resolve.outputs.version }}.tar.gz
+          tag: refs/tags/${{ steps.resolve.outputs.tag }}
+          release_name: Astrolabe ${{ steps.resolve.outputs.version }}
+          prerelease: ${{ contains(steps.resolve.outputs.version, '-alpha') || contains(steps.resolve.outputs.version, '-beta') || contains(steps.resolve.outputs.version, '-rc') }}
 
       - name: Upload to Nextcloud App Store
         uses: R0Wi/nextcloud-appstore-push-action@9244bb5445776688cfe90fa1903ea8dff95b0c28 # v1.0.4
         with:
           app_name: ${{ env.APP_NAME }}
           appstore_token: ${{ secrets.APPSTORE_TOKEN }}
-          download_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.APP_NAME }}-${{ steps.tag.outputs.TAG }}.tar.gz
+          download_url: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.resolve.outputs.tag }}/${{ env.APP_NAME }}-${{ steps.resolve.outputs.version }}.tar.gz
           app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
-          nightly: ${{ contains(steps.tag.outputs.TAG, '-alpha') || contains(steps.tag.outputs.TAG, '-beta') || contains(steps.tag.outputs.TAG, '-rc') }}
+          nightly: ${{ contains(steps.resolve.outputs.version, '-alpha') || contains(steps.resolve.outputs.version, '-beta') || contains(steps.resolve.outputs.version, '-rc') }}
