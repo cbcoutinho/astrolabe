@@ -494,15 +494,27 @@ class OauthController extends Controller {
 		// Use public URL that clients/browsers see, not internal Docker URL
 		$mcpServerPublicUrl = $this->config->getSystemValue('mcp_server_public_url', $mcpServerUrl);
 
+		// Build scope string - only include offline_access if IdP advertises support
+		$scope = 'openid profile email';
+		$scopesSupported = $discovery['scopes_supported'] ?? [];
+		if (in_array('offline_access', $scopesSupported)) {
+			$scope .= ' offline_access';
+		}
+
 		// Build authorization URL parameters
 		$params = [
 			'client_id' => $this->client->getClientId(),
 			'redirect_uri' => $redirectUri,
 			'response_type' => 'code',
-			'scope' => 'openid profile email offline_access',  // Request MCP scopes
+			'scope' => $scope,
 			'state' => $state,
-			'resource' => $mcpServerPublicUrl,  // RFC 8707 Resource Indicator - request token with MCP server audience
 		];
+
+		// Only include RFC 8707 Resource Indicator if IdP supports it
+		$grantTypesSupported = $discovery['grant_types_supported'] ?? [];
+		if (in_array('urn:ietf:params:oauth:grant-type:resource-indicator', $grantTypesSupported)) {
+			$params['resource'] = $mcpServerPublicUrl;
+		}
 
 		// Add PKCE parameters (always required per RFC 9207)
 		$params['code_challenge'] = $codeChallenge;
