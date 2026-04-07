@@ -10,9 +10,6 @@ name: E2E Tests
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:

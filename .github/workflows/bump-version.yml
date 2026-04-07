@@ -12,6 +12,9 @@ jobs:
     name: "Bump version and create changelog"
     permissions:
       contents: write
+    outputs:
+      bumped: ${{ steps.bump.outputs.bumped }}
+      tag: ${{ steps.bump.outputs.tag }}
     steps:
       - name: Check out
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -51,6 +54,8 @@ jobs:
 
           echo "$output"
           echo "bumped=true" >> $GITHUB_OUTPUT
+          tag=$(git tag --sort=-creatordate | head -n 1)
+          echo "tag=$tag" >> $GITHUB_OUTPUT
 
       - name: Push tags
         if: steps.bump.outputs.bumped == 'true'
@@ -66,9 +71,19 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "- **Astrolabe**: \`$tag\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Tag has been pushed and release workflow will trigger automatically." >> $GITHUB_STEP_SUMMARY
+            echo "Tag has been pushed and release workflow has been triggered." >> $GITHUB_STEP_SUMMARY
           else
             echo "## Version Bump Summary" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "No version bump required - no relevant commits found since last release." >> $GITHUB_STEP_SUMMARY
           fi
+
+  release:
+    needs: bump-version
+    if: needs.bump-version.outputs.bumped == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.bump-version.outputs.tag }}
+    secrets: inherit
+    permissions:
+      contents: write
