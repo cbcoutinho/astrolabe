@@ -247,7 +247,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->assertEquals(300, $result['expires_in']);
 	}
 
-	public function testRefreshAccessTokenFailsOnMissingRefreshTokenInResponse(): void {
+	public function testRefreshAccessTokenSucceedsWithoutRefreshTokenInResponse(): void {
 		// Setup config
 		$this->config->method('getSystemValue')
 			->willReturnMap([
@@ -264,28 +264,35 @@ final class IdpTokenRefresherTest extends TestCase {
 		$statusResponse->method('getBody')
 			->willReturn(json_encode(['version' => '1.0.0']));
 
-		// Mock token response WITHOUT refresh_token (token rotation failure)
+		// Mock token response WITHOUT refresh_token
+		// (e.g., Cognito doesn't rotate refresh tokens - original remains valid)
 		$tokenResponse = $this->createMock(IResponse::class);
 		$tokenResponse->method('getBody')
 			->willReturn(json_encode([
 				'access_token' => 'new-access-token',
-				// Missing refresh_token!
 				'expires_in' => 3600,
 			]));
 
 		$this->httpClient->method('get')->willReturn($statusResponse);
 		$this->httpClient->method('post')->willReturn($tokenResponse);
 
-		$this->logger->expects($this->once())
-			->method('error')
-			->with(
-				$this->stringContains('No refresh token in response'),
-				$this->anything()
-			);
+		$infoMessages = [];
+		$this->logger->method('info')
+			->willReturnCallback(function (string $message) use (&$infoMessages): void {
+				$infoMessages[] = $message;
+			});
 
 		$result = $this->refresher->refreshAccessToken('test-refresh-token');
 
-		$this->assertNull($result);
+		$this->assertNotNull($result);
+		$this->assertEquals('new-access-token', $result['access_token']);
+		$this->assertArrayNotHasKey('refresh_token', $result);
+
+		// Verify the info log about missing refresh token was emitted
+		$this->assertContains(
+			'IdpTokenRefresher: No refresh token in response - callers will reuse existing refresh token',
+			$infoMessages,
+		);
 	}
 
 	public function testRefreshAccessTokenHandlesHttpException(): void {
