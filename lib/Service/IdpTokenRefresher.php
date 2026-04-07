@@ -167,16 +167,16 @@ class IdpTokenRefresher {
 				throw new \RuntimeException('Invalid token response from IdP');
 			}
 
-			// Validate refresh_token is present (required for token rotation)
+			// Log if refresh token is absent (some IdPs like Cognito don't rotate
+			// refresh tokens - the original token remains valid and callers will
+			// reuse it)
 			if (!isset($tokenData['refresh_token'])) {
-				$this->logger->error(
-					'IdpTokenRefresher: No refresh token in response - token rotation will fail',
+				$this->logger->info(
+					'IdpTokenRefresher: No refresh token in response - callers will reuse existing refresh token',
 					[
-						'has_access_token' => isset($tokenData['access_token']),
 						'response_keys' => array_keys($tokenData),
 					]
 				);
-				return null;
 			}
 
 			$this->logger->info('IdpTokenRefresher: Token refresh successful');
