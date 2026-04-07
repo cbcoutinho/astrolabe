@@ -450,9 +450,10 @@ class OauthController extends Controller {
 				'body_length' => strlen($responseBody),
 			]);
 
+			/** @var array<string, mixed>|null $discovery */
 			$discovery = json_decode($responseBody, true);
 
-			if (json_last_error() !== JSON_ERROR_NONE) {
+			if (json_last_error() !== JSON_ERROR_NONE || !is_array($discovery)) {
 				throw new \RuntimeException('Invalid JSON in OIDC discovery: ' . json_last_error_msg());
 			}
 
@@ -496,6 +497,7 @@ class OauthController extends Controller {
 
 		// Build scope string - only include offline_access if IdP advertises support
 		$scope = 'openid profile email';
+		/** @var list<string> $scopesSupported */
 		$scopesSupported = $discovery['scopes_supported'] ?? [];
 		if (in_array('offline_access', $scopesSupported)) {
 			$scope .= ' offline_access';
@@ -511,9 +513,10 @@ class OauthController extends Controller {
 		];
 
 		// Only include RFC 8707 Resource Indicator if IdP supports it
+		/** @var list<string> $grantTypesSupported */
 		$grantTypesSupported = $discovery['grant_types_supported'] ?? [];
 		if (in_array('urn:ietf:params:oauth:grant-type:resource-indicator', $grantTypesSupported)) {
-			$params['resource'] = $mcpServerPublicUrl;
+			$params['resource'] = (string)$mcpServerPublicUrl;
 		}
 
 		// Add PKCE parameters (always required per RFC 9207)

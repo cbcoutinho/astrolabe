@@ -107,8 +107,6 @@
     <MixedArrayAccess>
       <code><![CDATA[$body['error']]]></code>
       <code><![CDATA[$body['success']]]></code>
-      <code><![CDATA[$discovery['authorization_endpoint']]]></code>
-      <code><![CDATA[$discovery['token_endpoint']]]></code>
       <code><![CDATA[$discovery['token_endpoint']]]></code>
       <code><![CDATA[$statusData['auth_mode']]]></code>
       <code><![CDATA[$statusData['oidc']]]></code>
@@ -124,7 +122,6 @@
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$codeVerifier]]></code>
-      <code><![CDATA[$discovery]]></code>
       <code><![CDATA[$discovery]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
@@ -248,7 +245,6 @@
   <file src="lib/Service/IdpTokenRefresher.php">
     <MixedArgument>
       <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$tokenData]]></code>
       <code><![CDATA[$tokenEndpoint]]></code>
     </MixedArgument>
     <MixedArrayAccess>
@@ -263,18 +259,11 @@
       <code><![CDATA[$internalUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$statusData]]></code>
-      <code><![CDATA[$tokenData]]></code>
       <code><![CDATA[$tokenEndpoint]]></code>
     </MixedAssignment>
-    <MixedInferredReturnType>
-      <code><![CDATA[array|null]]></code>
-    </MixedInferredReturnType>
     <MixedOperand>
       <code><![CDATA[$mcpServerUrl]]></code>
     </MixedOperand>
-    <MixedReturnStatement>
-      <code><![CDATA[$tokenData]]></code>
-    </MixedReturnStatement>
     <PossiblyInvalidArgument>
       <code><![CDATA[$discoveryResponse->getBody()]]></code>
       <code><![CDATA[$response->getBody()]]></code>
