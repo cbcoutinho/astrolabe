@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.6 (2026-04-07)
+
+### Fix
+
+- allow token refresh when IdP doesn't rotate refresh tokens
+
 ## v0.13.5 (2026-04-07)
 
 ### Fix
