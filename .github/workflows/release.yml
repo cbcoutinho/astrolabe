@@ -76,6 +76,19 @@ jobs:
           echo "${{ secrets.APP_PRIVATE_KEY }}" > $HOME/.nextcloud/certificates/${{ env.APP_NAME }}.key
           echo "${{ secrets.APP_PUBLIC_CRT }}" > $HOME/.nextcloud/certificates/${{ env.APP_NAME }}.crt
 
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          version="${{ steps.resolve.outputs.version }}"
+          # Extract content between this version's header and the next version header
+          body=$(awk "/^## v${version//./\\.} /{found=1; next} /^## v[0-9]/{if(found) exit} found{print}" CHANGELOG.md)
+          # Use GH delimiter for multiline output
+          {
+            echo "body<<CHANGELOG_EOF"
+            echo "$body"
+            echo "CHANGELOG_EOF"
+          } >> $GITHUB_OUTPUT
+
       - name: Build app store package
         run: make appstore server_dir=${{ github.workspace }}/server
 
