@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.7 (2026-04-07)
+
+### Fix
+
+- resolve psalm type errors in OAuth and token refresh code
+
 ## v0.13.6 (2026-04-07)
 
 ### Fix
