@@ -10,4 +10,5 @@ declare(strict_types=1);
  * includes the OCP interface definitions needed for mocking.
  */
 
+require_once __DIR__ . '/stubs.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
