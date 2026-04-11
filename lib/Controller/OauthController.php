@@ -465,11 +465,23 @@ class OauthController extends Controller {
 
 			// Transform internal URL to external URL if using Nextcloud OIDC app
 			// The discovery was done via internal http://localhost but browsers need
-			// the external URL (e.g., http://localhost:8080)
+			// the external URL (e.g., https://cloud.example.com)
+			// Use protocol-agnostic replacement because overwriteprotocol may cause
+			// the discovery response to return https:// URLs even for http://localhost requests
 			if (isset($internalBaseUrl)) {
 				$externalBaseUrl = $this->urlGenerator->getAbsoluteURL('/');
 				$externalBaseUrl = rtrim($externalBaseUrl, '/');
-				$authEndpoint = str_replace($internalBaseUrl, $externalBaseUrl, $authEndpoint);
+				$internalBaseUrl = rtrim($internalBaseUrl, '/');
+				/** @var string $internalHost */
+				$internalHost = preg_replace('#^https?://#', '', $internalBaseUrl);
+				$replaced = preg_replace(
+					'#^https?://' . preg_quote($internalHost, '#') . '#',
+					$externalBaseUrl,
+					$authEndpoint
+				);
+				if (is_string($replaced)) {
+					$authEndpoint = $replaced;
+				}
 			}
 
 			$this->logger->info('buildAuthorizationUrl: OIDC discovery succeeded', [
