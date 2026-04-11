@@ -471,12 +471,17 @@ class OauthController extends Controller {
 			if (isset($internalBaseUrl)) {
 				$externalBaseUrl = $this->urlGenerator->getAbsoluteURL('/');
 				$externalBaseUrl = rtrim($externalBaseUrl, '/');
+				$internalBaseUrl = rtrim($internalBaseUrl, '/');
+				/** @var string $internalHost */
 				$internalHost = preg_replace('#^https?://#', '', $internalBaseUrl);
-				$authEndpoint = preg_replace(
+				$replaced = preg_replace(
 					'#^https?://' . preg_quote($internalHost, '#') . '#',
 					$externalBaseUrl,
 					$authEndpoint
 				);
+				if (is_string($replaced)) {
+					$authEndpoint = $replaced;
+				}
 			}
 
 			$this->logger->info('buildAuthorizationUrl: OIDC discovery succeeded', [

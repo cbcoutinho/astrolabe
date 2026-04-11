@@ -11,9 +11,11 @@ declare(strict_types=1);
 
 namespace OC\Authentication\Token {
 	if (!interface_exists(IProvider::class)) {
-		interface IProvider {}
+		interface IProvider {
+		}
 	}
 	if (!interface_exists(IToken::class)) {
-		interface IToken {}
+		interface IToken {
+		}
 	}
 }

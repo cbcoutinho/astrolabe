@@ -1,0 +1,22 @@
+repos:
+- repo: https://github.com/commitizen-tools/commitizen
+  rev: v4.9.0
+  hooks:
+  - id: commitizen
+  - id: commitizen-branch
+    stages:
+    - pre-push
+- repo: local
+  hooks:
+    - id: php-cs-fixer
+      name: php-cs-fixer
+      entry: composer run cs:check
+      language: system
+      types: [php]
+      pass_filenames: false
+    - id: psalm
+      name: psalm
+      entry: composer run psalm
+      language: system
+      types: [php]
+      pass_filenames: false
