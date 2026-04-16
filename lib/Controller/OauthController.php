@@ -322,7 +322,7 @@ class OauthController extends Controller {
 			$this->tokenProvider->generateToken(
 				$token,
 				$userId,
-				$user->getDisplayName(),
+				$userId,
 				null, // password — null since we're generating from an authenticated session
 				'Astrolabe Background Sync',
 				IToken::PERMANENT_TOKEN,
