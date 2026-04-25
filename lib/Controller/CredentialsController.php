@@ -132,7 +132,7 @@ class CredentialsController extends Controller {
 
 			$response = $httpClient->post($mcpEndpoint, [
 				'auth' => [$userId, $appPassword],
-				'body' => '{}',
+				'body' => json_encode(['username' => $userId], JSON_THROW_ON_ERROR),
 				'headers' => [
 					'Content-Type' => 'application/json',
 					'Accept' => 'application/json',

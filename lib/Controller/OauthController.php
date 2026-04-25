@@ -339,7 +339,7 @@ class OauthController extends Controller {
 
 			$response = $this->httpClient->post($mcpEndpoint, [
 				'auth' => [$userId, $token],
-				'body' => '{}',
+				'body' => json_encode(['username' => $userId], JSON_THROW_ON_ERROR),
 				'headers' => [
 					'Content-Type' => 'application/json',
 					'Accept' => 'application/json',
