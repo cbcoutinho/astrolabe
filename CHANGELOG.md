@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.10 (2026-04-25)
+
+### Fix
+
+- use JSON_THROW_ON_ERROR instead of silent {} fallback
+- guard json_encode fallback for static analysis
+- send loginName when provisioning app password on MCP server
+
 ## v0.13.9 (2026-04-16)
 
 ### Fix
