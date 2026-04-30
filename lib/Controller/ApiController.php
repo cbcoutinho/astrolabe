@@ -566,7 +566,7 @@ class ApiController extends Controller {
 
 		// Get MCP server URL for webhook callback URI
 		$mcpServerUrl = $this->client->getServerUrl();
-		$callbackUri = $mcpServerUrl . '/api/v1/webhooks/callback';
+		$callbackUri = $mcpServerUrl . '/webhooks/nextcloud';
 
 		// Register each event in the preset
 		$registered = [];
