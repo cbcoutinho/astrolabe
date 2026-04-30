@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.11 (2026-04-30)
+
+### Fix
+
+- **webhooks**: point preset callback URI at /webhooks/nextcloud
+
 ## v0.13.10 (2026-04-25)
 
 ### Fix
