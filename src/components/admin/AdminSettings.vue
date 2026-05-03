@@ -92,17 +92,21 @@
 					<p>{{ t('astrolabe', 'Loading webhook presets...') }}</p>
 				</div>
 
-				<NcNoteCard v-else-if="webhooksError" type="warning">
+				<NcNoteCard v-else-if="webhooksProvisioningRequired" type="warning">
 					<p><strong>{{ t('astrolabe', 'Authorization Required') }}</strong></p>
-					<p v-if="webhooksError.includes('authorization')">
-						{{ t('astrolabe', 'To manage webhooks, you must first authorize Astrolabe with the MCP server in your Personal Settings.') }}
+					<p>
+						{{ t('astrolabe', 'To manage webhooks, you must first authorize Astrolabe with the MCP server in your Personal Settings. This grants the MCP server an app password it can use to call Nextcloud APIs on your behalf.') }}
 					</p>
-					<p v-else>{{ webhooksError }}</p>
 					<div class="webhook-auth-actions">
 						<NcButton variant="primary" @click="openPersonalSettings">
 							{{ t('astrolabe', 'Go to Personal Settings') }}
 						</NcButton>
 					</div>
+				</NcNoteCard>
+
+				<NcNoteCard v-else-if="webhooksError" type="error">
+					<p><strong>{{ t('astrolabe', 'Failed to load webhook presets') }}</strong></p>
+					<p>{{ webhooksError }}</p>
 				</NcNoteCard>
 
 				<template v-else>
@@ -268,6 +272,11 @@ const saving = ref(false)
 // Webhook management state
 const webhooksLoading = ref(false)
 const webhooksError = ref(null)
+// Set when the MCP server reports HTTP 428 (Precondition Required) — the
+// admin has not completed Login Flow v2 provisioning yet, so the MCP server
+// has no app password to call Nextcloud APIs with. Drives the "Authorization
+// Required" CTA card below.
+const webhooksProvisioningRequired = ref(false)
 const webhookPresets = ref([])
 
 // Load initial state from PHP
@@ -369,6 +378,7 @@ async function saveSettings() {
 async function loadWebhookPresets() {
 	webhooksLoading.value = true
 	webhooksError.value = null
+	webhooksProvisioningRequired.value = false
 
 	try {
 		const response = await axios.get(generateUrl('/apps/astrolabe/api/admin/webhooks/presets'))
@@ -386,7 +396,13 @@ async function loadWebhookPresets() {
 		}
 	} catch (err) {
 		console.error('Failed to load webhook presets:', err)
-		webhooksError.value = err.response?.data?.error || err.message || t('astrolabe', 'Network error')
+		// 428 Precondition Required → admin hasn't completed Login Flow v2
+		// provisioning. Show the dedicated CTA instead of a generic error.
+		if (err.response?.status === 428 || err.response?.data?.provisioning_required) {
+			webhooksProvisioningRequired.value = true
+		} else {
+			webhooksError.value = err.response?.data?.error || err.message || t('astrolabe', 'Network error')
+		}
 	} finally {
 		webhooksLoading.value = false
 	}
@@ -411,7 +427,15 @@ async function toggleWebhookPreset(preset) {
 		}
 	} catch (err) {
 		console.error('Failed to toggle webhook preset:', err)
-		showError(err.response?.data?.error || err.message || t('astrolabe', 'Network error'))
+		// 428 → admin hasn't provisioned. Surface the dedicated CTA at the
+		// top of the page rather than a transient toast that the user might
+		// dismiss without action.
+		if (err.response?.status === 428 || err.response?.data?.provisioning_required) {
+			webhooksProvisioningRequired.value = true
+			showError(t('astrolabe', 'Authorize Astrolabe with the MCP server in Personal Settings to manage webhooks'))
+		} else {
+			showError(err.response?.data?.error || err.message || t('astrolabe', 'Network error'))
+		}
 	} finally {
 		preset.toggling = false
 	}

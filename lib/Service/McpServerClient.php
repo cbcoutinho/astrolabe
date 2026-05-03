@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Service;
 
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
@@ -34,6 +35,33 @@ class McpServerClient {
 		// Get MCP server configuration from Nextcloud config
 		$baseUrl = $this->config->getSystemValue('mcp_server_url', 'http://localhost:8000');
 		$this->baseUrl = is_string($baseUrl) ? $baseUrl : 'http://localhost:8000';
+	}
+
+	/**
+	 * Detect HTTP 428 (Precondition Required) responses from the MCP server.
+	 *
+	 * The MCP server returns 428 when the user has not completed Login Flow v2
+	 * provisioning — admin endpoints have no app password to authenticate with
+	 * against Nextcloud. Surface this as a structured marker so the controller
+	 * can render a "complete provisioning" CTA instead of an opaque 500.
+	 *
+	 * @return array{error: string, provisioning_required: true, status_code: 428}|null
+	 */
+	private function detectProvisioningRequired(IResponse $response): ?array {
+		if ($response->getStatusCode() !== 428) {
+			return null;
+		}
+
+		$body = json_decode($response->getBody(), true);
+		$message = is_array($body) && isset($body['message']) && is_string($body['message'])
+			? $body['message']
+			: 'Nextcloud access not provisioned. Complete authorization in Personal Settings.';
+
+		return [
+			'error' => $message,
+			'provisioning_required' => true,
+			'status_code' => 428,
+		];
 	}
 
 	/**
@@ -398,9 +426,16 @@ class McpServerClient {
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
-					]
+					],
+					'http_errors' => false,
 				]
 			);
+
+			$provisioning = $this->detectProvisioningRequired($response);
+			if ($provisioning !== null) {
+				return $provisioning;
+			}
+
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
@@ -457,9 +492,16 @@ class McpServerClient {
 						'Authorization' => 'Bearer ' . $token,
 						'Content-Type' => 'application/json',
 					],
-					'json' => $requestBody
+					'json' => $requestBody,
+					'http_errors' => false,
 				]
 			);
+
+			$provisioning = $this->detectProvisioningRequired($response);
+			if ($provisioning !== null) {
+				return $provisioning;
+			}
+
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
@@ -492,9 +534,15 @@ class McpServerClient {
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
-					]
+					],
+					'http_errors' => false,
 				]
 			);
+
+			$provisioning = $this->detectProvisioningRequired($response);
+			if ($provisioning !== null) {
+				return $provisioning;
+			}
 
 			// Successful DELETE may return 204 No Content
 			if ($response->getStatusCode() === 204) {
@@ -536,9 +584,16 @@ class McpServerClient {
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
-					]
+					],
+					'http_errors' => false,
 				]
 			);
+
+			$provisioning = $this->detectProvisioningRequired($response);
+			if ($provisioning !== null) {
+				return $provisioning;
+			}
+
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
