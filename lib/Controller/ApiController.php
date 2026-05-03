@@ -873,7 +873,7 @@ class ApiController extends Controller {
 				'success' => false,
 				'error' => $result['error'] ?? 'Nextcloud access not provisioned',
 				'provisioning_required' => true,
-			], 428);
+			], Http::STATUS_PRECONDITION_REQUIRED);
 		}
 
 		return new JSONResponse([

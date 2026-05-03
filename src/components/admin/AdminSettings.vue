@@ -408,6 +408,11 @@ async function loadWebhookPresets() {
 	}
 }
 
+// Invariant: webhooksProvisioningRequired is reset on entry to
+// loadWebhookPresets and only ever set true here on a 428 — we never clear
+// it on success because the provisioning CTA card hides the toggle buttons
+// (the v-else-if chain shows only one card at a time), so a successful
+// toggle while the flag is true is not user-reachable.
 async function toggleWebhookPreset(preset) {
 	preset.toggling = true
 
