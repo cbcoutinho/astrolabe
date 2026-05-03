@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.12 (2026-05-03)
+
+### Fix
+
+- address review feedback and psalm errors for webhook 428 path
+- **admin**: handle 428 from MCP webhook endpoints with provisioning CTA
+
 ## v0.13.11 (2026-04-30)
 
 ### Fix
