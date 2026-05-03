@@ -445,10 +445,7 @@ class ApiController extends Controller {
 		// Get installed apps to filter presets
 		$installedAppsResult = $this->client->getInstalledApps($accessToken);
 		if (isset($installedAppsResult['error'])) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => $installedAppsResult['error']
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
+			return $this->mcpErrorResponse($installedAppsResult);
 		}
 
 		$installedApps = $installedAppsResult['apps'] ?? [];
@@ -456,10 +453,7 @@ class ApiController extends Controller {
 		// Get registered webhooks to check preset status
 		$webhooksResult = $this->client->listWebhooks($accessToken);
 		if (isset($webhooksResult['error'])) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => $webhooksResult['error']
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
+			return $this->mcpErrorResponse($webhooksResult);
 		}
 
 		$registeredWebhooks = $webhooksResult['webhooks'] ?? [];
@@ -580,6 +574,12 @@ class ApiController extends Controller {
 			);
 
 			if (isset($result['error'])) {
+				// Bail out immediately on provisioning-required — every
+				// subsequent createWebhook would fail the same way and
+				// pollute the error list.
+				if (!empty($result['provisioning_required'])) {
+					return $this->mcpErrorResponse($result);
+				}
 				$errors[] = [
 					'event' => $eventConfig['event'],
 					'error' => $result['error']
@@ -667,10 +667,7 @@ class ApiController extends Controller {
 		// Get all registered webhooks
 		$webhooksResult = $this->client->listWebhooks($accessToken);
 		if (isset($webhooksResult['error'])) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => $webhooksResult['error']
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
+			return $this->mcpErrorResponse($webhooksResult);
 		}
 
 		$registeredWebhooks = $webhooksResult['webhooks'] ?? [];
@@ -706,6 +703,11 @@ class ApiController extends Controller {
 			$result = $this->client->deleteWebhook($webhook['id'], $accessToken);
 
 			if (isset($result['error'])) {
+				// Bail out immediately on provisioning-required — every
+				// subsequent deleteWebhook would fail the same way.
+				if (!empty($result['provisioning_required'])) {
+					return $this->mcpErrorResponse($result);
+				}
 				$errors[] = [
 					'webhook_id' => $webhook['id'],
 					'event' => $webhook['event'],
@@ -850,5 +852,33 @@ class ApiController extends Controller {
 		}
 
 		return new JSONResponse($result);
+	}
+
+	/**
+	 * Convert an MCP client error result into a JSONResponse with the right
+	 * HTTP status code.
+	 *
+	 * The MCP server returns 428 (Precondition Required) when the user has not
+	 * completed Login Flow v2 provisioning. ``McpServerClient`` surfaces that
+	 * as ``['error' => ..., 'provisioning_required' => true]``. Pass it back
+	 * to the frontend with ``provisioning_required`` set so AdminSettings.vue
+	 * can render a "complete authorization" CTA instead of an opaque error.
+	 *
+	 * @param array $result The MCP client result containing 'error' (and
+	 *                      optionally 'provisioning_required').
+	 */
+	private function mcpErrorResponse(array $result): JSONResponse {
+		if (!empty($result['provisioning_required'])) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => $result['error'] ?? 'Nextcloud access not provisioned',
+				'provisioning_required' => true,
+			], Http::STATUS_PRECONDITION_REQUIRED);
+		}
+
+		return new JSONResponse([
+			'success' => false,
+			'error' => $result['error'] ?? 'Unknown error',
+		], Http::STATUS_INTERNAL_SERVER_ERROR);
 	}
 }

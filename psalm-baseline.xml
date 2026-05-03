@@ -296,7 +296,8 @@
       <code><![CDATA[array]]></code>
       <code><![CDATA[array{
 	 *   apps?: array<string>,
-	 *   error?: string
+	 *   error?: string,
+	 *   provisioning_required?: true
 	 * }]]></code>
       <code><![CDATA[array{
 	 *   id?: int,
@@ -304,7 +305,8 @@
 	 *   uri?: string,
 	 *   event_filter?: array,
 	 *   enabled?: bool,
-	 *   error?: string
+	 *   error?: string,
+	 *   provisioning_required?: true
 	 * }]]></code>
       <code><![CDATA[array{
 	 *   results?: array,
@@ -360,9 +362,10 @@
 	 *     event_filter?: array,
 	 *     enabled?: bool
 	 *   }>,
-	 *   error?: string
+	 *   error?: string,
+	 *   provisioning_required?: true
 	 * }]]></code>
-      <code><![CDATA[array{success?: bool, error?: string}]]></code>
+      <code><![CDATA[array{success?: bool, error?: string, provisioning_required?: true}]]></code>
       <code><![CDATA[array{success?: bool, message?: string, error?: string}]]></code>
       <code><![CDATA[string]]></code>
     </MixedInferredReturnType>

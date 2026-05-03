@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Service;
 
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
@@ -34,6 +35,60 @@ class McpServerClient {
 		// Get MCP server configuration from Nextcloud config
 		$baseUrl = $this->config->getSystemValue('mcp_server_url', 'http://localhost:8000');
 		$this->baseUrl = is_string($baseUrl) ? $baseUrl : 'http://localhost:8000';
+	}
+
+	/**
+	 * Convert a non-2xx response into a structured error array.
+	 *
+	 * Webhook-related methods set ``http_errors => false`` on the Guzzle
+	 * client so they can intercept HTTP 428 (Precondition Required) — the
+	 * MCP server returns that when the user has not completed Login Flow v2
+	 * provisioning, and the controller maps it to a "complete authorization"
+	 * CTA. Once exceptions are disabled, every other non-2xx response would
+	 * silently fall through to ``json_decode`` and be treated as success, so
+	 * this helper turns any non-2xx into an explicit error array.
+	 *
+	 * 428 → ``provisioning_required => true`` (mapped to a CTA in the UI).
+	 * Any other non-2xx → generic error with the status code in the message.
+	 * 2xx → null (caller continues with the success path).
+	 *
+	 * @return array{error: string, provisioning_required?: true}|null
+	 */
+	private function detectErrorResponse(IResponse $response): ?array {
+		$statusCode = $response->getStatusCode();
+
+		if ($statusCode === 428) {
+			return [
+				'error' => $this->extractProvisioningMessage($response),
+				'provisioning_required' => true,
+			];
+		}
+
+		if ($statusCode < 200 || $statusCode >= 300) {
+			return ['error' => "Unexpected HTTP $statusCode from MCP server"];
+		}
+
+		return null;
+	}
+
+	/**
+	 * Pull the human-readable message out of a 428 response body, falling
+	 * back to a generic "complete authorization" string if the body is not
+	 * a JSON object or has no ``message`` field.
+	 *
+	 * @psalm-suppress MixedAssignment $rawMessage is intentionally mixed
+	 *                  until is_string narrows it to a string below.
+	 */
+	private function extractProvisioningMessage(IResponse $response): string {
+		$default = 'Nextcloud access not provisioned. Complete authorization in Personal Settings.';
+
+		$decoded = json_decode((string)$response->getBody(), true);
+		if (!is_array($decoded)) {
+			return $default;
+		}
+
+		$rawMessage = $decoded['message'] ?? null;
+		return is_string($rawMessage) ? $rawMessage : $default;
 	}
 
 	/**
@@ -388,7 +443,8 @@ class McpServerClient {
 	 *     event_filter?: array,
 	 *     enabled?: bool
 	 *   }>,
-	 *   error?: string
+	 *   error?: string,
+	 *   provisioning_required?: true
 	 * }
 	 */
 	public function listWebhooks(string $token): array {
@@ -398,9 +454,16 @@ class McpServerClient {
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
-					]
+					],
+					'http_errors' => false,
 				]
 			);
+
+			$errorResult = $this->detectErrorResponse($response);
+			if ($errorResult !== null) {
+				return $errorResult;
+			}
+
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
@@ -431,7 +494,8 @@ class McpServerClient {
 	 *   uri?: string,
 	 *   event_filter?: array,
 	 *   enabled?: bool,
-	 *   error?: string
+	 *   error?: string,
+	 *   provisioning_required?: true
 	 * }
 	 */
 	public function createWebhook(
@@ -457,9 +521,16 @@ class McpServerClient {
 						'Authorization' => 'Bearer ' . $token,
 						'Content-Type' => 'application/json',
 					],
-					'json' => $requestBody
+					'json' => $requestBody,
+					'http_errors' => false,
 				]
 			);
+
+			$errorResult = $this->detectErrorResponse($response);
+			if ($errorResult !== null) {
+				return $errorResult;
+			}
+
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
@@ -483,7 +554,7 @@ class McpServerClient {
 	 *
 	 * @param int $webhookId Webhook ID to delete
 	 * @param string $token OAuth bearer token
-	 * @return array{success?: bool, error?: string}
+	 * @return array{success?: bool, error?: string, provisioning_required?: true}
 	 */
 	public function deleteWebhook(int $webhookId, string $token): array {
 		try {
@@ -492,9 +563,15 @@ class McpServerClient {
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
-					]
+					],
+					'http_errors' => false,
 				]
 			);
+
+			$errorResult = $this->detectErrorResponse($response);
+			if ($errorResult !== null) {
+				return $errorResult;
+			}
 
 			// Successful DELETE may return 204 No Content
 			if ($response->getStatusCode() === 204) {
@@ -526,7 +603,8 @@ class McpServerClient {
 	 * @param string $token OAuth bearer token
 	 * @return array{
 	 *   apps?: array<string>,
-	 *   error?: string
+	 *   error?: string,
+	 *   provisioning_required?: true
 	 * }
 	 */
 	public function getInstalledApps(string $token): array {
@@ -536,9 +614,16 @@ class McpServerClient {
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
-					]
+					],
+					'http_errors' => false,
 				]
 			);
+
+			$errorResult = $this->detectErrorResponse($response);
+			if ($errorResult !== null) {
+				return $errorResult;
+			}
+
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
