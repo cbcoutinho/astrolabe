@@ -489,6 +489,14 @@ export default {
 			return this.results.filter(r => (r.score || 0) >= threshold)
 		},
 	},
+	watch: {
+		scoreThreshold() {
+			// Re-render plot so visualization mirrors filteredResults list.
+			if (this.coordinates.length > 0) {
+				this.renderPlot()
+			}
+		},
+	},
 	mounted() {
 		// Check for URL parameters to open chunk viewer
 		this.handleUrlParameters()
@@ -714,9 +722,17 @@ export default {
 			const width = container.clientWidth
 			const height = container.clientHeight || 400
 
-			const coordinates = this.coordinates
 			const queryCoords = this.queryCoords
-			const results = this.results
+
+			// Filter results and coordinates by scoreThreshold so the plot
+			// stays in sync with the results list (filteredResults computed).
+			// results and coordinates are guaranteed 1:1 by the API.
+			const threshold = this.scoreThreshold / 100
+			const keepIndices = this.results
+				.map((r, i) => ((r.score || 0) >= threshold ? i : -1))
+				.filter(i => i >= 0)
+			const results = keepIndices.map(i => this.results[i])
+			const coordinates = keepIndices.map(i => this.coordinates[i])
 
 			const scores = results.map(r => r.score)
 
