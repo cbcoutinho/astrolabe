@@ -484,16 +484,59 @@ export default {
 		selectedAlgorithmOption() {
 			return this.algorithmOptions.find(opt => opt.id === this.algorithm) || this.algorithmOptions[0]
 		},
+		scoreThresholdRatio() {
+			return this.scoreThreshold / 100
+		},
 		filteredResults() {
-			const threshold = this.scoreThreshold / 100
+			const threshold = this.scoreThresholdRatio
 			return this.results.filter(r => (r.score || 0) >= threshold)
 		},
+		// Parallel arrays used by renderPlot. The coordinate guard is
+		// defensive against API drift so the plot never sees holes; the
+		// list view (filteredResults) intentionally stays independent so
+		// it still renders when PCA coordinates are unavailable.
+		filteredResultsAndCoords() {
+			const threshold = this.scoreThresholdRatio
+			return this.results.reduce((acc, r, i) => {
+				if ((r.score || 0) >= threshold && this.coordinates[i] !== undefined) {
+					acc.results.push(r)
+					acc.coordinates.push(this.coordinates[i])
+				}
+				return acc
+			}, { results: [], coordinates: [] })
+		},
+	},
+	watch: {
+		scoreThreshold() {
+			// Debounce so rapid slider drags don't trigger many Plotly.newPlot
+			// calls (each tears down and rebuilds the WebGL scene).
+			if (this._scoreThresholdTimer) {
+				clearTimeout(this._scoreThresholdTimer)
+			}
+			this._scoreThresholdTimer = setTimeout(() => {
+				this._scoreThresholdTimer = null
+				if (this.coordinates.length > 0) {
+					this.renderPlot()
+				}
+			}, 150)
+		},
+	},
+	created() {
+		// Non-reactive instance state. Storing these in data() would make
+		// Vue deep-observe a timer ID and a results-snapshot array on every
+		// mutation, with no template benefit.
+		this._scoreThresholdTimer = null
+		this._renderedResults = []
 	},
 	mounted() {
 		// Check for URL parameters to open chunk viewer
 		this.handleUrlParameters()
 	},
 	beforeUnmount() {
+		if (this._scoreThresholdTimer) {
+			clearTimeout(this._scoreThresholdTimer)
+			this._scoreThresholdTimer = null
+		}
 		// Clean up Plotly event handlers to prevent memory leaks
 		const plotDiv = document.getElementById('viz-plot')
 		if (plotDiv && plotDiv.on) {
@@ -714,9 +757,15 @@ export default {
 			const width = container.clientWidth
 			const height = container.clientHeight || 400
 
-			const coordinates = this.coordinates
 			const queryCoords = this.queryCoords
-			const results = this.results
+
+			// Single source of truth for the threshold + coord guard.
+			const { results, coordinates } = this.filteredResultsAndCoords
+
+			// Snapshot the filtered subset that will actually be rendered.
+			// handlePlotClick indexes into this — not this.results — because
+			// Plotly's pointIndex refers to the rendered trace data.
+			this._renderedResults = results
 
 			const scores = results.map(r => r.score)
 
@@ -822,9 +871,12 @@ export default {
 
 			Plotly.newPlot('viz-plot', traces, layout, config)
 
-			// Register click event handler for result points
+			// Register click event handler for result points. Plotly.newPlot
+			// reuses the same DOM node, so listeners stack across re-renders —
+			// remove any prior handler before attaching a fresh one.
 			const plotDiv = document.getElementById('viz-plot')
 			if (plotDiv) {
+				plotDiv.removeAllListeners('plotly_click')
 				plotDiv.on('plotly_click', this.handlePlotClick)
 			}
 		},
@@ -946,9 +998,10 @@ export default {
 				return
 			}
 
-			// Access full result object using pointIndex
-			// Results array is 1:1 with coordinates array (guaranteed by API)
-			const result = this.results[pointIndex]
+			// Index into the rendered (filtered) subset, not this.results.
+			// pointIndex refers to the trace data Plotly painted, which may
+			// be a subset of this.results when scoreThreshold is non-zero.
+			const result = this._renderedResults[pointIndex]
 
 			if (!result) {
 				console.warn('Click handler: result not found for index', pointIndex)
