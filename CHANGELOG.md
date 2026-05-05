@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.13 (2026-05-05)
+
+### Fix
+
+- **viz**: consolidate threshold filter, drop reactivity overhead
+- **viz**: click handler must index into rendered (filtered) results
+- **viz**: debounce slider, dedupe plot click handlers, simplify filter
+- **viz**: apply scoreThreshold filter to 3D plot
+
 ## v0.13.12 (2026-05-03)
 
 ### Fix
