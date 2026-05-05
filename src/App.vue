@@ -444,6 +444,7 @@ export default {
 			queryCoords: [],
 			showQueryPoint: true,
 			scoreThresholdTimer: null,
+			renderedResults: [],
 			// Vector status state
 			vectorStatus: null,
 			statusLoading: false,
@@ -750,6 +751,11 @@ export default {
 			const results = filtered.results
 			const coordinates = filtered.coordinates
 
+			// Snapshot the filtered subset that will actually be rendered.
+			// handlePlotClick indexes into this — not this.results — because
+			// Plotly's pointIndex refers to the rendered trace data.
+			this.renderedResults = results
+
 			const scores = results.map(r => r.score)
 
 			// Trace 1: Document results (always visible)
@@ -981,9 +987,10 @@ export default {
 				return
 			}
 
-			// Access full result object using pointIndex
-			// Results array is 1:1 with coordinates array (guaranteed by API)
-			const result = this.results[pointIndex]
+			// Index into the rendered (filtered) subset, not this.results.
+			// pointIndex refers to the trace data Plotly painted, which may
+			// be a subset of this.results when scoreThreshold is non-zero.
+			const result = this.renderedResults[pointIndex]
 
 			if (!result) {
 				console.warn('Click handler: result not found for index', pointIndex)
