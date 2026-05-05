@@ -443,6 +443,7 @@ export default {
 			coordinates: [],
 			queryCoords: [],
 			showQueryPoint: true,
+			scoreThresholdTimer: null,
 			// Vector status state
 			vectorStatus: null,
 			statusLoading: false,
@@ -491,10 +492,17 @@ export default {
 	},
 	watch: {
 		scoreThreshold() {
-			// Re-render plot so visualization mirrors filteredResults list.
-			if (this.coordinates.length > 0) {
-				this.renderPlot()
+			// Debounce so rapid slider drags don't trigger many Plotly.newPlot
+			// calls (each tears down and rebuilds the WebGL scene).
+			if (this.scoreThresholdTimer) {
+				clearTimeout(this.scoreThresholdTimer)
 			}
+			this.scoreThresholdTimer = setTimeout(() => {
+				this.scoreThresholdTimer = null
+				if (this.coordinates.length > 0) {
+					this.renderPlot()
+				}
+			}, 150)
 		},
 	},
 	mounted() {
@@ -502,6 +510,10 @@ export default {
 		this.handleUrlParameters()
 	},
 	beforeUnmount() {
+		if (this.scoreThresholdTimer) {
+			clearTimeout(this.scoreThresholdTimer)
+			this.scoreThresholdTimer = null
+		}
 		// Clean up Plotly event handlers to prevent memory leaks
 		const plotDiv = document.getElementById('viz-plot')
 		if (plotDiv && plotDiv.on) {
@@ -728,11 +740,15 @@ export default {
 			// stays in sync with the results list (filteredResults computed).
 			// results and coordinates are guaranteed 1:1 by the API.
 			const threshold = this.scoreThreshold / 100
-			const keepIndices = this.results
-				.map((r, i) => ((r.score || 0) >= threshold ? i : -1))
-				.filter(i => i >= 0)
-			const results = keepIndices.map(i => this.results[i])
-			const coordinates = keepIndices.map(i => this.coordinates[i])
+			const filtered = this.results.reduce((acc, r, i) => {
+				if ((r.score || 0) >= threshold) {
+					acc.results.push(r)
+					acc.coordinates.push(this.coordinates[i])
+				}
+				return acc
+			}, { results: [], coordinates: [] })
+			const results = filtered.results
+			const coordinates = filtered.coordinates
 
 			const scores = results.map(r => r.score)
 
@@ -838,9 +854,12 @@ export default {
 
 			Plotly.newPlot('viz-plot', traces, layout, config)
 
-			// Register click event handler for result points
+			// Register click event handler for result points. Plotly.newPlot
+			// reuses the same DOM node, so listeners stack across re-renders —
+			// remove any prior handler before attaching a fresh one.
 			const plotDiv = document.getElementById('viz-plot')
 			if (plotDiv) {
+				plotDiv.removeAllListeners('plotly_click')
 				plotDiv.on('plotly_click', this.handlePlotClick)
 			}
 		},
