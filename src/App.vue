@@ -864,6 +864,15 @@ export default {
 					start: result.chunk_start_offset,
 					end: result.chunk_end_offset,
 				}
+				// Pass chunk_index/total_chunks when known so the MCP server can
+				// look up the chunk by the always-indexed chunk_index field
+				// (faster and more robust than offset-based filtering).
+				if (result.chunk_index !== undefined && result.chunk_index !== null) {
+					params.chunk_index = result.chunk_index
+				}
+				if (result.total_chunks !== undefined && result.total_chunks !== null) {
+					params.total_chunks = result.total_chunks
+				}
 
 				const response = await axios.get(url, { params })
 
