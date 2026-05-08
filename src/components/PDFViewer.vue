@@ -14,7 +14,7 @@
 				class="pdf-page-image"
 				alt="PDF page" />
 			<div
-				v-for="(rect, i) in highlightBbox"
+				v-for="(rect, i) in (pageNumber === bboxPage ? highlightBbox : [])"
 				:key="i"
 				class="pdf-highlight"
 				:style="highlightStyle(rect)" />
@@ -59,6 +59,13 @@ const props = defineProps({
 	highlightBbox: {
 		type: Array,
 		default: () => [],
+		validator: (v) => v.every(r => Array.isArray(r) && r.length === 4 && r.every(n => typeof n === 'number')),
+	},
+	// Page the highlightBbox belongs to. The overlay only renders when
+	// pageNumber === bboxPage so highlights don't bleed across navigation.
+	bboxPage: {
+		type: Number,
+		default: null,
 	},
 })
 
@@ -128,7 +135,7 @@ async function loadPage() {
 }
 
 function highlightStyle(rect) {
-	const [x0, y0, x1, y1] = rect
+	const [x0, y0, x1, y1] = rect.map(v => Math.max(0, Math.min(1, v)))
 	return {
 		left: `${x0 * 100}%`,
 		top: `${y0 * 100}%`,
