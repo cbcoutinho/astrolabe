@@ -573,6 +573,14 @@ export default {
 				if (pageNumber) {
 					result.page_number = parseInt(pageNumber, 10)
 				}
+				const chunkIndex = urlParams.get('chunk_index')
+				if (chunkIndex !== null) {
+					result.chunk_index = parseInt(chunkIndex, 10)
+				}
+				const totalChunks = urlParams.get('total_chunks')
+				if (totalChunks !== null) {
+					result.total_chunks = parseInt(totalChunks, 10)
+				}
 				const boardId = urlParams.get('board_id')
 				if (boardId) {
 					result.metadata.board_id = boardId
@@ -915,6 +923,15 @@ export default {
 					doc_id: result.id,
 					start: result.chunk_start_offset,
 					end: result.chunk_end_offset,
+				}
+				// Pass chunk_index/total_chunks when known so the MCP server can
+				// look up the chunk by the always-indexed chunk_index field
+				// (faster and more robust than offset-based filtering).
+				if (result.chunk_index !== undefined && result.chunk_index !== null) {
+					params.chunk_index = result.chunk_index
+				}
+				if (result.total_chunks !== undefined && result.total_chunks !== null) {
+					params.total_chunks = result.total_chunks
 				}
 
 				const response = await axios.get(url, { params })

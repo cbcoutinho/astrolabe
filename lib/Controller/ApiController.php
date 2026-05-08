@@ -746,6 +746,10 @@ class ApiController extends Controller {
 	 * @param string $doc_id Document ID
 	 * @param int $start Start offset
 	 * @param int $end End offset
+	 * @param int|null $chunk_index Zero-based chunk index in document (optional;
+	 *                              when provided, lets the MCP server use the always-indexed chunk_index
+	 *                              field for lookup instead of the offset filter)
+	 * @param int|null $total_chunks Total chunks in document (optional)
 	 * @return JSONResponse
 	 */
 	#[NoAdminRequired]
@@ -754,6 +758,8 @@ class ApiController extends Controller {
 		string $doc_id,
 		int $start,
 		int $end,
+		?int $chunk_index = null,
+		?int $total_chunks = null,
 	): JSONResponse {
 		$user = $this->userSession->getUser();
 		if (!$user) {
@@ -787,7 +793,15 @@ class ApiController extends Controller {
 			], Http::STATUS_UNAUTHORIZED);
 		}
 
-		$result = $this->client->getChunkContext($doc_type, $doc_id, $start, $end, $accessToken);
+		$result = $this->client->getChunkContext(
+			$doc_type,
+			$doc_id,
+			$start,
+			$end,
+			$accessToken,
+			$chunk_index,
+			$total_chunks,
+		);
 
 		if (isset($result['error'])) {
 			return new JSONResponse(['success' => false, 'error' => $result['error']], Http::STATUS_INTERNAL_SERVER_ERROR);

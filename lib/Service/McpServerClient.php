@@ -649,6 +649,10 @@ class McpServerClient {
 	 * @param int $start Start offset
 	 * @param int $end End offset
 	 * @param string $token OAuth bearer token
+	 * @param int|null $chunkIndex Zero-based chunk index (optional). When
+	 *                             provided, the MCP server uses the always-indexed chunk_index field
+	 *                             for lookup instead of the offset filter.
+	 * @param int|null $totalChunks Total chunks in document (optional)
 	 * @return array
 	 */
 	public function getChunkContext(
@@ -657,21 +661,30 @@ class McpServerClient {
 		int $start,
 		int $end,
 		string $token,
+		?int $chunkIndex = null,
+		?int $totalChunks = null,
 	): array {
 		try {
+			$query = [
+				'doc_type' => $docType,
+				'doc_id' => $docId,
+				'start' => $start,
+				'end' => $end,
+				'context' => 500
+			];
+			if ($chunkIndex !== null) {
+				$query['chunk_index'] = $chunkIndex;
+			}
+			if ($totalChunks !== null) {
+				$query['total_chunks'] = $totalChunks;
+			}
 			$response = $this->httpClient->get(
 				$this->baseUrl . '/api/v1/chunk-context',
 				[
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
-					'query' => [
-						'doc_type' => $docType,
-						'doc_id' => $docId,
-						'start' => $start,
-						'end' => $end,
-						'context' => 500
-					]
+					'query' => $query
 				]
 			);
 			$data = json_decode($response->getBody(), true);
