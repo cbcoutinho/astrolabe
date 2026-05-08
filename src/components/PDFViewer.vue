@@ -200,9 +200,8 @@ onMounted(() => {
 
 .pdf-highlight {
 	position: absolute;
-	background: rgba(255, 235, 59, 0.35);
+	background: rgba(255, 235, 59, 0.4);
 	pointer-events: none;
-	mix-blend-mode: multiply;
 }
 
 @media (max-width: 768px) {
