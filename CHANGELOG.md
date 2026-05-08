@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.13.14 (2026-05-08)
+
+### Fix
+
+- **chunk-context**: forward chunk_index in deep-link path; fix php-cs
+- **chunk-context**: pass chunk_index to MCP for indexed Qdrant lookup
+
 ## v0.13.13 (2026-05-05)
 
 ### Fix
