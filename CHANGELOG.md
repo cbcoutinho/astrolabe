@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.14.0 (2026-05-08)
+
+### Feat
+
+- **pdf-viewer**: client-side highlight overlay from chunk_bbox
+
+### Fix
+
+- **pdf-viewer**: scope bbox highlight to its page; clamp + validate
+- **pdf-viewer**: drop multiply blend mode for dark-mode visibility
+
 ## v0.13.14 (2026-05-08)
 
 ### Fix
