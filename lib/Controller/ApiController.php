@@ -745,8 +745,8 @@ class ApiController extends Controller {
 	 * @param int $start Start offset
 	 * @param int $end End offset
 	 * @param int|null $chunk_index Zero-based chunk index in document (optional;
-	 *   when provided, lets the MCP server use the always-indexed chunk_index
-	 *   field for lookup instead of the offset filter)
+	 *                              when provided, lets the MCP server use the always-indexed chunk_index
+	 *                              field for lookup instead of the offset filter)
 	 * @param int|null $total_chunks Total chunks in document (optional)
 	 * @return JSONResponse
 	 */

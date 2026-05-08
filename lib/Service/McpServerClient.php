@@ -565,8 +565,8 @@ class McpServerClient {
 	 * @param int $end End offset
 	 * @param string $token OAuth bearer token
 	 * @param int|null $chunkIndex Zero-based chunk index (optional). When
-	 *   provided, the MCP server uses the always-indexed chunk_index field
-	 *   for lookup instead of the offset filter.
+	 *                             provided, the MCP server uses the always-indexed chunk_index field
+	 *                             for lookup instead of the offset filter.
 	 * @param int|null $totalChunks Total chunks in document (optional)
 	 * @return array
 	 */

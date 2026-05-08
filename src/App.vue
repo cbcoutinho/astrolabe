@@ -530,6 +530,14 @@ export default {
 				if (pageNumber) {
 					result.page_number = parseInt(pageNumber, 10)
 				}
+				const chunkIndex = urlParams.get('chunk_index')
+				if (chunkIndex !== null) {
+					result.chunk_index = parseInt(chunkIndex, 10)
+				}
+				const totalChunks = urlParams.get('total_chunks')
+				if (totalChunks !== null) {
+					result.total_chunks = parseInt(totalChunks, 10)
+				}
 				const boardId = urlParams.get('board_id')
 				if (boardId) {
 					result.metadata.board_id = boardId
