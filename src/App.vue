@@ -325,6 +325,7 @@
 						v-else-if="viewerType === 'pdf'"
 						:file-path="currentPdfPath"
 						:page-number="viewerPage"
+						:highlight-bbox="currentBbox"
 						@prev-page="viewerPage--"
 						@next-page="viewerPage++"
 						@loaded="handlePdfLoaded"
@@ -455,6 +456,7 @@ export default {
 			viewerPage: 1,
 			pdfTotalPages: 0,
 			currentPdfPath: '',
+			currentBbox: [],
 			currentResult: null, // Store the current result for document linking
 			viewerContext: {
 				chunk: '',
@@ -942,6 +944,7 @@ export default {
 						this.viewerType = 'pdf'
 						this.currentPdfPath = result.metadata?.path || ''
 						this.viewerPage = response.data.page_number
+						this.currentBbox = response.data.chunk_bbox || []
 					} else {
 						this.viewerType = 'text'
 						this.viewerContext = {
@@ -997,6 +1000,7 @@ export default {
 			this.showViewer = false
 			this.pdfTotalPages = 0
 			this.currentResult = null
+			this.currentBbox = []
 		},
 
 		handlePlotClick(eventData) {

@@ -13,6 +13,11 @@
 				:src="`data:image/png;base64,${imageData}`"
 				class="pdf-page-image"
 				alt="PDF page" />
+			<div
+				v-for="(rect, i) in highlightBbox"
+				:key="i"
+				class="pdf-highlight"
+				:style="highlightStyle(rect)" />
 		</div>
 	</div>
 </template>
@@ -47,6 +52,13 @@ const props = defineProps({
 	scale: {
 		type: Number,
 		default: 2.0,
+	},
+	// Normalized [x0, y0, x1, y1] tuples (0..1, top-left origin) marking
+	// the location of the matched chunk on the page. Drawn as a soft-yellow
+	// overlay on top of the rendered image. Empty array = no highlight.
+	highlightBbox: {
+		type: Array,
+		default: () => [],
 	},
 })
 
@@ -115,6 +127,16 @@ async function loadPage() {
 	}
 }
 
+function highlightStyle(rect) {
+	const [x0, y0, x1, y1] = rect
+	return {
+		left: `${x0 * 100}%`,
+		top: `${y0 * 100}%`,
+		width: `${(x1 - x0) * 100}%`,
+		height: `${(y1 - y0) * 100}%`,
+	}
+}
+
 // Re-fetch when file path or page number changes
 watch(() => [props.filePath, props.pageNumber], loadPage)
 
@@ -162,6 +184,7 @@ onMounted(() => {
 
 .pdf-image-container {
 	position: relative;
+	display: inline-block;
 	border: 1px solid var(--color-border);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	background: var(--color-main-background);
@@ -173,6 +196,13 @@ onMounted(() => {
 	display: block;
 	max-width: 100%;
 	height: auto;
+}
+
+.pdf-highlight {
+	position: absolute;
+	background: rgba(255, 235, 59, 0.35);
+	pointer-events: none;
+	mix-blend-mode: multiply;
 }
 
 @media (max-width: 768px) {
