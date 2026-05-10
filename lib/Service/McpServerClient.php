@@ -380,7 +380,7 @@ class McpServerClient {
 	}
 
 	/**
-	 * Check if the MCP server is reachable and API key is valid.
+	 * Check if the MCP server is reachable and healthy.
 	 *
 	 * @return bool True if server is reachable and healthy
 	 */

@@ -129,6 +129,7 @@ final class OauthControllerTest extends TestCase {
 				['mcp_server_url', '', $mcpServerUrl],
 				['mcp_server_public_url', $mcpServerUrl, $mcpServerUrl],
 				['astrolabe_client_secret', '', ''],
+				['astrolabe_internal_url', '', ''],
 			]);
 
 		// Mock client ID

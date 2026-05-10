@@ -365,6 +365,32 @@ class OauthController extends Controller {
 	}
 
 	/**
+	 * Get Nextcloud base URL for reaching this NC's OIDC endpoints.
+	 *
+	 * Mirrors IdpTokenRefresher::getNextcloudBaseUrl() so both the
+	 * authorization-flow and token-refresh paths resolve the same URL.
+	 *
+	 * Priority:
+	 *  1. astrolabe_internal_url - explicit override (admin-configurable)
+	 *  2. http://localhost - default for self-hosted/Docker, where PHP and
+	 *     Apache share the same host. Fails on managed NC, which is why
+	 *     admins of managed deployments must set the override.
+	 */
+	private function getNextcloudBaseUrl(): string {
+		$internalUrl = $this->config->getSystemValue('astrolabe_internal_url', '');
+		if (!is_string($internalUrl) || $internalUrl === '') {
+			return 'http://localhost';
+		}
+		if (!filter_var($internalUrl, FILTER_VALIDATE_URL)) {
+			$this->logger->warning('Invalid astrolabe_internal_url format, falling back to default', [
+				'configured_url' => $internalUrl,
+			]);
+			return 'http://localhost';
+		}
+		return rtrim($internalUrl, '/');
+	}
+
+	/**
 	 * Build OAuth authorization URL.
 	 *
 	 * Queries MCP server for IdP configuration, then performs OIDC discovery
@@ -426,13 +452,16 @@ class OauthController extends Controller {
 				'discovery_url' => $discoveryUrl,
 			]);
 		} else {
-			// Fall back to Nextcloud's OIDC app
-			// Use internal localhost URL for HTTP request (accessible from inside container)
-			// We'll transform the returned URLs to external format after discovery
-			$discoveryUrl = 'http://localhost/.well-known/openid-configuration';
-			$internalBaseUrl = 'http://localhost';
+			// Fall back to Nextcloud's OIDC app.
+			// Use the admin-configured astrolabe_internal_url if set; otherwise
+			// default to http://localhost (works when Astrolabe runs in the same
+			// container/host as Nextcloud's web server). Managed Nextcloud
+			// deployments must set astrolabe_internal_url to the public NC URL
+			// because there is no local web server to curl into.
+			$internalBaseUrl = $this->getNextcloudBaseUrl();
+			$discoveryUrl = $internalBaseUrl . '/.well-known/openid-configuration';
 
-			$this->logger->info('Using Nextcloud OIDC app as IdP (internal request)', [
+			$this->logger->info('Using Nextcloud OIDC app as IdP', [
 				'discovery_url' => $discoveryUrl,
 			]);
 		}

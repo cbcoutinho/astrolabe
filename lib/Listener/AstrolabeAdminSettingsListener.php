@@ -48,9 +48,9 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		// Map field IDs to system config keys
 		$value = match($fieldId) {
 			'mcp_server_url' => $this->config->getSystemValue('mcp_server_url', ''),
-			'mcp_server_api_key' => '****', // Never leak the API key on read
 			'astrolabe_client_id' => $this->config->getSystemValue('astrolabe_client_id', ''),
 			'astrolabe_client_secret' => '****', // Never leak the secret on read
+			'astrolabe_internal_url' => $this->config->getSystemValue('astrolabe_internal_url', ''),
 			default => null,
 		};
 
@@ -63,12 +63,7 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		$fieldId = $event->getFieldId();
 		$value = $event->getValue();
 
-		// Only save if value is not empty (allow clearing by setting to empty string)
 		// For password fields, if the value is '****', don't update (user didn't change it)
-		if ($fieldId === 'mcp_server_api_key' && $value === '****') {
-			$event->stopPropagation();
-			return;
-		}
 		if ($fieldId === 'astrolabe_client_secret' && $value === '****') {
 			$event->stopPropagation();
 			return;
@@ -77,9 +72,9 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		try {
 			match($fieldId) {
 				'mcp_server_url' => $this->config->setSystemValue('mcp_server_url', (string)$value),
-				'mcp_server_api_key' => $this->config->setSystemValue('mcp_server_api_key', (string)$value),
 				'astrolabe_client_id' => $this->config->setSystemValue('astrolabe_client_id', (string)$value),
 				'astrolabe_client_secret' => $this->config->setSystemValue('astrolabe_client_secret', (string)$value),
+				'astrolabe_internal_url' => $this->config->setSystemValue('astrolabe_internal_url', (string)$value),
 				default => null,
 			};
 
