@@ -387,6 +387,15 @@ class OauthController extends Controller {
 			]);
 			return 'http://localhost';
 		}
+		// Warn if it looks like an external URL (common misconfiguration).
+		// Mirrors IdpTokenRefresher::getNextcloudBaseUrl() so both helpers
+		// behave the same.
+		if (preg_match('/:\d{4,5}$/', $internalUrl)) {
+			$this->logger->warning('astrolabe_internal_url appears to use external port mapping', [
+				'configured_url' => $internalUrl,
+				'hint' => 'Internal URLs should use port 80, not mapped ports like :8080',
+			]);
+		}
 		return rtrim($internalUrl, '/');
 	}
 
@@ -629,9 +638,11 @@ class OauthController extends Controller {
 				throw new \Exception('Failed to discover token endpoint: ' . $e->getMessage());
 			}
 		} else {
-			// Nextcloud's OIDC app - use internal URL directly (no HTTP request needed)
-			// This avoids network issues when overwritehost includes external port
-			$tokenEndpoint = 'http://localhost/apps/oidc/token';
+			// Nextcloud's OIDC app — resolve the base URL via the same
+			// helper as buildAuthorizationUrl() and IdpTokenRefresher so the
+			// token-exchange leg honors astrolabe_internal_url (required for
+			// managed NC where http://localhost is unreachable from PHP).
+			$tokenEndpoint = $this->getNextcloudBaseUrl() . '/apps/oidc/token';
 		}
 
 		$redirectUri = $this->urlGenerator->linkToRouteAbsolute(

@@ -174,4 +174,91 @@ final class OauthControllerTest extends TestCase {
 			],
 		];
 	}
+
+	// =========================================================================
+	// exchangeCodeForToken() tests — Nextcloud OIDC branch honors override
+	// =========================================================================
+
+	/**
+	 * @dataProvider provideTokenEndpointCases
+	 */
+	public function testExchangeCodeForTokenHonorsInternalUrlOverride(
+		string $internalUrlConfig,
+		string $expectedTokenEndpoint,
+	): void {
+		$mcpServerUrl = 'http://mcp-server:8000';
+
+		// Mock MCP server status response — no oidc.discovery_url forces
+		// the Nextcloud-OIDC (internal URL) branch.
+		$statusResponse = $this->createMock(IResponse::class);
+		$statusResponse->method('getBody')->willReturn(json_encode([
+			'auth_mode' => 'multi_user_basic',
+			'supports_app_passwords' => true,
+		]));
+
+		// Mock token-endpoint POST response with a minimal valid payload.
+		$tokenResponse = $this->createMock(IResponse::class);
+		$tokenResponse->method('getBody')->willReturn(json_encode([
+			'access_token' => 'fake-access-token',
+			'refresh_token' => 'fake-refresh-token',
+			'expires_in' => 3600,
+		]));
+
+		$this->httpClient->method('get')->willReturn($statusResponse);
+
+		// Capture the URL the controller POSTs the token request to.
+		$capturedTokenUrl = null;
+		$this->httpClient->expects($this->once())
+			->method('post')
+			->with(
+				$this->callback(function (string $url) use (&$capturedTokenUrl): bool {
+					$capturedTokenUrl = $url;
+					return true;
+				}),
+				$this->anything(),
+			)
+			->willReturn($tokenResponse);
+
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_internal_url', '', $internalUrlConfig],
+				['astrolabe_client_secret', '', ''],
+			]);
+
+		$this->mcpClient->method('getClientId')->willReturn('test-client-id');
+		$this->urlGenerator->method('linkToRouteAbsolute')
+			->willReturn('https://cloud.example.com/apps/astrolabe/oauth/callback');
+
+		// Call private method via reflection (same pattern used above).
+		$reflection = new \ReflectionClass($this->controller);
+		$method = $reflection->getMethod('exchangeCodeForToken');
+		$method->setAccessible(true);
+
+		$result = $method->invoke($this->controller, $mcpServerUrl, 'test-code', 'test-verifier');
+
+		$this->assertSame($expectedTokenEndpoint, $capturedTokenUrl);
+		$this->assertSame('fake-access-token', $result['access_token']);
+	}
+
+	/**
+	 * Provides test cases for exchangeCodeForToken() internal-URL resolution.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function provideTokenEndpointCases(): array {
+		return [
+			'default (config empty) → localhost' => [
+				'',
+				'http://localhost/apps/oidc/token',
+			],
+			'managed NC override → public URL' => [
+				'https://cloud.example.com',
+				'https://cloud.example.com/apps/oidc/token',
+			],
+			'override with trailing slash is trimmed' => [
+				'https://cloud.example.com/',
+				'https://cloud.example.com/apps/oidc/token',
+			],
+		];
+	}
 }
