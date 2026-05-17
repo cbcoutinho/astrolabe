@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Listener\AstrolabeAdminSettingsListener;
 use OCP\IConfig;
 use OCP\IUser;
+use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
 use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -101,6 +102,18 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 		];
 	}
 
+	public function testReadReturnsConfiguredInternalUrl(): void {
+		$this->config->expects($this->once())
+			->method('getSystemValue')
+			->with('astrolabe_internal_url', '')
+			->willReturn('https://nc.example.com');
+
+		$event = $this->buildGetEvent('astrolabe_internal_url');
+		$this->listener->handle($event);
+
+		$this->assertSame('https://nc.example.com', $event->getValue());
+	}
+
 	public function testInvalidUrlWarningDoesNotBlockOtherFields(): void {
 		// Other fields must not trigger the internal-url validation path.
 		$this->logger->method('warning')
@@ -127,6 +140,16 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 			'astrolabe-admin-settings',
 			$fieldId,
 			$value,
+		);
+	}
+
+	private function buildGetEvent(string $fieldId): DeclarativeSettingsGetValueEvent {
+		$user = $this->createMock(IUser::class);
+		return new DeclarativeSettingsGetValueEvent(
+			$user,
+			Application::APP_ID,
+			'astrolabe-admin-settings',
+			$fieldId,
 		);
 	}
 }

@@ -490,7 +490,8 @@ class OauthController extends Controller {
 			if (!$useExternalIdp) {
 				$externalBaseUrl = $this->urlGenerator->getAbsoluteURL('/');
 				$externalBaseUrl = rtrim($externalBaseUrl, '/');
-				$internalBaseUrl = rtrim($internalBaseUrl, '/');
+				// NcInternalUrlResolver::resolve() already strips trailing slash;
+				// $internalBaseUrl is used as-is.
 				/** @var string $internalHost */
 				$internalHost = preg_replace('#^https?://#', '', $internalBaseUrl);
 				// Escape backreference markers ($N, ${N}, \N) in the replacement string.

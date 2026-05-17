@@ -10,13 +10,15 @@ use Psr\Log\LoggerInterface;
 /**
  * Resolves the base URL Astrolabe uses for server-to-server requests to
  * this Nextcloud's OIDC endpoints (e.g. /.well-known/openid-configuration
- * and /apps/oidc/token).
+ * and /apps/oidc/token), and validates external OIDC discovery URLs
+ * received from MCP servers.
  *
- * Centralizes the rule shared between OauthController and
+ * Centralizes the rules shared between OauthController and
  * IdpTokenRefresher so both legs of the OAuth round-trip resolve to the
- * same host.
+ * same host (resolve()) and apply the same SSRF guard to operator-
+ * supplied discovery URLs (validateExternalDiscoveryUrl()).
  *
- * Priority:
+ * Priority for internal resolution:
  *   1. astrolabe_internal_url (admin-configurable override)
  *   2. http://localhost (self-hosted/Docker default, where PHP and the
  *      web server share a host)
