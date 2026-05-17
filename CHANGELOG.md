@@ -25,6 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.14.1 (2026-05-17)
+
+### Fix
+
+- **oauth**: log SSRF-guard rejections in IdpTokenRefresher too
+- **psalm**: suppress MixedAssignment on $rawDiscoveryUrl extraction
+- **psalm**: inline discovery_url access + drop dead default match arm
+- **oauth**: log SSRF-guard rejections + don't consume events for unknown fields
+- **oauth**: address review nits — drop redundant rtrim, expand resolver docblock, cover read path
+- **oauth**: centralize SSRF validator + address review nits
+- **oauth**: address review nits + write-time url check
+- **oauth**: validate external discovery_url + nits + clear psalm
+- **oauth**: SSRF allowlist + scoped port warn + clear CI checks
+- **oauth**: honor astrolabe_internal_url in token exchange too
+- **oauth**: support managed Nextcloud OIDC discovery
+
+### Refactor
+
+- **oauth**: extract NcInternalUrlResolver + trim config value
+
 ## v0.14.0 (2026-05-08)
 
 ### Feat
