@@ -11,6 +11,7 @@ use OC\Authentication\Token\IProvider as ITokenProvider;
 use OC\Authentication\Token\IToken;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenStorage;
+use OCA\Astrolabe\Service\NcInternalUrlResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -50,6 +51,7 @@ class OauthController extends Controller {
 	private McpServerClient $client;
 	private ITokenProvider $tokenProvider;
 	private ISecureRandom $random;
+	private NcInternalUrlResolver $urlResolver;
 
 	public function __construct(
 		string $appName,
@@ -65,6 +67,7 @@ class OauthController extends Controller {
 		McpServerClient $client,
 		ITokenProvider $tokenProvider,
 		ISecureRandom $random,
+		NcInternalUrlResolver $urlResolver,
 	) {
 		parent::__construct($appName, $request);
 		$this->config = $config;
@@ -78,6 +81,7 @@ class OauthController extends Controller {
 		$this->client = $client;
 		$this->tokenProvider = $tokenProvider;
 		$this->random = $random;
+		$this->urlResolver = $urlResolver;
 	}
 
 	/**
@@ -384,6 +388,9 @@ class OauthController extends Controller {
 		string $state,
 		string $codeChallenge,
 	): string {
+		// Strip any trailing slash so concatenation with /api/... is safe.
+		$mcpServerUrl = rtrim($mcpServerUrl, '/');
+
 		// First, query MCP server to discover which IdP it's configured to use
 		$this->logger->info('buildAuthorizationUrl: Starting', [
 			'mcp_server_url' => $mcpServerUrl,
@@ -417,22 +424,40 @@ class OauthController extends Controller {
 			throw new \Exception('Cannot connect to MCP server: ' . $e->getMessage());
 		}
 
-		// Determine OIDC discovery URL
-		// Priority: 1) MCP server's configured discovery URL, 2) Nextcloud OIDC app
-		if (isset($statusData['oidc']['discovery_url'])) {
-			// MCP server has external IdP configured (e.g., Keycloak)
-			$discoveryUrl = $statusData['oidc']['discovery_url'];
+		// Determine OIDC discovery URL.
+		// Priority: 1) MCP server's configured discovery URL, 2) Nextcloud OIDC app.
+		$useExternalIdp = isset($statusData['oidc']['discovery_url']);
+		$internalBaseUrl = '';
+		if ($useExternalIdp) {
+			// MCP server has external IdP configured (e.g., Keycloak).
+			// Log the offending value if validation rejects it; the validator
+			// itself is static and has no logger, so context would otherwise
+			// be lost as the RuntimeException bubbles up.
+			/** @psalm-suppress MixedAssignment */
+			$rawDiscoveryUrl = $statusData['oidc']['discovery_url'];
+			try {
+				$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($rawDiscoveryUrl);
+			} catch (\RuntimeException $e) {
+				$this->logger->warning('Rejected external OIDC discovery_url from MCP server', [
+					'discovery_url' => $rawDiscoveryUrl,
+					'reason' => $e->getMessage(),
+				]);
+				throw $e;
+			}
 			$this->logger->info('Using IdP from MCP server configuration', [
 				'discovery_url' => $discoveryUrl,
 			]);
 		} else {
-			// Fall back to Nextcloud's OIDC app
-			// Use internal localhost URL for HTTP request (accessible from inside container)
-			// We'll transform the returned URLs to external format after discovery
-			$discoveryUrl = 'http://localhost/.well-known/openid-configuration';
-			$internalBaseUrl = 'http://localhost';
+			// Fall back to Nextcloud's OIDC app.
+			// Use the admin-configured astrolabe_internal_url if set; otherwise
+			// default to http://localhost (works when Astrolabe runs in the same
+			// container/host as Nextcloud's web server). Managed Nextcloud
+			// deployments must set astrolabe_internal_url to the public NC URL
+			// because there is no local web server to curl into.
+			$internalBaseUrl = $this->urlResolver->resolve();
+			$discoveryUrl = $internalBaseUrl . '/.well-known/openid-configuration';
 
-			$this->logger->info('Using Nextcloud OIDC app as IdP (internal request)', [
+			$this->logger->info('Using Nextcloud OIDC app as IdP', [
 				'discovery_url' => $discoveryUrl,
 			]);
 		}
@@ -463,22 +488,35 @@ class OauthController extends Controller {
 
 			$authEndpoint = $discovery['authorization_endpoint'];
 
-			// Transform internal URL to external URL if using Nextcloud OIDC app
-			// The discovery was done via internal http://localhost but browsers need
-			// the external URL (e.g., https://cloud.example.com)
+			// Transform internal URL to external URL if using Nextcloud OIDC app.
+			// The discovery was done via the internal base URL but browsers need
+			// the external URL (e.g., https://cloud.example.com).
 			// Use protocol-agnostic replacement because overwriteprotocol may cause
-			// the discovery response to return https:// URLs even for http://localhost requests
-			if (isset($internalBaseUrl)) {
+			// the discovery response to return https:// URLs even for http://localhost requests.
+			//
+			// On managed NC where astrolabe_internal_url already IS the public URL,
+			// this preg_replace is idempotent — internal and external resolve to
+			// the same host. If urlGenerator returns a different host than
+			// astrolabe_internal_url (e.g., misconfigured overwritehost), the auth
+			// endpoint will be rewritten silently; that is intentional —
+			// overwritehost wins because that's what browsers will use.
+			if (!$useExternalIdp) {
 				$externalBaseUrl = $this->urlGenerator->getAbsoluteURL('/');
 				$externalBaseUrl = rtrim($externalBaseUrl, '/');
-				$internalBaseUrl = rtrim($internalBaseUrl, '/');
+				// NcInternalUrlResolver::resolve() already strips trailing slash;
+				// $internalBaseUrl is used as-is.
 				/** @var string $internalHost */
 				$internalHost = preg_replace('#^https?://#', '', $internalBaseUrl);
+				// Escape backreference markers ($N, ${N}, \N) in the replacement string.
 				$replaced = preg_replace(
 					'#^https?://' . preg_quote($internalHost, '#') . '#',
-					$externalBaseUrl,
+					addcslashes($externalBaseUrl, '\\$'),
 					$authEndpoint
 				);
+				// preg_replace returns null only on PCRE backtrack/recursion limit
+				// overflow, which is unreachable for these short HTTP URLs. The
+				// is_string guard keeps $authEndpoint at its original (internal)
+				// value as a defensive fallback so we never assign null.
 				if (is_string($replaced)) {
 					$authEndpoint = $replaced;
 				}
@@ -559,7 +597,13 @@ class OauthController extends Controller {
 		string $code,
 		string $codeVerifier,
 	): array {
-		// Query MCP server to discover which IdP it's configured to use
+		$mcpServerUrl = rtrim($mcpServerUrl, '/');
+
+		// Query MCP server to discover which IdP it's configured to use.
+		// TODO: buildAuthorizationUrl() already fetches /api/v1/status for the
+		// same MCP server URL during the authorize leg. Cache the status in the
+		// session keyed by mcpServerUrl to skip this second round-trip on the
+		// callback.
 		try {
 			$statusResponse = $this->httpClient->get($mcpServerUrl . '/api/v1/status');
 			$statusData = json_decode($statusResponse->getBody(), true);
@@ -579,8 +623,20 @@ class OauthController extends Controller {
 		$useInternalNextcloud = !isset($statusData['oidc']['discovery_url']);
 
 		if (!$useInternalNextcloud) {
-			// External IdP configured - use discovery
-			$discoveryUrl = $statusData['oidc']['discovery_url'];
+			// External IdP configured - use discovery. Mirror the authorize
+			// leg by logging the offending value before re-throwing so the
+			// callback failure surfaces with context in the server log.
+			/** @psalm-suppress MixedAssignment */
+			$rawDiscoveryUrl = $statusData['oidc']['discovery_url'];
+			try {
+				$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($rawDiscoveryUrl);
+			} catch (\RuntimeException $e) {
+				$this->logger->warning('Rejected external OIDC discovery_url from MCP server during token exchange', [
+					'discovery_url' => $rawDiscoveryUrl,
+					'reason' => $e->getMessage(),
+				]);
+				throw $e;
+			}
 
 			try {
 				$response = $this->httpClient->get($discoveryUrl);
@@ -600,9 +656,11 @@ class OauthController extends Controller {
 				throw new \Exception('Failed to discover token endpoint: ' . $e->getMessage());
 			}
 		} else {
-			// Nextcloud's OIDC app - use internal URL directly (no HTTP request needed)
-			// This avoids network issues when overwritehost includes external port
-			$tokenEndpoint = 'http://localhost/apps/oidc/token';
+			// Nextcloud's OIDC app — resolve the base URL via the shared
+			// resolver so the token-exchange leg honors astrolabe_internal_url
+			// (required for managed NC where http://localhost is unreachable
+			// from PHP).
+			$tokenEndpoint = $this->urlResolver->resolve() . '/apps/oidc/token';
 		}
 
 		$redirectUri = $this->urlGenerator->linkToRouteAbsolute(

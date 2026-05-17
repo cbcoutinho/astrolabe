@@ -37,7 +37,6 @@
 		<ol>
 			<li><?php p($l->t('Verify the MCP server is running and accessible')); ?></li>
 			<li><?php p($l->t('Check that mcp_server_url in config.php is correct')); ?></li>
-			<li><?php p($l->t('Ensure mcp_server_api_key matches the server configuration')); ?></li>
 			<li><?php p($l->t('Check firewall rules and network connectivity')); ?></li>
 			<li><?php p($l->t('Review MCP server logs for errors')); ?></li>
 		</ol>
