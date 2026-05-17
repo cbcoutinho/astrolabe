@@ -41,7 +41,7 @@ final class McpServerClientTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnCallback(function (string $key, $default) {
 				if ($key === 'mcp_server_url') {
-					return 'http://mcp-server:8000';
+					return 'http://mcp-server:8000'; // NOSONAR
 				}
 				return $default;
 			});
@@ -167,7 +167,7 @@ final class McpServerClientTest extends TestCase {
 
 		$result = $this->client->createWebhook(
 			'OCA\\Files::postCreate',
-			'http://mcp-server:8000/webhooks/nextcloud',
+			'http://mcp-server:8000/webhooks/nextcloud', // NOSONAR
 			null,
 			'access-token',
 		);

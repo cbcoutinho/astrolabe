@@ -95,7 +95,7 @@ final class OauthControllerTest extends TestCase {
 		string $externalBaseUrl,
 		string $expectedHostInResult,
 	): void {
-		$mcpServerUrl = 'http://mcp-server:8000';
+		$mcpServerUrl = 'http://mcp-server:8000'; // NOSONAR
 
 		// Mock the shared resolver — replaces the previous raw-config mock.
 		$this->urlResolver->method('resolve')->willReturn($resolverBaseUrl);
@@ -168,22 +168,22 @@ final class OauthControllerTest extends TestCase {
 	public static function provideUrlTransformationCases(): array {
 		return [
 			'self-hosted: https discovery with overwriteprotocol (the bug)' => [
-				'http://localhost',
+				'http://localhost', // NOSONAR
 				'https://localhost/apps/oidc/authorize',
 				'https://cloud.example.com',
 				'https://cloud.example.com',
 			],
 			'self-hosted: http discovery without overwriteprotocol' => [
-				'http://localhost',
-				'http://localhost/apps/oidc/authorize',
+				'http://localhost', // NOSONAR
+				'http://localhost/apps/oidc/authorize', // NOSONAR
 				'https://cloud.example.com',
 				'https://cloud.example.com',
 			],
 			'self-hosted: http discovery with http external' => [
-				'http://localhost',
-				'http://localhost/apps/oidc/authorize',
-				'http://localhost:8080',
-				'http://localhost:8080',
+				'http://localhost', // NOSONAR
+				'http://localhost/apps/oidc/authorize', // NOSONAR
+				'http://localhost:8080', // NOSONAR
+				'http://localhost:8080', // NOSONAR
 			],
 			'managed NC: resolver returns the public URL (idempotent preg_replace)' => [
 				'https://cloud.example.com',
@@ -195,7 +195,7 @@ final class OauthControllerTest extends TestCase {
 	}
 
 	public function testBuildAuthorizationUrlUsesExternalDiscoveryUrlVerbatim(): void {
-		$mcpServerUrl = 'http://mcp-server:8000';
+		$mcpServerUrl = 'http://mcp-server:8000'; // NOSONAR
 		$externalDiscovery = 'https://keycloak.example.com/realms/x/.well-known/openid-configuration';
 		$externalAuthEndpoint = 'https://keycloak.example.com/realms/x/auth';
 
@@ -245,7 +245,7 @@ final class OauthControllerTest extends TestCase {
 	 * @dataProvider provideInsecureExternalDiscoveryUrls
 	 */
 	public function testBuildAuthorizationUrlRejectsInsecureExternalDiscoveryUrl(mixed $discoveryUrl): void {
-		$mcpServerUrl = 'http://mcp-server:8000';
+		$mcpServerUrl = 'http://mcp-server:8000'; // NOSONAR
 
 		$statusResponse = $this->createMock(IResponse::class);
 		$statusResponse->method('getBody')->willReturn(json_encode([
@@ -279,7 +279,7 @@ final class OauthControllerTest extends TestCase {
 	 */
 	public static function provideInsecureExternalDiscoveryUrls(): array {
 		return [
-			'plaintext http rejected' => ['http://keycloak.example.com/.well-known/openid-configuration'],
+			'plaintext http rejected' => ['http://keycloak.example.com/.well-known/openid-configuration'], // NOSONAR
 			'malformed URL rejected' => ['not-a-url'],
 			'non-string discovery_url rejected' => [123],
 		];
@@ -296,7 +296,7 @@ final class OauthControllerTest extends TestCase {
 		string $resolverBaseUrl,
 		string $expectedTokenEndpoint,
 	): void {
-		$mcpServerUrl = 'http://mcp-server:8000';
+		$mcpServerUrl = 'http://mcp-server:8000'; // NOSONAR
 
 		// Mock the shared resolver — the controller no longer reads the raw
 		// config value directly.
@@ -363,8 +363,8 @@ final class OauthControllerTest extends TestCase {
 	public static function provideTokenEndpointCases(): array {
 		return [
 			'default (resolver returns localhost) → localhost token endpoint' => [
-				'http://localhost',
-				'http://localhost/apps/oidc/token',
+				'http://localhost', // NOSONAR
+				'http://localhost/apps/oidc/token', // NOSONAR
 			],
 			'managed NC (resolver returns public URL) → public token endpoint' => [
 				'https://cloud.example.com',

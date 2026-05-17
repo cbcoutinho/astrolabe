@@ -94,8 +94,8 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	public static function provideValidInternalUrls(): array {
 		return [
 			'https URL' => ['https://cloud.example.com'],
-			'http URL' => ['http://localhost'],
-			'http with port' => ['http://nextcloud.default.svc:8080'],
+			'http URL' => ['http://localhost'], // NOSONAR
+			'http with port' => ['http://nextcloud.default.svc:8080'], // NOSONAR
 			'empty string (will skip validation)' => [''],
 			'whitespace only (will skip validation)' => ['   '],
 		];

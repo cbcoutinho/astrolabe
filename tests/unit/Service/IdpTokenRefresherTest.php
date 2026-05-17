@@ -97,11 +97,11 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// Resolver returns default (localhost) for this test.
-		$this->urlResolver->method('resolve')->willReturn('http://localhost');
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');
@@ -127,12 +127,12 @@ final class IdpTokenRefresherTest extends TestCase {
 
 		// Setup HTTP client to return appropriate responses
 		$this->httpClient->method('get')
-			->with('http://mcp-server:8000/api/v1/status')
+			->with('http://mcp-server:8000/api/v1/status') // NOSONAR
 			->willReturn($statusResponse);
 
 		$this->httpClient->method('post')
 			->with(
-				'http://localhost/apps/oidc/token',
+				'http://localhost/apps/oidc/token', // NOSONAR
 				$this->callback(function ($options) {
 					// Verify the POST body contains expected parameters
 					$body = $options['body'] ?? '';
@@ -157,7 +157,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		$this->mcpServerClient->method('getClientId')
@@ -224,7 +224,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// Status response pins discovery_url to plaintext http — must be rejected
@@ -233,7 +233,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$statusResponse->method('getBody')
 			->willReturn(json_encode([
 				'oidc' => [
-					'discovery_url' => 'http://keycloak.example.com/.well-known/openid-configuration',
+					'discovery_url' => 'http://keycloak.example.com/.well-known/openid-configuration', // NOSONAR
 				],
 			]));
 
@@ -255,10 +255,10 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
-		$this->urlResolver->method('resolve')->willReturn('http://localhost');
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');
@@ -304,7 +304,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// HTTP client throws exception
@@ -327,7 +327,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// Transient network failure — Nextcloud's HTTP client raises
@@ -355,7 +355,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// Mock invalid JSON response
@@ -382,7 +382,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		$this->mcpServerClient->method('getClientId')
@@ -430,10 +430,10 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
-		$this->urlResolver->method('resolve')->willReturn('http://localhost');
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');

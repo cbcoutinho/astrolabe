@@ -44,14 +44,14 @@ final class NcInternalUrlResolverTest extends TestCase {
 	 */
 	public static function provideResolutionCases(): array {
 		return [
-			'empty string → localhost' => ['', 'http://localhost'],
-			'non-string (false) → localhost' => [false, 'http://localhost'],
-			'whitespace-only → localhost' => ['   ', 'http://localhost'],
+			'empty string → localhost' => ['', 'http://localhost'], // NOSONAR
+			'non-string (false) → localhost' => [false, 'http://localhost'], // NOSONAR
+			'whitespace-only → localhost' => ['   ', 'http://localhost'], // NOSONAR
 			'valid URL → returned as-is' => ['https://cloud.example.com', 'https://cloud.example.com'],
 			'trailing slash trimmed' => ['https://cloud.example.com/', 'https://cloud.example.com'],
 			'trailing space trimmed (guards against trailing whitespace in config.php)' => ['https://cloud.example.com ', 'https://cloud.example.com'],
 			'leading + trailing whitespace trimmed' => ["\thttps://cloud.example.com\n", 'https://cloud.example.com'],
-			'kubernetes service URL preserved' => ['http://nextcloud.default.svc:80', 'http://nextcloud.default.svc:80'],
+			'kubernetes service URL preserved' => ['http://nextcloud.default.svc:80', 'http://nextcloud.default.svc:80'], // NOSONAR
 		];
 	}
 
@@ -67,52 +67,52 @@ final class NcInternalUrlResolverTest extends TestCase {
 				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'not-a-url'),
 			);
 
-		$this->assertSame('http://localhost', $this->resolver->resolve());
+		$this->assertSame('http://localhost', $this->resolver->resolve()); // NOSONAR
 	}
 
 	public function testHighPortUrlLogsExternalPortMappingWarning(): void {
 		$this->config->method('getSystemValue')
 			->with('astrolabe_internal_url', '')
-			->willReturn('http://localhost:8080');
+			->willReturn('http://localhost:8080'); // NOSONAR
 
 		$this->logger->expects($this->once())
 			->method('warning')
 			->with(
 				$this->stringContains('external port mapping'),
-				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://localhost:8080'),
+				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://localhost:8080'), // NOSONAR
 			);
 
-		$this->assertSame('http://localhost:8080', $this->resolver->resolve());
+		$this->assertSame('http://localhost:8080', $this->resolver->resolve()); // NOSONAR
 	}
 
 	public function testHighPortOn127LoopbackLogsExternalPortMappingWarning(): void {
 		$this->config->method('getSystemValue')
 			->with('astrolabe_internal_url', '')
-			->willReturn('http://127.0.0.1:8080');
+			->willReturn('http://127.0.0.1:8080'); // NOSONAR
 
 		$this->logger->expects($this->once())
 			->method('warning')
 			->with(
 				$this->stringContains('external port mapping'),
-				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://127.0.0.1:8080'),
+				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://127.0.0.1:8080'), // NOSONAR
 			);
 
-		$this->assertSame('http://127.0.0.1:8080', $this->resolver->resolve());
+		$this->assertSame('http://127.0.0.1:8080', $this->resolver->resolve()); // NOSONAR
 	}
 
 	public function testHighPortOnIpv6LoopbackLogsExternalPortMappingWarning(): void {
 		$this->config->method('getSystemValue')
 			->with('astrolabe_internal_url', '')
-			->willReturn('http://[::1]:8080');
+			->willReturn('http://[::1]:8080'); // NOSONAR
 
 		$this->logger->expects($this->once())
 			->method('warning')
 			->with(
 				$this->stringContains('external port mapping'),
-				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://[::1]:8080'),
+				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://[::1]:8080'), // NOSONAR
 			);
 
-		$this->assertSame('http://[::1]:8080', $this->resolver->resolve());
+		$this->assertSame('http://[::1]:8080', $this->resolver->resolve()); // NOSONAR
 	}
 
 	/**
@@ -136,7 +136,7 @@ final class NcInternalUrlResolverTest extends TestCase {
 	public static function provideDefaultPortLoopbackUrls(): array {
 		return [
 			'https://localhost:443' => ['https://localhost:443'],
-			'http://localhost:80' => ['http://localhost:80'],
+			'http://localhost:80' => ['http://localhost:80'], // NOSONAR
 			'https://127.0.0.1:443' => ['https://127.0.0.1:443'],
 			'https://[::1]:443' => ['https://[::1]:443'],
 		];
@@ -145,14 +145,14 @@ final class NcInternalUrlResolverTest extends TestCase {
 	public function testHighPortOnKubernetesUrlDoesNotWarn(): void {
 		$this->config->method('getSystemValue')
 			->with('astrolabe_internal_url', '')
-			->willReturn('http://nextcloud.default.svc.cluster.local:8080');
+			->willReturn('http://nextcloud.default.svc.cluster.local:8080'); // NOSONAR
 
 		// Kubernetes internal service URLs frequently use non-80 ports —
 		// they are legitimate and must not trigger the port-mapping warning.
 		$this->logger->expects($this->never())->method('warning');
 
 		$this->assertSame(
-			'http://nextcloud.default.svc.cluster.local:8080',
+			'http://nextcloud.default.svc.cluster.local:8080', // NOSONAR
 			$this->resolver->resolve(),
 		);
 	}
@@ -172,7 +172,7 @@ final class NcInternalUrlResolverTest extends TestCase {
 				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === $url),
 			);
 
-		$this->assertSame('http://localhost', $this->resolver->resolve());
+		$this->assertSame('http://localhost', $this->resolver->resolve()); // NOSONAR
 	}
 
 	/**
@@ -208,7 +208,7 @@ final class NcInternalUrlResolverTest extends TestCase {
 	 */
 	public static function provideRejectedExternalDiscoveryUrls(): array {
 		return [
-			'http:// (plaintext)' => ['http://idp.example.com/'],
+			'http:// (plaintext)' => ['http://idp.example.com/'], // NOSONAR
 			'non-string (null)' => [null],
 			'non-string (array)' => [['https://idp.example.com/']],
 			'non-string (int)' => [42],
