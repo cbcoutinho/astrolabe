@@ -49,7 +49,6 @@ class Admin implements ISettings {
 	public function getForm(): TemplateResponse {
 		// Get configuration from config.php (local, fast)
 		$serverUrl = $this->config->getSystemValue('mcp_server_url', '');
-		$apiKeyConfigured = !empty($this->config->getSystemValue('mcp_server_api_key', ''));
 		$clientId = $this->config->getSystemValue('astrolabe_client_id', '');
 		$clientIdConfigured = !empty($clientId);
 		$clientSecret = $this->config->getSystemValue('astrolabe_client_secret', '');
@@ -84,7 +83,6 @@ class Admin implements ISettings {
 		$this->initialState->provideInitialState('admin-config', [
 			'config' => [
 				'serverUrl' => $serverUrl,
-				'apiKeyConfigured' => $apiKeyConfigured,
 				'clientIdConfigured' => $clientIdConfigured,
 				'clientSecretConfigured' => $clientSecretConfigured,
 			],

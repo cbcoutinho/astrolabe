@@ -23,64 +23,20 @@ class IdpTokenRefresher {
 	private IClient $httpClient;
 	private LoggerInterface $logger;
 	private McpServerClient $mcpServerClient;
+	private NcInternalUrlResolver $urlResolver;
 
 	public function __construct(
 		IConfig $config,
 		IClientService $clientService,
 		LoggerInterface $logger,
 		McpServerClient $mcpServerClient,
+		NcInternalUrlResolver $urlResolver,
 	) {
 		$this->config = $config;
 		$this->httpClient = $clientService->newClient();
 		$this->logger = $logger;
 		$this->mcpServerClient = $mcpServerClient;
-	}
-
-	/**
-	 * Get Nextcloud base URL for constructing internal OIDC endpoint URLs.
-	 *
-	 * IMPORTANT: This is for INTERNAL server-to-server requests (PHP to local Apache),
-	 * NOT for external client URLs. We must use the internal container URL, not the
-	 * external URL that browsers see.
-	 *
-	 * Configuration priority:
-	 * 1. astrolabe_internal_url - Explicit internal URL (for custom container setups)
-	 * 2. http://localhost - Default for Docker containers (web server on port 80)
-	 *
-	 * NOTE: We intentionally DO NOT use overwrite.cli.url here because:
-	 * - overwrite.cli.url is the EXTERNAL URL (e.g., http://localhost:8080)
-	 * - External URLs are not accessible from inside the container
-	 * - This method is for internal HTTP requests to the local web server
-	 *
-	 * @return string Base URL for internal requests (e.g., "http://localhost")
-	 */
-	private function getNextcloudBaseUrl(): string {
-		// Check for explicit internal URL config (for custom container setups)
-		$internalUrl = $this->config->getSystemValue('astrolabe_internal_url', '');
-		if (!is_string($internalUrl)) {
-			$internalUrl = '';
-		}
-		if (!empty($internalUrl)) {
-			// Validate URL format
-			if (!filter_var($internalUrl, FILTER_VALIDATE_URL)) {
-				$this->logger->warning('Invalid astrolabe_internal_url format, using default', [
-					'configured_url' => $internalUrl,
-				]);
-				return 'http://localhost';
-			}
-			// Warn if it looks like an external URL (common misconfiguration)
-			if (preg_match('/:\d{4,5}$/', $internalUrl)) {
-				$this->logger->warning('astrolabe_internal_url appears to use external port mapping', [
-					'configured_url' => $internalUrl,
-					'hint' => 'Internal URLs should use port 80, not mapped ports like :8080',
-				]);
-			}
-			return rtrim($internalUrl, '/');
-		}
-
-		// Default: container environment with web server on localhost:80
-		// This works because PHP runs inside the same container as Apache
-		return 'http://localhost';
+		$this->urlResolver = $urlResolver;
 	}
 
 	/**
@@ -106,6 +62,7 @@ class IdpTokenRefresher {
 			if (empty($mcpServerUrl)) {
 				throw new \Exception('MCP server URL not configured');
 			}
+			$mcpServerUrl = rtrim((string)$mcpServerUrl, '/');
 
 			// Query MCP server to discover which IdP it's configured to use
 			$statusResponse = $this->httpClient->get($mcpServerUrl . '/api/v1/status');
@@ -119,8 +76,24 @@ class IdpTokenRefresher {
 			$useInternalNextcloud = !isset($statusData['oidc']['discovery_url']);
 
 			if (!$useInternalNextcloud) {
-				// External IdP configured - use OIDC discovery
-				$discoveryUrl = $statusData['oidc']['discovery_url'];
+				// External IdP configured - use OIDC discovery.
+				// Validate scheme before fetching: discovery_url comes from
+				// the MCP status response verbatim, so without this check it
+				// would be an SSRF vector controllable by the MCP operator.
+				// Log the offending value if validation rejects it — the
+				// outer catch only sees a generic RuntimeException, so
+				// without this the rejected URL never reaches the log.
+				/** @psalm-suppress MixedAssignment */
+				$rawDiscoveryUrl = $statusData['oidc']['discovery_url'];
+				try {
+					$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($rawDiscoveryUrl);
+				} catch (\RuntimeException $e) {
+					$this->logger->warning('Rejected external OIDC discovery_url from MCP server during token refresh', [
+						'discovery_url' => $rawDiscoveryUrl,
+						'reason' => $e->getMessage(),
+					]);
+					throw $e;
+				}
 
 				$this->logger->debug('IdpTokenRefresher: Using external IdP', [
 					'discovery_url' => $discoveryUrl,
@@ -136,7 +109,7 @@ class IdpTokenRefresher {
 				$tokenEndpoint = $discovery['token_endpoint'];
 			} else {
 				// Nextcloud's OIDC app - use internal URL
-				$tokenEndpoint = $this->getNextcloudBaseUrl() . '/apps/oidc/token';
+				$tokenEndpoint = $this->urlResolver->resolve() . '/apps/oidc/token';
 
 				$this->logger->debug('IdpTokenRefresher: Using Nextcloud OIDC app', [
 					'token_endpoint' => $tokenEndpoint,
@@ -191,10 +164,7 @@ class IdpTokenRefresher {
 			]);
 			return null;
 		} catch (\Exception $e) {
-			$statusCode = null;
-			if (method_exists($e, 'getCode')) {
-				$statusCode = $e->getCode();
-			}
+			$statusCode = $e->getCode();
 
 			// Log with appropriate level based on error type
 			if ($statusCode === 401 || $statusCode === 403) {

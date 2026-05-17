@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Tests\Unit\Service;
 
 use OCA\Astrolabe\Service\IdpTokenRefresher;
 use OCA\Astrolabe\Service\McpServerClient;
+use OCA\Astrolabe\Service\NcInternalUrlResolver;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -25,6 +26,7 @@ final class IdpTokenRefresherTest extends TestCase {
 	private IClient&MockObject $httpClient;
 	private LoggerInterface&MockObject $logger;
 	private McpServerClient&MockObject $mcpServerClient;
+	private NcInternalUrlResolver&MockObject $urlResolver;
 	private IdpTokenRefresher $refresher;
 
 	protected function setUp(): void {
@@ -35,6 +37,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->httpClient = $this->createMock(IClient::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->mcpServerClient = $this->createMock(McpServerClient::class);
+		$this->urlResolver = $this->createMock(NcInternalUrlResolver::class);
 
 		$this->clientService->method('newClient')->willReturn($this->httpClient);
 
@@ -42,49 +45,17 @@ final class IdpTokenRefresherTest extends TestCase {
 			$this->config,
 			$this->clientService,
 			$this->logger,
-			$this->mcpServerClient
+			$this->mcpServerClient,
+			$this->urlResolver,
 		);
 	}
 
 	// =========================================================================
-	// getNextcloudBaseUrl() tests
-	// =========================================================================
-
-	/**
-	 * @dataProvider provideBaseUrlTestCases
-	 */
-	public function testGetNextcloudBaseUrl(string $configValue, string $expected): void {
-		$this->config->method('getSystemValue')
-			->with('astrolabe_internal_url', '')
-			->willReturn($configValue);
-
-		// Use reflection to test private method
-		$reflection = new \ReflectionClass($this->refresher);
-		$method = $reflection->getMethod('getNextcloudBaseUrl');
-		$method->setAccessible(true);
-
-		$result = $method->invoke($this->refresher);
-
-		$this->assertEquals($expected, $result);
-	}
-
-	/**
-	 * Provides test cases for getNextcloudBaseUrl().
-	 *
-	 * @return array<string, array{string, string}>
-	 */
-	public static function provideBaseUrlTestCases(): array {
-		return [
-			'default - no config' => ['', 'http://localhost'],
-			'custom internal url' => ['http://web:8080', 'http://web:8080'],
-			'custom url with trailing slash' => ['http://web:8080/', 'http://web:8080'],
-			'kubernetes service' => ['http://nextcloud.default.svc:80', 'http://nextcloud.default.svc:80'],
-			'https internal url' => ['https://internal.example.com', 'https://internal.example.com'],
-		];
-	}
-
-	// =========================================================================
 	// refreshAccessToken() tests
+	//
+	// Internal-URL resolution logic itself is exercised in
+	// NcInternalUrlResolverTest. Here we only stub the resolver's return
+	// value for tests that hit the Nextcloud-OIDC branch.
 	// =========================================================================
 
 	public function testRefreshAccessTokenFailsWithoutClientSecret(): void {
@@ -126,9 +97,11 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
-				['astrolabe_internal_url', '', ''],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
+
+		// Resolver returns default (localhost) for this test.
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');
@@ -154,12 +127,12 @@ final class IdpTokenRefresherTest extends TestCase {
 
 		// Setup HTTP client to return appropriate responses
 		$this->httpClient->method('get')
-			->with('http://mcp-server:8000/api/v1/status')
+			->with('http://mcp-server:8000/api/v1/status') // NOSONAR
 			->willReturn($statusResponse);
 
 		$this->httpClient->method('post')
 			->with(
-				'http://localhost/apps/oidc/token',
+				'http://localhost/apps/oidc/token', // NOSONAR
 				$this->callback(function ($options) {
 					// Verify the POST body contains expected parameters
 					$body = $options['body'] ?? '';
@@ -184,7 +157,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		$this->mcpServerClient->method('getClientId')
@@ -247,14 +220,45 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->assertEquals(300, $result['expires_in']);
 	}
 
+	public function testRefreshAccessTokenRejectsInsecureExternalDiscoveryUrl(): void {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', 'test-secret'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
+			]);
+
+		// Status response pins discovery_url to plaintext http — must be rejected
+		// before the httpClient->get is reached. This is the SSRF guard.
+		$statusResponse = $this->createMock(IResponse::class);
+		$statusResponse->method('getBody')
+			->willReturn(json_encode([
+				'oidc' => [
+					'discovery_url' => 'http://keycloak.example.com/.well-known/openid-configuration', // NOSONAR
+				],
+			]));
+
+		$this->httpClient->method('get')->willReturn($statusResponse);
+		$this->httpClient->expects($this->never())->method('post');
+
+		$this->logger->expects($this->once())
+			->method('error')
+			->with(
+				$this->stringContains('Token refresh failed'),
+				$this->callback(fn ($ctx) => str_contains((string)($ctx['error'] ?? ''), 'https'))
+			);
+
+		$this->assertNull($this->refresher->refreshAccessToken('test-refresh-token'));
+	}
+
 	public function testRefreshAccessTokenSucceedsWithoutRefreshTokenInResponse(): void {
 		// Setup config
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
-				['astrolabe_internal_url', '', ''],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
+
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');
@@ -300,7 +304,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// HTTP client throws exception
@@ -319,12 +323,39 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->assertNull($result);
 	}
 
+	public function testRefreshAccessTokenHandlesLocalServerException(): void {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', 'test-secret'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
+			]);
+
+		// Transient network failure — Nextcloud's HTTP client raises
+		// LocalServerException for connection-level errors. The refresher
+		// must log this as a warning, not an error, so callers don't
+		// surface a fatal-looking signal for retryable problems.
+		$this->httpClient->method('get')
+			->willThrowException(new \OCP\Http\Client\LocalServerException('connect failed'));
+
+		$this->logger->expects($this->once())
+			->method('warning')
+			->with(
+				$this->stringContains('Network error during refresh'),
+				$this->callback(fn ($ctx) => str_contains($ctx['error'], 'connect failed'))
+			);
+		$this->logger->expects($this->never())->method('error');
+
+		$result = $this->refresher->refreshAccessToken('test-refresh-token');
+
+		$this->assertNull($result);
+	}
+
 	public function testRefreshAccessTokenHandlesInvalidStatusResponse(): void {
 		// Setup config
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// Mock invalid JSON response
@@ -351,7 +382,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		$this->mcpServerClient->method('getClientId')
@@ -399,9 +430,10 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
-				['astrolabe_internal_url', '', ''],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
+
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');

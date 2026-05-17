@@ -93,9 +93,6 @@
     <MixedArgument>
       <code><![CDATA[$authEndpoint]]></code>
       <code><![CDATA[$codeVerifier]]></code>
-      <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$internalBaseUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$tokenData['access_token']]]></code>
@@ -123,8 +120,6 @@
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$codeVerifier]]></code>
       <code><![CDATA[$discovery]]></code>
-      <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$discoveryUrl]]></code>
       <code><![CDATA[$error]]></code>
       <code><![CDATA[$mcpServerPublicUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
@@ -169,6 +164,7 @@
       <code><![CDATA[$tokenProvider]]></code>
       <code><![CDATA[$tokenStorage]]></code>
       <code><![CDATA[$urlGenerator]]></code>
+      <code><![CDATA[$urlResolver]]></code>
       <code><![CDATA[$userSession]]></code>
     </PossiblyUnusedParam>
     <RiskyTruthyFalsyComparison>
@@ -244,7 +240,6 @@
   </file>
   <file src="lib/Service/IdpTokenRefresher.php">
     <MixedArgument>
-      <code><![CDATA[$discoveryUrl]]></code>
       <code><![CDATA[$tokenEndpoint]]></code>
     </MixedArgument>
     <MixedArrayAccess>
@@ -255,15 +250,10 @@
     <MixedAssignment>
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$discovery]]></code>
-      <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$internalUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$statusData]]></code>
       <code><![CDATA[$tokenEndpoint]]></code>
     </MixedAssignment>
-    <MixedOperand>
-      <code><![CDATA[$mcpServerUrl]]></code>
-    </MixedOperand>
     <PossiblyInvalidArgument>
       <code><![CDATA[$discoveryResponse->getBody()]]></code>
       <code><![CDATA[$response->getBody()]]></code>
@@ -427,6 +417,14 @@
       <code><![CDATA[!$token]]></code>
       <code><![CDATA[$refreshCallback]]></code>
     </RiskyTruthyFalsyComparison>
+  </file>
+  <file src="lib/Service/NcInternalUrlResolver.php">
+    <MixedAssignment>
+      <code><![CDATA[$configured]]></code>
+    </MixedAssignment>
+    <PossiblyUnusedMethod>
+      <code><![CDATA[__construct]]></code>
+    </PossiblyUnusedMethod>
   </file>
   <file src="lib/Service/WebhookPresets.php">
     <MissingClosureParamType>
