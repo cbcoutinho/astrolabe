@@ -1014,8 +1014,15 @@ class ApiController extends Controller {
 				// caller sees a consistent state.
 				return null;
 			}
-			/** @var string $currentRefreshToken */
-			$currentRefreshToken = ($latestToken['refresh_token'] ?? '') ?: $refreshToken;
+			// Strict check: array values come back as mixed, so guard the
+			// type explicitly rather than relying on truthy/falsy. Fall
+			// back to the pre-lock value if storage returned anything
+			// other than a non-empty string (corrupted entry, race with
+			// deletion partway through, etc.).
+			$candidate = $latestToken['refresh_token'] ?? '';
+			$currentRefreshToken = (is_string($candidate) && $candidate !== '')
+				? $candidate
+				: $refreshToken;
 
 			$result = $this->tokenRefresher->refreshAccessToken($currentRefreshToken);
 			if ($result === null || !isset($result['access_token'])) {
