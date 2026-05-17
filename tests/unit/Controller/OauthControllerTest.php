@@ -253,9 +253,10 @@ final class OauthControllerTest extends TestCase {
 			'oidc' => ['discovery_url' => $discoveryUrl],
 		]));
 
-		$this->httpClient->method('get')->willReturn($statusResponse);
 		// Discovery fetch must never happen — only the /api/v1/status call.
-		$this->httpClient->expects($this->once())->method('get');
+		$this->httpClient->expects($this->once())
+			->method('get')
+			->willReturn($statusResponse);
 
 		$this->config->method('getSystemValue')
 			->willReturnMap([

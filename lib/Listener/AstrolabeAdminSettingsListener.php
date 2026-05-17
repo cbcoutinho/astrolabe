@@ -69,6 +69,29 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 			return;
 		}
 
+		// Surface invalid astrolabe_internal_url at save time so the admin sees
+		// the problem immediately, rather than discovering at OAuth-flow runtime
+		// that NcInternalUrlResolver silently fell back to http://localhost.
+		// The save itself still succeeds — the resolver's runtime fallback is
+		// safe — this is a UX nudge for managed-NC operators.
+		if ($fieldId === 'astrolabe_internal_url') {
+			$trimmed = trim((string)$value);
+			if ($trimmed !== '') {
+				$scheme = filter_var($trimmed, FILTER_VALIDATE_URL)
+					? parse_url($trimmed, PHP_URL_SCHEME)
+					: null;
+				if ($scheme !== 'http' && $scheme !== 'https') {
+					$this->logger->warning(
+						'astrolabe_internal_url set to a value that will fall back to http://localhost at runtime',
+						[
+							'configured_url' => $trimmed,
+							'app' => Application::APP_ID,
+						],
+					);
+				}
+			}
+		}
+
 		try {
 			match($fieldId) {
 				'mcp_server_url' => $this->config->setSystemValue('mcp_server_url', (string)$value),

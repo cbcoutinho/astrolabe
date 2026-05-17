@@ -85,6 +85,26 @@ class OauthController extends Controller {
 	}
 
 	/**
+	 * Validate an external OIDC discovery URL before fetching.
+	 *
+	 * The value comes from /api/v1/status verbatim, so without this guard it
+	 * would be an SSRF vector controllable by the MCP server operator.
+	 *
+	 * @throws \RuntimeException if the URL is not a syntactically valid https:// URL
+	 */
+	private function validateExternalDiscoveryUrl(mixed $url): string {
+		if (!is_string($url)
+			|| !filter_var($url, FILTER_VALIDATE_URL)
+			|| !str_starts_with($url, 'https://')
+		) {
+			throw new \RuntimeException(
+				'External OIDC discovery_url must be a valid https:// URL'
+			);
+		}
+		return $url;
+	}
+
+	/**
 	 * Initiate OAuth authorization flow.
 	 *
 	 * Always generates PKCE code verifier and challenge (RFC 9207).
@@ -430,19 +450,7 @@ class OauthController extends Controller {
 		$internalBaseUrl = '';
 		if ($useExternalIdp) {
 			// MCP server has external IdP configured (e.g., Keycloak).
-			// Validate the URL is a https:// endpoint before we fetch it —
-			// the value comes from /api/v1/status verbatim, so without this
-			// check it would be an SSRF vector controllable by the MCP
-			// server operator.
-			$discoveryUrl = $statusData['oidc']['discovery_url'];
-			if (!is_string($discoveryUrl)
-				|| !filter_var($discoveryUrl, FILTER_VALIDATE_URL)
-				|| !str_starts_with($discoveryUrl, 'https://')
-			) {
-				throw new \RuntimeException(
-					'External OIDC discovery_url must be a valid https:// URL'
-				);
-			}
+			$discoveryUrl = $this->validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
 			$this->logger->info('Using IdP from MCP server configuration', [
 				'discovery_url' => $discoveryUrl,
 			]);
@@ -618,17 +626,7 @@ class OauthController extends Controller {
 
 		if (!$useInternalNextcloud) {
 			// External IdP configured - use discovery.
-			// Validate scheme before fetching — see buildAuthorizationUrl()
-			// for the SSRF rationale.
-			$discoveryUrl = $statusData['oidc']['discovery_url'];
-			if (!is_string($discoveryUrl)
-				|| !filter_var($discoveryUrl, FILTER_VALIDATE_URL)
-				|| !str_starts_with($discoveryUrl, 'https://')
-			) {
-				throw new \RuntimeException(
-					'External OIDC discovery_url must be a valid https:// URL'
-				);
-			}
+			$discoveryUrl = $this->validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
 
 			try {
 				$response = $this->httpClient->get($discoveryUrl);

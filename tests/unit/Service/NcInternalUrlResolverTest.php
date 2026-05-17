@@ -49,7 +49,7 @@ final class NcInternalUrlResolverTest extends TestCase {
 			'whitespace-only → localhost' => ['   ', 'http://localhost'],
 			'valid URL → returned as-is' => ['https://cloud.example.com', 'https://cloud.example.com'],
 			'trailing slash trimmed' => ['https://cloud.example.com/', 'https://cloud.example.com'],
-			'trailing space trimmed (the reviewer regression)' => ['https://cloud.example.com ', 'https://cloud.example.com'],
+			'trailing space trimmed (guards against trailing whitespace in config.php)' => ['https://cloud.example.com ', 'https://cloud.example.com'],
 			'leading + trailing whitespace trimmed' => ["\thttps://cloud.example.com\n", 'https://cloud.example.com'],
 			'kubernetes service URL preserved' => ['http://nextcloud.default.svc:80', 'http://nextcloud.default.svc:80'],
 		];
@@ -113,6 +113,33 @@ final class NcInternalUrlResolverTest extends TestCase {
 			);
 
 		$this->assertSame('http://[::1]:8080', $this->resolver->resolve());
+	}
+
+	/**
+	 * @dataProvider provideDefaultPortLoopbackUrls
+	 */
+	public function testDefaultPortOnLoopbackDoesNotWarn(string $url): void {
+		$this->config->method('getSystemValue')
+			->with('astrolabe_internal_url', '')
+			->willReturn($url);
+
+		// Explicit default port for the scheme (http:80, https:443) is not
+		// "external port mapping" and must not trigger the warning.
+		$this->logger->expects($this->never())->method('warning');
+
+		$this->assertSame($url, $this->resolver->resolve());
+	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function provideDefaultPortLoopbackUrls(): array {
+		return [
+			'https://localhost:443' => ['https://localhost:443'],
+			'http://localhost:80' => ['http://localhost:80'],
+			'https://127.0.0.1:443' => ['https://127.0.0.1:443'],
+			'https://[::1]:443' => ['https://[::1]:443'],
+		];
 	}
 
 	public function testHighPortOnKubernetesUrlDoesNotWarn(): void {

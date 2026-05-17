@@ -78,16 +78,18 @@ class NcInternalUrlResolver {
 		// legitimate and intentionally not flagged.
 		$host = parse_url($internalUrl, PHP_URL_HOST);
 		$port = parse_url($internalUrl, PHP_URL_PORT);
+		$isDefaultPort = ($scheme === 'http' && $port === 80)
+			|| ($scheme === 'https' && $port === 443);
 		// parse_url returns the IPv6 host with surrounding brackets ('[::1]').
 		if (($host === 'localhost' || $host === '127.0.0.1' || $host === '[::1]')
 			&& is_int($port)
-			&& $port !== 80
+			&& !$isDefaultPort
 		) {
 			$this->logger->warning(
 				'astrolabe_internal_url appears to use external port mapping',
 				[
 					'configured_url' => $internalUrl,
-					'hint' => 'For localhost, prefer port 80 (or no port) over mapped ports like :8080',
+					'hint' => 'For localhost, prefer the default port for the scheme (80/443) or no port over mapped ports like :8080',
 				],
 			);
 		}
