@@ -59,9 +59,24 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		}
 	}
 
+	private const KNOWN_FIELDS = [
+		'mcp_server_url',
+		'astrolabe_client_id',
+		'astrolabe_client_secret',
+		'astrolabe_internal_url',
+	];
+
 	private function handleSetValue(DeclarativeSettingsSetValueEvent $event): void {
 		$fieldId = $event->getFieldId();
 		$value = $event->getValue();
+
+		// Don't silently consume events for unknown field IDs. The form is
+		// closed today, but if a field is ever renamed without updating
+		// KNOWN_FIELDS this returns control to the dispatcher rather than
+		// dropping the save with no trace.
+		if (!in_array($fieldId, self::KNOWN_FIELDS, true)) {
+			return;
+		}
 
 		// For password fields, if the value is '****', don't update (user didn't change it)
 		if ($fieldId === 'astrolabe_client_secret' && $value === '****') {

@@ -430,7 +430,19 @@ class OauthController extends Controller {
 		$internalBaseUrl = '';
 		if ($useExternalIdp) {
 			// MCP server has external IdP configured (e.g., Keycloak).
-			$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
+			// Log the offending value if validation rejects it; the validator
+			// itself is static and has no logger, so context would otherwise
+			// be lost as the RuntimeException bubbles up.
+			$rawDiscoveryUrl = $statusData['oidc']['discovery_url'];
+			try {
+				$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($rawDiscoveryUrl);
+			} catch (\RuntimeException $e) {
+				$this->logger->warning('Rejected external OIDC discovery_url from MCP server', [
+					'discovery_url' => $rawDiscoveryUrl,
+					'reason' => $e->getMessage(),
+				]);
+				throw $e;
+			}
 			$this->logger->info('Using IdP from MCP server configuration', [
 				'discovery_url' => $discoveryUrl,
 			]);
@@ -610,8 +622,19 @@ class OauthController extends Controller {
 		$useInternalNextcloud = !isset($statusData['oidc']['discovery_url']);
 
 		if (!$useInternalNextcloud) {
-			// External IdP configured - use discovery.
-			$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
+			// External IdP configured - use discovery. Mirror the authorize
+			// leg by logging the offending value before re-throwing so the
+			// callback failure surfaces with context in the server log.
+			$rawDiscoveryUrl = $statusData['oidc']['discovery_url'];
+			try {
+				$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($rawDiscoveryUrl);
+			} catch (\RuntimeException $e) {
+				$this->logger->warning('Rejected external OIDC discovery_url from MCP server during token exchange', [
+					'discovery_url' => $rawDiscoveryUrl,
+					'reason' => $e->getMessage(),
+				]);
+				throw $e;
+			}
 
 			try {
 				$response = $this->httpClient->get($discoveryUrl);

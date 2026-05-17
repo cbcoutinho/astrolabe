@@ -114,6 +114,20 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 		$this->assertSame('https://nc.example.com', $event->getValue());
 	}
 
+	public function testUnknownFieldDoesNotStopPropagation(): void {
+		// Unknown field IDs must not be silently consumed by this listener —
+		// otherwise a future rename would drop saves with no log trail.
+		$this->config->expects($this->never())->method('setSystemValue');
+
+		$event = $this->buildEvent('some_unknown_field', 'whatever');
+		$this->listener->handle($event);
+
+		$this->assertFalse(
+			$event->isPropagationStopped(),
+			'Listener must not stop propagation for unknown field IDs',
+		);
+	}
+
 	public function testInvalidUrlWarningDoesNotBlockOtherFields(): void {
 		// Other fields must not trigger the internal-url validation path.
 		$this->logger->method('warning')
