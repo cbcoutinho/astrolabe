@@ -80,15 +80,9 @@ class IdpTokenRefresher {
 				// Validate scheme before fetching: discovery_url comes from
 				// the MCP status response verbatim, so without this check it
 				// would be an SSRF vector controllable by the MCP operator.
-				$discoveryUrl = $statusData['oidc']['discovery_url'];
-				if (!is_string($discoveryUrl)
-					|| !filter_var($discoveryUrl, FILTER_VALIDATE_URL)
-					|| !str_starts_with($discoveryUrl, 'https://')
-				) {
-					throw new \RuntimeException(
-						'External OIDC discovery_url must be a valid https:// URL'
-					);
-				}
+				$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl(
+					$statusData['oidc']['discovery_url']
+				);
 
 				$this->logger->debug('IdpTokenRefresher: Using external IdP', [
 					'discovery_url' => $discoveryUrl,

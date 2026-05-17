@@ -185,4 +185,35 @@ final class NcInternalUrlResolverTest extends TestCase {
 			'gopher:// URL' => ['gopher://example.com/x'],
 		];
 	}
+
+	public function testValidateExternalDiscoveryUrlAcceptsHttps(): void {
+		$url = 'https://idp.example.com/.well-known/openid-configuration';
+		$this->assertSame(
+			$url,
+			NcInternalUrlResolver::validateExternalDiscoveryUrl($url),
+		);
+	}
+
+	/**
+	 * @dataProvider provideRejectedExternalDiscoveryUrls
+	 */
+	public function testValidateExternalDiscoveryUrlRejectsInvalidValues(mixed $value): void {
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('External OIDC discovery_url must be a valid https:// URL');
+		NcInternalUrlResolver::validateExternalDiscoveryUrl($value);
+	}
+
+	/**
+	 * @return array<string, array{mixed}>
+	 */
+	public static function provideRejectedExternalDiscoveryUrls(): array {
+		return [
+			'http:// (plaintext)' => ['http://idp.example.com/'],
+			'non-string (null)' => [null],
+			'non-string (array)' => [['https://idp.example.com/']],
+			'non-string (int)' => [42],
+			'syntactically invalid' => ['not a url'],
+			'empty string' => [''],
+		];
+	}
 }

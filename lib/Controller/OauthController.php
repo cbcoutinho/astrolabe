@@ -85,26 +85,6 @@ class OauthController extends Controller {
 	}
 
 	/**
-	 * Validate an external OIDC discovery URL before fetching.
-	 *
-	 * The value comes from /api/v1/status verbatim, so without this guard it
-	 * would be an SSRF vector controllable by the MCP server operator.
-	 *
-	 * @throws \RuntimeException if the URL is not a syntactically valid https:// URL
-	 */
-	private function validateExternalDiscoveryUrl(mixed $url): string {
-		if (!is_string($url)
-			|| !filter_var($url, FILTER_VALIDATE_URL)
-			|| !str_starts_with($url, 'https://')
-		) {
-			throw new \RuntimeException(
-				'External OIDC discovery_url must be a valid https:// URL'
-			);
-		}
-		return $url;
-	}
-
-	/**
 	 * Initiate OAuth authorization flow.
 	 *
 	 * Always generates PKCE code verifier and challenge (RFC 9207).
@@ -450,7 +430,7 @@ class OauthController extends Controller {
 		$internalBaseUrl = '';
 		if ($useExternalIdp) {
 			// MCP server has external IdP configured (e.g., Keycloak).
-			$discoveryUrl = $this->validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
+			$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
 			$this->logger->info('Using IdP from MCP server configuration', [
 				'discovery_url' => $discoveryUrl,
 			]);
@@ -519,6 +499,10 @@ class OauthController extends Controller {
 					addcslashes($externalBaseUrl, '\\$'),
 					$authEndpoint
 				);
+				// preg_replace returns null only on PCRE backtrack/recursion limit
+				// overflow, which is unreachable for these short HTTP URLs. The
+				// is_string guard keeps $authEndpoint at its original (internal)
+				// value as a defensive fallback so we never assign null.
 				if (is_string($replaced)) {
 					$authEndpoint = $replaced;
 				}
@@ -626,7 +610,7 @@ class OauthController extends Controller {
 
 		if (!$useInternalNextcloud) {
 			// External IdP configured - use discovery.
-			$discoveryUrl = $this->validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
+			$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($statusData['oidc']['discovery_url']);
 
 			try {
 				$response = $this->httpClient->get($discoveryUrl);

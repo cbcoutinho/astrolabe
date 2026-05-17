@@ -45,6 +45,11 @@ class NcInternalUrlResolver {
 		$internalUrl = is_string($configured) ? trim($configured) : '';
 
 		if ($internalUrl === '') {
+			// http://localhost is the safe default for self-hosted/Docker
+			// installs where PHP and Nextcloud's web server share a host —
+			// the request never leaves the loopback interface, so Sonar
+			// S5332 (clear-text protocols) does not apply. Managed Nextcloud
+			// deployments must set astrolabe_internal_url to override.
 			return 'http://localhost';
 		}
 
@@ -95,5 +100,36 @@ class NcInternalUrlResolver {
 		}
 
 		return rtrim($internalUrl, '/');
+	}
+
+	/**
+	 * Validate an external OIDC discovery URL before fetching.
+	 *
+	 * The value comes from the MCP server's /api/v1/status response
+	 * verbatim, so without this guard it would be an SSRF vector
+	 * controllable by the MCP server operator.
+	 *
+	 * Centralized here so both legs of the OAuth round-trip
+	 * (OauthController) and the IdpTokenRefresher apply the same
+	 * scheme allowlist.
+	 *
+	 * @throws \RuntimeException if the URL is not a syntactically valid https:// URL
+	 */
+	public static function validateExternalDiscoveryUrl(mixed $url): string {
+		// Split the is_string check from the rest so Psalm narrows $url to
+		// string before the return statement (avoids MixedReturnStatement).
+		if (!is_string($url)) {
+			throw new \RuntimeException(
+				'External OIDC discovery_url must be a valid https:// URL'
+			);
+		}
+		if (!filter_var($url, FILTER_VALIDATE_URL)
+			|| !str_starts_with($url, 'https://')
+		) {
+			throw new \RuntimeException(
+				'External OIDC discovery_url must be a valid https:// URL'
+			);
+		}
+		return $url;
 	}
 }
