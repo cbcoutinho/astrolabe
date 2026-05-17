@@ -10,6 +10,7 @@ use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenStorage;
 use OCP\AppFramework\Http;
 use OCP\IConfig;
+use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
@@ -35,6 +36,7 @@ final class ApiControllerWebhookProvisioningTest extends TestCase {
 	private McpTokenStorage&MockObject $tokenStorage;
 	private IConfig&MockObject $config;
 	private IdpTokenRefresher&MockObject $tokenRefresher;
+	private IGroupManager&MockObject $groupManager;
 	private ApiController $controller;
 
 	protected function setUp(): void {
@@ -48,6 +50,7 @@ final class ApiControllerWebhookProvisioningTest extends TestCase {
 		$this->tokenStorage = $this->createMock(McpTokenStorage::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->tokenRefresher = $this->createMock(IdpTokenRefresher::class);
+		$this->groupManager = $this->createMock(IGroupManager::class);
 
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('admin');
@@ -66,6 +69,7 @@ final class ApiControllerWebhookProvisioningTest extends TestCase {
 			$this->tokenStorage,
 			$this->config,
 			$this->tokenRefresher,
+			$this->groupManager,
 		);
 	}
 

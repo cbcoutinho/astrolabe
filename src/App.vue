@@ -660,7 +660,10 @@ export default {
 				console.error('Search error:', err)
 				// Check if this is an HTTP error with a response
 				if (err.response && err.response.data && err.response.data.error) {
-					// Use the specific error message from the backend
+					// Use the specific error message from the backend. For admin
+					// users the 401 body may include a refresh_error key with the
+					// IdpTokenRefresher failure reason — surface it so the admin
+					// can diagnose without DevTools.
 					this.error = err.response.data.error
 				} else if (err.response && err.response.status === 401) {
 					// Unauthorized - user needs to authorize the app

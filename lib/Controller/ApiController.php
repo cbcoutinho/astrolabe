@@ -15,6 +15,7 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IConfig;
+use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
@@ -33,6 +34,7 @@ class ApiController extends Controller {
 	private McpTokenStorage $tokenStorage;
 	private IConfig $config;
 	private IdpTokenRefresher $tokenRefresher;
+	private IGroupManager $groupManager;
 
 	public function __construct(
 		string $appName,
@@ -44,6 +46,7 @@ class ApiController extends Controller {
 		McpTokenStorage $tokenStorage,
 		IConfig $config,
 		IdpTokenRefresher $tokenRefresher,
+		IGroupManager $groupManager,
 	) {
 		parent::__construct($appName, $request);
 		$this->client = $client;
@@ -53,6 +56,33 @@ class ApiController extends Controller {
 		$this->tokenStorage = $tokenStorage;
 		$this->config = $config;
 		$this->tokenRefresher = $tokenRefresher;
+		$this->groupManager = $groupManager;
+	}
+
+	/**
+	 * Build the "MCP server authorization required" JSON body, optionally
+	 * including the refresh-failure reason captured by IdpTokenRefresher.
+	 *
+	 * The reason is only included for admin users — it can contain bits of
+	 * the IdP's response body, which we don't want surfaced to every user.
+	 * For non-admin users the body remains the generic message they already
+	 * get today, so this change is observation-only at runtime.
+	 */
+	private function authRequiredBody(string $message, ?string $userId): array {
+		$body = [
+			'success' => false,
+			'error' => $message,
+		];
+
+		if ($userId !== null && $this->groupManager->isAdmin($userId)) {
+			$refreshError = $this->tokenRefresher->getLastError();
+			if ($refreshError !== null) {
+				$body['refresh_error'] = $refreshError;
+				$body['error'] = $message . ' (' . $refreshError . ')';
+			}
+		}
+
+		return $body;
 	}
 
 	/**
@@ -170,10 +200,13 @@ class ApiController extends Controller {
 		// Get user's OAuth token for MCP server with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'MCP server authorization required. Please authorize the app first.'
-			], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(
+				$this->authRequiredBody(
+					'MCP server authorization required. Please authorize the app first.',
+					$userId
+				),
+				Http::STATUS_UNAUTHORIZED
+			);
 		}
 
 		// Validate algorithm
@@ -436,10 +469,10 @@ class ApiController extends Controller {
 		// Get access token with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'MCP server authorization required'
-			], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(
+				$this->authRequiredBody('MCP server authorization required', $userId),
+				Http::STATUS_UNAUTHORIZED
+			);
 		}
 
 		// Get installed apps to filter presets
@@ -543,10 +576,10 @@ class ApiController extends Controller {
 		// Get access token with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'MCP server authorization required'
-			], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(
+				$this->authRequiredBody('MCP server authorization required', $userId),
+				Http::STATUS_UNAUTHORIZED
+			);
 		}
 
 		// Get preset configuration
@@ -649,10 +682,10 @@ class ApiController extends Controller {
 		// Get access token with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'MCP server authorization required'
-			], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(
+				$this->authRequiredBody('MCP server authorization required', $userId),
+				Http::STATUS_UNAUTHORIZED
+			);
 		}
 
 		// Get preset configuration
@@ -787,10 +820,10 @@ class ApiController extends Controller {
 		// Get user's OAuth token for MCP server with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'MCP server authorization required.'
-			], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(
+				$this->authRequiredBody('MCP server authorization required.', $userId),
+				Http::STATUS_UNAUTHORIZED
+			);
 		}
 
 		$result = $this->client->getChunkContext(
@@ -853,10 +886,10 @@ class ApiController extends Controller {
 		// Get user's OAuth token for MCP server with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'MCP server authorization required.'
-			], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(
+				$this->authRequiredBody('MCP server authorization required.', $userId),
+				Http::STATUS_UNAUTHORIZED
+			);
 		}
 
 		$result = $this->client->getPdfPreview($file_path, $page, $scale, $accessToken);
@@ -894,5 +927,104 @@ class ApiController extends Controller {
 			'success' => false,
 			'error' => $result['error'] ?? 'Unknown error',
 		], Http::STATUS_INTERNAL_SERVER_ERROR);
+	}
+
+	/**
+	 * Diagnose why OAuth refresh is failing for the current user.
+	 *
+	 * Admin-only. Runs against the current user's stored token so the admin
+	 * can reproduce by signing in as themselves on the affected deployment.
+	 * Returns a structured report covering token state and the most recent
+	 * IdpTokenRefresher failure reason, so an authorization failure can be
+	 * diagnosed without `occ` / nextcloud.log access (e.g. Hetzner Storage
+	 * Share, where logreader is disabled).
+	 *
+	 * Never returns the access_token or refresh_token themselves — only
+	 * their presence and expiration metadata.
+	 */
+	public function refreshDiagnostic(): JSONResponse {
+		$user = $this->userSession->getUser();
+		if (!$user) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'User not authenticated',
+			], Http::STATUS_UNAUTHORIZED);
+		}
+
+		$userId = $user->getUID();
+
+		if (!$this->groupManager->isAdmin($userId)) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'Admin privileges required',
+			], Http::STATUS_FORBIDDEN);
+		}
+
+		$diagnostic = [
+			'user_id' => $userId,
+			'client_secret_configured' => !empty($this->config->getSystemValue('astrolabe_client_secret', '')),
+			'mcp_server_url_configured' => !empty($this->config->getSystemValue('mcp_server_url', '')),
+		];
+
+		$token = $this->tokenStorage->getUserToken($userId);
+		if ($token === null) {
+			$diagnostic['has_stored_token'] = false;
+			$diagnostic['conclusion'] = 'No OAuth token stored — user has not completed initial authorization.';
+			return new JSONResponse(['success' => true, 'diagnostic' => $diagnostic]);
+		}
+
+		$now = time();
+		$expiresAt = (int)($token['expires_at'] ?? 0);
+		$issuedAt = isset($token['issued_at']) ? (int)$token['issued_at'] : null;
+		/** @var string $refreshToken */
+		$refreshToken = $token['refresh_token'] ?? '';
+
+		$diagnostic['has_stored_token'] = true;
+		$diagnostic['has_refresh_token'] = $refreshToken !== '';
+		$diagnostic['access_token_expired'] = $this->tokenStorage->isExpired($token);
+		$diagnostic['expires_in_seconds'] = $expiresAt - $now;
+		$diagnostic['issued_at'] = $issuedAt;
+		$diagnostic['expires_at'] = $expiresAt;
+
+		// Attempt a refresh and capture the outcome.
+		//
+		// We MUST persist the new token if the IdP rotates refresh tokens —
+		// otherwise this diagnostic call would invalidate the old refresh
+		// token at the IdP without storing the new one, breaking the chain
+		// and forcing the user to re-authorize. The lock keeps this in sync
+		// with concurrent on-demand / background refreshes.
+		$refreshResult = $this->tokenStorage->withTokenLock($userId, function () use ($userId, $refreshToken): ?array {
+			$result = $this->tokenRefresher->refreshAccessToken($refreshToken);
+			if ($result === null || !isset($result['access_token'])) {
+				return null;
+			}
+			$nowInner = time();
+			/** @var string $accessToken */
+			$accessToken = $result['access_token'];
+			/** @var string $newRefreshToken */
+			$newRefreshToken = $result['refresh_token'] ?? $refreshToken;
+			$expiresIn = (int)($result['expires_in'] ?? 3600);
+			$this->tokenStorage->storeUserToken(
+				$userId,
+				$accessToken,
+				$newRefreshToken,
+				$nowInner + $expiresIn,
+				$nowInner,
+			);
+			return $result;
+		});
+
+		if ($refreshResult !== null && isset($refreshResult['access_token'])) {
+			$diagnostic['refresh_attempt'] = 'success';
+			$diagnostic['new_access_token_expires_in'] = (int)($refreshResult['expires_in'] ?? 0);
+			$diagnostic['idp_rotated_refresh_token'] = isset($refreshResult['refresh_token']);
+			$diagnostic['conclusion'] = 'Refresh succeeded. Token chain is healthy and stored token has been updated.';
+		} else {
+			$diagnostic['refresh_attempt'] = 'failed';
+			$diagnostic['refresh_error'] = $this->tokenRefresher->getLastError();
+			$diagnostic['conclusion'] = 'Refresh failed — see refresh_error. The stored token has NOT been deleted by this diagnostic; the next user-triggered API call will trigger the same failure and delete it.';
+		}
+
+		return new JSONResponse(['success' => true, 'diagnostic' => $diagnostic]);
 	}
 }

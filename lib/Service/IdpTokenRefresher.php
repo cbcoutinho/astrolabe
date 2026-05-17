@@ -24,6 +24,15 @@ class IdpTokenRefresher {
 	private LoggerInterface $logger;
 	private McpServerClient $mcpServerClient;
 
+	/**
+	 * Short, human-readable reason for the last refresh failure on this
+	 * service instance, or null if the last attempt succeeded / no attempt
+	 * has been made yet. Cleared at the start of every refreshAccessToken()
+	 * call. Surfaced to admin callers via ApiController so an authorization
+	 * failure in the UI doesn't require reading nextcloud.log to diagnose.
+	 */
+	private ?string $lastError = null;
+
 	public function __construct(
 		IConfig $config,
 		IClientService $clientService,
@@ -34,6 +43,14 @@ class IdpTokenRefresher {
 		$this->httpClient = $clientService->newClient();
 		$this->logger = $logger;
 		$this->mcpServerClient = $mcpServerClient;
+	}
+
+	/**
+	 * Reason the most recent refreshAccessToken() call returned null, or
+	 * null if it succeeded.
+	 */
+	public function getLastError(): ?string {
+		return $this->lastError;
 	}
 
 	/**
@@ -92,10 +109,19 @@ class IdpTokenRefresher {
 	 * @return array|null New token data or null on failure
 	 */
 	public function refreshAccessToken(string $refreshToken): ?array {
+		$this->lastError = null;
+
+		if ($refreshToken === '') {
+			$this->lastError = 'No refresh token stored — original OAuth response did not include one (offline_access likely not advertised by the IdP).';
+			$this->logger->warning('IdpTokenRefresher: Cannot refresh with empty refresh_token');
+			return null;
+		}
+
 		// Check if confidential client secret is configured
 		$clientSecret = $this->config->getSystemValue('astrolabe_client_secret', '');
 
 		if (empty($clientSecret)) {
+			$this->lastError = 'astrolabe_client_secret is not configured. Refresh requires a confidential client.';
 			$this->logger->warning('Cannot refresh: no client secret configured. Confidential client required for token refresh.');
 			return null;
 		}
@@ -186,6 +212,7 @@ class IdpTokenRefresher {
 
 		} catch (\OCP\Http\Client\LocalServerException $e) {
 			// Network/connection error - may be transient
+			$this->lastError = 'Network error reaching IdP/MCP server: ' . $e->getMessage();
 			$this->logger->warning('IdpTokenRefresher: Network error during refresh', [
 				'error' => $e->getMessage(),
 			]);
@@ -196,20 +223,32 @@ class IdpTokenRefresher {
 				$statusCode = $e->getCode();
 			}
 
+			// Truncate exception message — Guzzle exceptions can embed a
+			// large response body. We want enough to diagnose, not a wall.
+			$messageSnippet = $e->getMessage();
+			if (strlen($messageSnippet) > 500) {
+				$messageSnippet = substr($messageSnippet, 0, 500) . '…';
+			}
+
 			// Log with appropriate level based on error type
 			if ($statusCode === 401 || $statusCode === 403) {
 				// Auth error - token is invalid, should be deleted
+				$this->lastError = "IdP rejected refresh_token (HTTP $statusCode). Refresh token likely expired or revoked. Detail: $messageSnippet";
 				$this->logger->error('IdpTokenRefresher: Auth error - token invalid', [
 					'status_code' => $statusCode,
 					'error' => $e->getMessage(),
 				]);
 			} elseif ($statusCode >= 500) {
 				// Server error - may be transient
+				$this->lastError = "IdP server error (HTTP $statusCode) during refresh. Detail: $messageSnippet";
 				$this->logger->warning('IdpTokenRefresher: Server error during refresh', [
 					'status_code' => $statusCode,
 					'error' => $e->getMessage(),
 				]);
 			} else {
+				$this->lastError = $statusCode
+					? "Token refresh failed (HTTP $statusCode): $messageSnippet"
+					: "Token refresh failed: $messageSnippet";
 				$this->logger->error('IdpTokenRefresher: Token refresh failed', [
 					'status_code' => $statusCode,
 					'error' => $e->getMessage(),

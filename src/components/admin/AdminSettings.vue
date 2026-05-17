@@ -223,6 +223,32 @@
 				</div>
 			</div>
 
+			<!-- OAuth Diagnostics -->
+			<div class="admin-section">
+				<h3>{{ t('astrolabe', 'OAuth Refresh Diagnostics') }}</h3>
+				<p class="section-description">
+					{{ t('astrolabe', 'Inspect why semantic search may be repeatedly prompting for re-authorization. Runs a real refresh against your own stored token and reports the outcome — useful when log access is restricted (e.g. Hetzner Storage Share).') }}
+				</p>
+				<div class="form-actions">
+					<NcButton
+						variant="secondary"
+						:disabled="diagnosticsLoading"
+						@click="runRefreshDiagnostic">
+						{{ diagnosticsLoading ? t('astrolabe', 'Running…') : t('astrolabe', 'Run diagnostic') }}
+					</NcButton>
+				</div>
+				<NcNoteCard
+					v-if="diagnosticsResult"
+					:type="diagnosticsResult.refresh_attempt === 'success' ? 'success' : 'warning'"
+					class="diagnostic-result">
+					<p><strong>{{ diagnosticsResult.conclusion }}</strong></p>
+					<pre>{{ JSON.stringify(diagnosticsResult, null, 2) }}</pre>
+				</NcNoteCard>
+				<NcNoteCard v-if="diagnosticsError" type="error" class="diagnostic-result">
+					<p>{{ diagnosticsError }}</p>
+				</NcNoteCard>
+			</div>
+
 			<!-- Documentation -->
 			<div class="admin-section">
 				<h3>{{ t('astrolabe', 'Documentation') }}</h3>
@@ -268,6 +294,11 @@ const serverStatus = ref(null)
 const vectorSyncStatus = ref(null)
 const vectorSyncEnabled = ref(false)
 const saving = ref(false)
+
+// OAuth refresh diagnostic state
+const diagnosticsLoading = ref(false)
+const diagnosticsResult = ref(null)
+const diagnosticsError = ref(null)
 
 // Webhook management state
 const webhooksLoading = ref(false)
@@ -450,6 +481,26 @@ function openPersonalSettings() {
 	window.location.href = generateUrl('/settings/user/astrolabe')
 }
 
+async function runRefreshDiagnostic() {
+	diagnosticsLoading.value = true
+	diagnosticsResult.value = null
+	diagnosticsError.value = null
+
+	try {
+		const response = await axios.get(generateUrl('/apps/astrolabe/api/admin/refresh-diagnostic'))
+		if (response.data.success) {
+			diagnosticsResult.value = response.data.diagnostic
+		} else {
+			diagnosticsError.value = response.data.error || t('astrolabe', 'Diagnostic returned no result')
+		}
+	} catch (err) {
+		console.error('Refresh diagnostic failed:', err)
+		diagnosticsError.value = err.response?.data?.error || err.message || t('astrolabe', 'Network error')
+	} finally {
+		diagnosticsLoading.value = false
+	}
+}
+
 function formatUptime(seconds) {
 	const hours = Math.floor(seconds / 3600)
 	const minutes = Math.floor((seconds % 3600) / 60)
@@ -500,6 +551,23 @@ onMounted(async () => {
 .loading-icon {
 	margin: 40px auto;
 	display: block;
+}
+
+.diagnostic-result {
+	margin-top: 16px;
+
+	pre {
+		font-family: monospace;
+		font-size: 12px;
+		background: var(--color-background-dark);
+		padding: 12px;
+		border-radius: var(--border-radius);
+		overflow-x: auto;
+		max-height: 320px;
+		margin: 8px 0 0 0;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
 }
 
 .admin-section {
