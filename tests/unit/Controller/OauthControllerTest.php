@@ -8,6 +8,7 @@ use OC\Authentication\Token\IProvider as ITokenProvider;
 use OCA\Astrolabe\Controller\OauthController;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenStorage;
+use OCA\Astrolabe\Service\NcInternalUrlResolver;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -40,6 +41,7 @@ final class OauthControllerTest extends TestCase {
 	private McpServerClient&MockObject $mcpClient;
 	private ITokenProvider&MockObject $tokenProvider;
 	private ISecureRandom&MockObject $random;
+	private NcInternalUrlResolver&MockObject $urlResolver;
 	private OauthController $controller;
 
 	protected function setUp(): void {
@@ -57,6 +59,7 @@ final class OauthControllerTest extends TestCase {
 		$this->mcpClient = $this->createMock(McpServerClient::class);
 		$this->tokenProvider = $this->createMock(ITokenProvider::class);
 		$this->random = $this->createMock(ISecureRandom::class);
+		$this->urlResolver = $this->createMock(NcInternalUrlResolver::class);
 
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->httpClient);
@@ -75,6 +78,7 @@ final class OauthControllerTest extends TestCase {
 			$this->mcpClient,
 			$this->tokenProvider,
 			$this->random,
+			$this->urlResolver,
 		);
 	}
 
@@ -86,11 +90,15 @@ final class OauthControllerTest extends TestCase {
 	 * @dataProvider provideUrlTransformationCases
 	 */
 	public function testBuildAuthorizationUrlTransformsInternalToExternal(
+		string $resolverBaseUrl,
 		string $discoveryAuthEndpoint,
 		string $externalBaseUrl,
 		string $expectedHostInResult,
 	): void {
 		$mcpServerUrl = 'http://mcp-server:8000';
+
+		// Mock the shared resolver — replaces the previous raw-config mock.
+		$this->urlResolver->method('resolve')->willReturn($resolverBaseUrl);
 
 		// Mock MCP server status response (no external IdP → Nextcloud OIDC fallback)
 		$statusResponse = $this->createMock(IResponse::class);
@@ -129,7 +137,6 @@ final class OauthControllerTest extends TestCase {
 				['mcp_server_url', '', $mcpServerUrl],
 				['mcp_server_public_url', $mcpServerUrl, $mcpServerUrl],
 				['astrolabe_client_secret', '', ''],
-				['astrolabe_internal_url', '', ''],
 			]);
 
 		// Mock client ID
@@ -153,24 +160,36 @@ final class OauthControllerTest extends TestCase {
 	/**
 	 * Provides test cases for URL transformation in buildAuthorizationUrl().
 	 *
-	 * @return array<string, array{string, string, string}>
+	 * Tuple: [resolver-returned base URL, discovery's authorization_endpoint,
+	 *         external base URL from urlGenerator, expected host prefix in result].
+	 *
+	 * @return array<string, array{string, string, string, string}>
 	 */
 	public static function provideUrlTransformationCases(): array {
 		return [
-			'https discovery with overwriteprotocol (the bug)' => [
+			'self-hosted: https discovery with overwriteprotocol (the bug)' => [
+				'http://localhost',
 				'https://localhost/apps/oidc/authorize',
 				'https://cloud.example.com',
 				'https://cloud.example.com',
 			],
-			'http discovery without overwriteprotocol' => [
+			'self-hosted: http discovery without overwriteprotocol' => [
+				'http://localhost',
 				'http://localhost/apps/oidc/authorize',
 				'https://cloud.example.com',
 				'https://cloud.example.com',
 			],
-			'http discovery with http external' => [
+			'self-hosted: http discovery with http external' => [
+				'http://localhost',
 				'http://localhost/apps/oidc/authorize',
 				'http://localhost:8080',
 				'http://localhost:8080',
+			],
+			'managed NC: resolver returns the public URL (idempotent preg_replace)' => [
+				'https://cloud.example.com',
+				'https://cloud.example.com/apps/oidc/authorize',
+				'https://cloud.example.com',
+				'https://cloud.example.com',
 			],
 		];
 	}
@@ -183,10 +202,14 @@ final class OauthControllerTest extends TestCase {
 	 * @dataProvider provideTokenEndpointCases
 	 */
 	public function testExchangeCodeForTokenHonorsInternalUrlOverride(
-		string $internalUrlConfig,
+		string $resolverBaseUrl,
 		string $expectedTokenEndpoint,
 	): void {
 		$mcpServerUrl = 'http://mcp-server:8000';
+
+		// Mock the shared resolver — the controller no longer reads the raw
+		// config value directly.
+		$this->urlResolver->method('resolve')->willReturn($resolverBaseUrl);
 
 		// Mock MCP server status response — no oidc.discovery_url forces
 		// the Nextcloud-OIDC (internal URL) branch.
@@ -221,7 +244,6 @@ final class OauthControllerTest extends TestCase {
 
 		$this->config->method('getSystemValue')
 			->willReturnMap([
-				['astrolabe_internal_url', '', $internalUrlConfig],
 				['astrolabe_client_secret', '', ''],
 			]);
 
@@ -243,20 +265,22 @@ final class OauthControllerTest extends TestCase {
 	/**
 	 * Provides test cases for exchangeCodeForToken() internal-URL resolution.
 	 *
+	 * Tuple: [resolver-returned base URL, expected token endpoint URL].
+	 *
 	 * @return array<string, array{string, string}>
 	 */
 	public static function provideTokenEndpointCases(): array {
 		return [
-			'default (config empty) → localhost' => [
-				'',
+			'default (resolver returns localhost) → localhost token endpoint' => [
+				'http://localhost',
 				'http://localhost/apps/oidc/token',
 			],
-			'managed NC override → public URL' => [
+			'managed NC (resolver returns public URL) → public token endpoint' => [
 				'https://cloud.example.com',
 				'https://cloud.example.com/apps/oidc/token',
 			],
-			'override with trailing slash is trimmed' => [
-				'https://cloud.example.com/',
+			'resolver already trimmed trailing slash' => [
+				'https://cloud.example.com',
 				'https://cloud.example.com/apps/oidc/token',
 			],
 		];

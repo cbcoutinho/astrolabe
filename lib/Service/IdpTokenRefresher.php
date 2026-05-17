@@ -23,64 +23,20 @@ class IdpTokenRefresher {
 	private IClient $httpClient;
 	private LoggerInterface $logger;
 	private McpServerClient $mcpServerClient;
+	private NcInternalUrlResolver $urlResolver;
 
 	public function __construct(
 		IConfig $config,
 		IClientService $clientService,
 		LoggerInterface $logger,
 		McpServerClient $mcpServerClient,
+		NcInternalUrlResolver $urlResolver,
 	) {
 		$this->config = $config;
 		$this->httpClient = $clientService->newClient();
 		$this->logger = $logger;
 		$this->mcpServerClient = $mcpServerClient;
-	}
-
-	/**
-	 * Get Nextcloud base URL for constructing internal OIDC endpoint URLs.
-	 *
-	 * IMPORTANT: This is for INTERNAL server-to-server requests (PHP to local Apache),
-	 * NOT for external client URLs. We must use the internal container URL, not the
-	 * external URL that browsers see.
-	 *
-	 * Configuration priority:
-	 * 1. astrolabe_internal_url - Explicit internal URL (for custom container setups)
-	 * 2. http://localhost - Default for Docker containers (web server on port 80)
-	 *
-	 * NOTE: We intentionally DO NOT use overwrite.cli.url here because:
-	 * - overwrite.cli.url is the EXTERNAL URL (e.g., http://localhost:8080)
-	 * - External URLs are not accessible from inside the container
-	 * - This method is for internal HTTP requests to the local web server
-	 *
-	 * @return string Base URL for internal requests (e.g., "http://localhost")
-	 */
-	private function getNextcloudBaseUrl(): string {
-		// Check for explicit internal URL config (for custom container setups)
-		$internalUrl = $this->config->getSystemValue('astrolabe_internal_url', '');
-		if (!is_string($internalUrl)) {
-			$internalUrl = '';
-		}
-		if (!empty($internalUrl)) {
-			// Validate URL format
-			if (!filter_var($internalUrl, FILTER_VALIDATE_URL)) {
-				$this->logger->warning('Invalid astrolabe_internal_url format, using default', [
-					'configured_url' => $internalUrl,
-				]);
-				return 'http://localhost';
-			}
-			// Warn if it looks like an external URL (common misconfiguration)
-			if (preg_match('/:\d{4,5}$/', $internalUrl)) {
-				$this->logger->warning('astrolabe_internal_url appears to use external port mapping', [
-					'configured_url' => $internalUrl,
-					'hint' => 'Internal URLs should use port 80, not mapped ports like :8080',
-				]);
-			}
-			return rtrim($internalUrl, '/');
-		}
-
-		// Default: container environment with web server on localhost:80
-		// This works because PHP runs inside the same container as Apache
-		return 'http://localhost';
+		$this->urlResolver = $urlResolver;
 	}
 
 	/**
@@ -136,7 +92,7 @@ class IdpTokenRefresher {
 				$tokenEndpoint = $discovery['token_endpoint'];
 			} else {
 				// Nextcloud's OIDC app - use internal URL
-				$tokenEndpoint = $this->getNextcloudBaseUrl() . '/apps/oidc/token';
+				$tokenEndpoint = $this->urlResolver->resolve() . '/apps/oidc/token';
 
 				$this->logger->debug('IdpTokenRefresher: Using Nextcloud OIDC app', [
 					'token_endpoint' => $tokenEndpoint,
