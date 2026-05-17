@@ -80,9 +80,20 @@ class IdpTokenRefresher {
 				// Validate scheme before fetching: discovery_url comes from
 				// the MCP status response verbatim, so without this check it
 				// would be an SSRF vector controllable by the MCP operator.
-				$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl(
-					$statusData['oidc']['discovery_url']
-				);
+				// Log the offending value if validation rejects it — the
+				// outer catch only sees a generic RuntimeException, so
+				// without this the rejected URL never reaches the log.
+				/** @psalm-suppress MixedAssignment */
+				$rawDiscoveryUrl = $statusData['oidc']['discovery_url'];
+				try {
+					$discoveryUrl = NcInternalUrlResolver::validateExternalDiscoveryUrl($rawDiscoveryUrl);
+				} catch (\RuntimeException $e) {
+					$this->logger->warning('Rejected external OIDC discovery_url from MCP server during token refresh', [
+						'discovery_url' => $rawDiscoveryUrl,
+						'reason' => $e->getMessage(),
+					]);
+					throw $e;
+				}
 
 				$this->logger->debug('IdpTokenRefresher: Using external IdP', [
 					'discovery_url' => $discoveryUrl,
