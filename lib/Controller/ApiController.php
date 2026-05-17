@@ -1019,6 +1019,7 @@ class ApiController extends Controller {
 			// back to the pre-lock value if storage returned anything
 			// other than a non-empty string (corrupted entry, race with
 			// deletion partway through, etc.).
+			/** @psalm-suppress MixedAssignment - array values are mixed; guarded below */
 			$candidate = $latestToken['refresh_token'] ?? '';
 			$currentRefreshToken = (is_string($candidate) && $candidate !== '')
 				? $candidate
