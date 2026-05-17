@@ -31,6 +31,16 @@ class IdpTokenRefresher {
 	 * has been made yet. Cleared at the start of every refreshAccessToken()
 	 * call. Surfaced to admin callers via ApiController so an authorization
 	 * failure in the UI doesn't require reading nextcloud.log to diagnose.
+	 *
+	 * SECURITY: The string may include truncated IdP response body
+	 * snippets — Guzzle wraps the HTTP response body in its exception
+	 * message, and OIDC providers (Keycloak, Cognito, …) embed
+	 * `error_description` and similar fields there. Callers that surface
+	 * this value over the API MUST gate it on an admin check; the
+	 * ApiController::authRequiredBody() / unauthorizedResponse() helpers
+	 * are the only sanctioned exposure path and both enforce that guard.
+	 * Do not widen exposure without re-evaluating what IdP-side detail
+	 * could leak.
 	 */
 	private ?string $lastError = null;
 

@@ -97,7 +97,7 @@ return [
 		[
 			'name' => 'api#refreshDiagnostic',
 			'url' => '/api/admin/refresh-diagnostic',
-			'verb' => 'GET',
+			'verb' => 'POST',
 		],
 
 		// Webhook management routes (admin only)

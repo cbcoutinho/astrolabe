@@ -64,9 +64,14 @@ class ApiController extends Controller {
 	 * including the refresh-failure reason captured by IdpTokenRefresher.
 	 *
 	 * The reason is only included for admin users — it can contain bits of
-	 * the IdP's response body, which we don't want surfaced to every user.
-	 * For non-admin users the body remains the generic message they already
-	 * get today, so this change is observation-only at runtime.
+	 * the IdP's response body (see IdpTokenRefresher::$lastError docblock),
+	 * which we don't want surfaced to every user. For non-admin users the
+	 * body remains the generic message they already get today.
+	 *
+	 * The detail goes in a separate `refresh_error` key rather than being
+	 * concatenated into `error`. The frontend keeps the short message in
+	 * its main banner and renders `refresh_error` as a secondary line, so
+	 * the primary UI stays compact even when the reason is long.
 	 */
 	private function authRequiredBody(string $message, ?string $userId): array {
 		$body = [
@@ -78,11 +83,24 @@ class ApiController extends Controller {
 			$refreshError = $this->tokenRefresher->getLastError();
 			if ($refreshError !== null) {
 				$body['refresh_error'] = $refreshError;
-				$body['error'] = $message . ' (' . $refreshError . ')';
 			}
 		}
 
 		return $body;
+	}
+
+	/**
+	 * Build a 401 JSONResponse for the "MCP server authorization required"
+	 * failure mode. Wraps authRequiredBody() so endpoints can return the
+	 * canonical unauthorized response in one statement, which keeps the
+	 * six getAccessToken()-null branches in this controller structurally
+	 * identical and well below SonarCloud's duplication threshold.
+	 */
+	private function unauthorizedResponse(string $message, ?string $userId): JSONResponse {
+		return new JSONResponse(
+			$this->authRequiredBody($message, $userId),
+			Http::STATUS_UNAUTHORIZED
+		);
 	}
 
 	/**
@@ -200,12 +218,9 @@ class ApiController extends Controller {
 		// Get user's OAuth token for MCP server with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse(
-				$this->authRequiredBody(
-					'MCP server authorization required. Please authorize the app first.',
-					$userId
-				),
-				Http::STATUS_UNAUTHORIZED
+			return $this->unauthorizedResponse(
+				'MCP server authorization required. Please authorize the app first.',
+				$userId
 			);
 		}
 
@@ -469,10 +484,7 @@ class ApiController extends Controller {
 		// Get access token with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse(
-				$this->authRequiredBody('MCP server authorization required', $userId),
-				Http::STATUS_UNAUTHORIZED
-			);
+			return $this->unauthorizedResponse('MCP server authorization required', $userId);
 		}
 
 		// Get installed apps to filter presets
@@ -576,10 +588,7 @@ class ApiController extends Controller {
 		// Get access token with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse(
-				$this->authRequiredBody('MCP server authorization required', $userId),
-				Http::STATUS_UNAUTHORIZED
-			);
+			return $this->unauthorizedResponse('MCP server authorization required', $userId);
 		}
 
 		// Get preset configuration
@@ -682,10 +691,7 @@ class ApiController extends Controller {
 		// Get access token with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse(
-				$this->authRequiredBody('MCP server authorization required', $userId),
-				Http::STATUS_UNAUTHORIZED
-			);
+			return $this->unauthorizedResponse('MCP server authorization required', $userId);
 		}
 
 		// Get preset configuration
@@ -820,10 +826,7 @@ class ApiController extends Controller {
 		// Get user's OAuth token for MCP server with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse(
-				$this->authRequiredBody('MCP server authorization required.', $userId),
-				Http::STATUS_UNAUTHORIZED
-			);
+			return $this->unauthorizedResponse('MCP server authorization required.', $userId);
 		}
 
 		$result = $this->client->getChunkContext(
@@ -886,10 +889,7 @@ class ApiController extends Controller {
 		// Get user's OAuth token for MCP server with automatic refresh
 		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
 		if ($accessToken === null) {
-			return new JSONResponse(
-				$this->authRequiredBody('MCP server authorization required.', $userId),
-				Http::STATUS_UNAUTHORIZED
-			);
+			return $this->unauthorizedResponse('MCP server authorization required.', $userId);
 		}
 
 		$result = $this->client->getPdfPreview($file_path, $page, $scale, $accessToken);
@@ -953,6 +953,12 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
+		// Defense in depth: Nextcloud's SecurityMiddleware already enforces
+		// admin-only at the dispatch layer because this method has no
+		// #[NoAdminRequired] attribute. Re-checking here keeps the guarantee
+		// local to the handler so future refactors (e.g. accidentally
+		// adding the attribute, or invoking this method from another
+		// controller) cannot silently widen access to the diagnostic.
 		if (!$this->groupManager->isAdmin($userId)) {
 			return new JSONResponse([
 				'success' => false,
@@ -993,8 +999,25 @@ class ApiController extends Controller {
 		// token at the IdP without storing the new one, breaking the chain
 		// and forcing the user to re-authorize. The lock keeps this in sync
 		// with concurrent on-demand / background refreshes.
+		//
+		// Re-read the stored token inside the lock (double-check pattern,
+		// same as McpTokenStorage::getAccessToken). The outer read above
+		// could otherwise be stale by the time we acquire the lock — if
+		// RefreshUserTokens rotated the refresh_token in the meantime, we'd
+		// redeem an already-consumed value and report a false "revoked"
+		// failure for a chain that is actually healthy.
 		$refreshResult = $this->tokenStorage->withTokenLock($userId, function () use ($userId, $refreshToken): ?array {
-			$result = $this->tokenRefresher->refreshAccessToken($refreshToken);
+			$latestToken = $this->tokenStorage->getUserToken($userId);
+			if ($latestToken === null) {
+				// Concurrent failed refresh wiped the token between the
+				// outer read and lock acquisition; treat as failure so the
+				// caller sees a consistent state.
+				return null;
+			}
+			/** @var string $currentRefreshToken */
+			$currentRefreshToken = ($latestToken['refresh_token'] ?? '') ?: $refreshToken;
+
+			$result = $this->tokenRefresher->refreshAccessToken($currentRefreshToken);
 			if ($result === null || !isset($result['access_token'])) {
 				return null;
 			}
@@ -1002,7 +1025,7 @@ class ApiController extends Controller {
 			/** @var string $accessToken */
 			$accessToken = $result['access_token'];
 			/** @var string $newRefreshToken */
-			$newRefreshToken = $result['refresh_token'] ?? $refreshToken;
+			$newRefreshToken = $result['refresh_token'] ?? $currentRefreshToken;
 			$expiresIn = (int)($result['expires_in'] ?? 3600);
 			$this->tokenStorage->storeUserToken(
 				$userId,

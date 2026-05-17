@@ -239,7 +239,7 @@
 				</div>
 				<NcNoteCard
 					v-if="diagnosticsResult"
-					:type="diagnosticsResult.refresh_attempt === 'success' ? 'success' : 'warning'"
+					:type="diagnosticsResultType"
 					class="diagnostic-result">
 					<p><strong>{{ diagnosticsResult.conclusion }}</strong></p>
 					<pre>{{ JSON.stringify(diagnosticsResult, null, 2) }}</pre>
@@ -339,6 +339,17 @@ const selectedAlgorithmOption = computed(() =>
 const selectedFusionOption = computed(() =>
 	fusionOptions.value.find(opt => opt.id === settings.value.fusion) || fusionOptions.value[0],
 )
+
+// NcNoteCard variant for the diagnostic result panel. The "no stored
+// token" early-return path leaves refresh_attempt undefined; render it
+// as a neutral info card rather than the amber warning the previous
+// two-arm ternary fell through to.
+const diagnosticsResultType = computed(() => {
+	const attempt = diagnosticsResult.value?.refresh_attempt
+	if (attempt === 'success') return 'success'
+	if (attempt === 'failed') return 'error'
+	return 'info'
+})
 
 // Methods
 async function loadServerStatus() {
@@ -487,7 +498,12 @@ async function runRefreshDiagnostic() {
 	diagnosticsError.value = null
 
 	try {
-		const response = await axios.get(generateUrl('/apps/astrolabe/api/admin/refresh-diagnostic'))
+		// POST because the diagnostic mutates state — it stores a rotated
+		// refresh_token on success (under withTokenLock to stay in sync
+		// with the background refresher). GET would be both wrong per
+		// HTTP semantics and CSRF-triggerable (Nextcloud's CSRF middleware
+		// doesn't gate GET).
+		const response = await axios.post(generateUrl('/apps/astrolabe/api/admin/refresh-diagnostic'))
 		if (response.data.success) {
 			diagnosticsResult.value = response.data.diagnostic
 		} else {

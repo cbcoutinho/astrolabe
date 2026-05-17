@@ -503,7 +503,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 			]);
 
 		// Simulate an unauthorized response from the IdP via an exception
@@ -539,7 +539,7 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
-				['mcp_server_url', '', 'http://mcp-server:8000'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
 				['astrolabe_internal_url', '', ''],
 			]);
 		$this->mcpServerClient->method('getClientId')
