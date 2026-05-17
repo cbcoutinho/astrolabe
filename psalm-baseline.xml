@@ -95,7 +95,6 @@
       <code><![CDATA[$codeVerifier]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$internalBaseUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$tokenData['access_token']]]></code>
@@ -429,6 +428,9 @@
     </RiskyTruthyFalsyComparison>
   </file>
   <file src="lib/Service/NcInternalUrlResolver.php">
+    <MixedAssignment>
+      <code><![CDATA[$configured]]></code>
+    </MixedAssignment>
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
     </PossiblyUnusedMethod>

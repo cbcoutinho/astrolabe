@@ -194,6 +194,96 @@ final class OauthControllerTest extends TestCase {
 		];
 	}
 
+	public function testBuildAuthorizationUrlUsesExternalDiscoveryUrlVerbatim(): void {
+		$mcpServerUrl = 'http://mcp-server:8000';
+		$externalDiscovery = 'https://keycloak.example.com/realms/x/.well-known/openid-configuration';
+		$externalAuthEndpoint = 'https://keycloak.example.com/realms/x/auth';
+
+		// Resolver must NOT be consulted on the external-IdP path.
+		$this->urlResolver->expects($this->never())->method('resolve');
+
+		$statusResponse = $this->createMock(IResponse::class);
+		$statusResponse->method('getBody')->willReturn(json_encode([
+			'auth_mode' => 'multi_user_oauth',
+			'oidc' => ['discovery_url' => $externalDiscovery],
+		]));
+
+		$discoveryResponse = $this->createMock(IResponse::class);
+		$discoveryResponse->method('getBody')->willReturn(json_encode([
+			'authorization_endpoint' => $externalAuthEndpoint,
+			'token_endpoint' => 'https://keycloak.example.com/realms/x/token',
+			'scopes_supported' => ['openid', 'profile', 'email'],
+			'grant_types_supported' => ['authorization_code'],
+		]));
+		$discoveryResponse->method('getStatusCode')->willReturn(200);
+
+		$this->httpClient->method('get')
+			->willReturnCallback(function (string $url) use ($statusResponse, $discoveryResponse) {
+				return str_contains($url, '/api/v1/status') ? $statusResponse : $discoveryResponse;
+			});
+
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['mcp_server_url', '', $mcpServerUrl],
+				['mcp_server_public_url', $mcpServerUrl, $mcpServerUrl],
+				['astrolabe_client_secret', '', ''],
+			]);
+		$this->mcpClient->method('getClientId')->willReturn('test-client-id');
+		$this->urlGenerator->method('linkToRouteAbsolute')
+			->willReturn('https://cloud.example.com/apps/astrolabe/oauth/callback');
+
+		$reflection = new \ReflectionClass($this->controller);
+		$method = $reflection->getMethod('buildAuthorizationUrl');
+		$method->setAccessible(true);
+
+		$result = $method->invoke($this->controller, $mcpServerUrl, 'test-state', 'test-challenge');
+
+		$this->assertStringStartsWith($externalAuthEndpoint . '?', $result);
+	}
+
+	/**
+	 * @dataProvider provideInsecureExternalDiscoveryUrls
+	 */
+	public function testBuildAuthorizationUrlRejectsInsecureExternalDiscoveryUrl(mixed $discoveryUrl): void {
+		$mcpServerUrl = 'http://mcp-server:8000';
+
+		$statusResponse = $this->createMock(IResponse::class);
+		$statusResponse->method('getBody')->willReturn(json_encode([
+			'auth_mode' => 'multi_user_oauth',
+			'oidc' => ['discovery_url' => $discoveryUrl],
+		]));
+
+		$this->httpClient->method('get')->willReturn($statusResponse);
+		// Discovery fetch must never happen — only the /api/v1/status call.
+		$this->httpClient->expects($this->once())->method('get');
+
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['mcp_server_url', '', $mcpServerUrl],
+				['astrolabe_client_secret', '', ''],
+			]);
+
+		$reflection = new \ReflectionClass($this->controller);
+		$method = $reflection->getMethod('buildAuthorizationUrl');
+		$method->setAccessible(true);
+
+		$this->expectException(\Exception::class);
+		$this->expectExceptionMessageMatches('/https/i');
+
+		$method->invoke($this->controller, $mcpServerUrl, 'test-state', 'test-challenge');
+	}
+
+	/**
+	 * @return array<string, array{mixed}>
+	 */
+	public static function provideInsecureExternalDiscoveryUrls(): array {
+		return [
+			'plaintext http rejected' => ['http://keycloak.example.com/.well-known/openid-configuration'],
+			'malformed URL rejected' => ['not-a-url'],
+			'non-string discovery_url rejected' => [123],
+		];
+	}
+
 	// =========================================================================
 	// exchangeCodeForToken() tests — Nextcloud OIDC branch honors override
 	// =========================================================================

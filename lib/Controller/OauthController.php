@@ -388,6 +388,9 @@ class OauthController extends Controller {
 		string $state,
 		string $codeChallenge,
 	): string {
+		// Strip any trailing slash so concatenation with /api/... is safe.
+		$mcpServerUrl = rtrim($mcpServerUrl, '/');
+
 		// First, query MCP server to discover which IdP it's configured to use
 		$this->logger->info('buildAuthorizationUrl: Starting', [
 			'mcp_server_url' => $mcpServerUrl,
@@ -426,8 +429,20 @@ class OauthController extends Controller {
 		$useExternalIdp = isset($statusData['oidc']['discovery_url']);
 		$internalBaseUrl = '';
 		if ($useExternalIdp) {
-			// MCP server has external IdP configured (e.g., Keycloak)
+			// MCP server has external IdP configured (e.g., Keycloak).
+			// Validate the URL is a https:// endpoint before we fetch it —
+			// the value comes from /api/v1/status verbatim, so without this
+			// check it would be an SSRF vector controllable by the MCP
+			// server operator.
 			$discoveryUrl = $statusData['oidc']['discovery_url'];
+			if (!is_string($discoveryUrl)
+				|| !filter_var($discoveryUrl, FILTER_VALIDATE_URL)
+				|| !str_starts_with($discoveryUrl, 'https://')
+			) {
+				throw new \RuntimeException(
+					'External OIDC discovery_url must be a valid https:// URL'
+				);
+			}
 			$this->logger->info('Using IdP from MCP server configuration', [
 				'discovery_url' => $discoveryUrl,
 			]);
@@ -490,9 +505,10 @@ class OauthController extends Controller {
 				$internalBaseUrl = rtrim($internalBaseUrl, '/');
 				/** @var string $internalHost */
 				$internalHost = preg_replace('#^https?://#', '', $internalBaseUrl);
+				// Escape backreference markers ($N, ${N}, \N) in the replacement string.
 				$replaced = preg_replace(
 					'#^https?://' . preg_quote($internalHost, '#') . '#',
-					$externalBaseUrl,
+					addcslashes($externalBaseUrl, '\\$'),
 					$authEndpoint
 				);
 				if (is_string($replaced)) {
@@ -575,6 +591,8 @@ class OauthController extends Controller {
 		string $code,
 		string $codeVerifier,
 	): array {
+		$mcpServerUrl = rtrim($mcpServerUrl, '/');
+
 		// Query MCP server to discover which IdP it's configured to use.
 		// TODO: buildAuthorizationUrl() already fetches /api/v1/status for the
 		// same MCP server URL during the authorize leg. Cache the status in the
@@ -599,8 +617,18 @@ class OauthController extends Controller {
 		$useInternalNextcloud = !isset($statusData['oidc']['discovery_url']);
 
 		if (!$useInternalNextcloud) {
-			// External IdP configured - use discovery
+			// External IdP configured - use discovery.
+			// Validate scheme before fetching — see buildAuthorizationUrl()
+			// for the SSRF rationale.
 			$discoveryUrl = $statusData['oidc']['discovery_url'];
+			if (!is_string($discoveryUrl)
+				|| !filter_var($discoveryUrl, FILTER_VALIDATE_URL)
+				|| !str_starts_with($discoveryUrl, 'https://')
+			) {
+				throw new \RuntimeException(
+					'External OIDC discovery_url must be a valid https:// URL'
+				);
+			}
 
 			try {
 				$response = $this->httpClient->get($discoveryUrl);

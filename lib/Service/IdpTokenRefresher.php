@@ -62,6 +62,7 @@ class IdpTokenRefresher {
 			if (empty($mcpServerUrl)) {
 				throw new \Exception('MCP server URL not configured');
 			}
+			$mcpServerUrl = rtrim((string)$mcpServerUrl, '/');
 
 			// Query MCP server to discover which IdP it's configured to use
 			$statusResponse = $this->httpClient->get($mcpServerUrl . '/api/v1/status');
@@ -75,8 +76,19 @@ class IdpTokenRefresher {
 			$useInternalNextcloud = !isset($statusData['oidc']['discovery_url']);
 
 			if (!$useInternalNextcloud) {
-				// External IdP configured - use OIDC discovery
+				// External IdP configured - use OIDC discovery.
+				// Validate scheme before fetching: discovery_url comes from
+				// the MCP status response verbatim, so without this check it
+				// would be an SSRF vector controllable by the MCP operator.
 				$discoveryUrl = $statusData['oidc']['discovery_url'];
+				if (!is_string($discoveryUrl)
+					|| !filter_var($discoveryUrl, FILTER_VALIDATE_URL)
+					|| !str_starts_with($discoveryUrl, 'https://')
+				) {
+					throw new \RuntimeException(
+						'External OIDC discovery_url must be a valid https:// URL'
+					);
+				}
 
 				$this->logger->debug('IdpTokenRefresher: Using external IdP', [
 					'discovery_url' => $discoveryUrl,
@@ -147,10 +159,7 @@ class IdpTokenRefresher {
 			]);
 			return null;
 		} catch (\Exception $e) {
-			$statusCode = null;
-			if (method_exists($e, 'getCode')) {
-				$statusCode = $e->getCode();
-			}
+			$statusCode = $e->getCode();
 
 			// Log with appropriate level based on error type
 			if ($statusCode === 401 || $statusCode === 403) {

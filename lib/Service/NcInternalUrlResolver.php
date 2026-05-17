@@ -78,7 +78,8 @@ class NcInternalUrlResolver {
 		// legitimate and intentionally not flagged.
 		$host = parse_url($internalUrl, PHP_URL_HOST);
 		$port = parse_url($internalUrl, PHP_URL_PORT);
-		if (($host === 'localhost' || $host === '127.0.0.1')
+		// parse_url returns the IPv6 host with surrounding brackets ('[::1]').
+		if (($host === 'localhost' || $host === '127.0.0.1' || $host === '[::1]')
 			&& is_int($port)
 			&& $port !== 80
 		) {

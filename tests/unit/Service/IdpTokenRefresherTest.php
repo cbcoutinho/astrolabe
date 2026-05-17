@@ -220,6 +220,36 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->assertEquals(300, $result['expires_in']);
 	}
 
+	public function testRefreshAccessTokenRejectsInsecureExternalDiscoveryUrl(): void {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', 'test-secret'],
+				['mcp_server_url', '', 'http://mcp-server:8000'],
+			]);
+
+		// Status response pins discovery_url to plaintext http — must be rejected
+		// before the httpClient->get is reached. This is the SSRF guard.
+		$statusResponse = $this->createMock(IResponse::class);
+		$statusResponse->method('getBody')
+			->willReturn(json_encode([
+				'oidc' => [
+					'discovery_url' => 'http://keycloak.example.com/.well-known/openid-configuration',
+				],
+			]));
+
+		$this->httpClient->method('get')->willReturn($statusResponse);
+		$this->httpClient->expects($this->never())->method('post');
+
+		$this->logger->expects($this->once())
+			->method('error')
+			->with(
+				$this->stringContains('Token refresh failed'),
+				$this->callback(fn ($ctx) => str_contains((string)($ctx['error'] ?? ''), 'https'))
+			);
+
+		$this->assertNull($this->refresher->refreshAccessToken('test-refresh-token'));
+	}
+
 	public function testRefreshAccessTokenSucceedsWithoutRefreshTokenInResponse(): void {
 		// Setup config
 		$this->config->method('getSystemValue')

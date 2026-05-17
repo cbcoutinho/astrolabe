@@ -100,6 +100,21 @@ final class NcInternalUrlResolverTest extends TestCase {
 		$this->assertSame('http://127.0.0.1:8080', $this->resolver->resolve());
 	}
 
+	public function testHighPortOnIpv6LoopbackLogsExternalPortMappingWarning(): void {
+		$this->config->method('getSystemValue')
+			->with('astrolabe_internal_url', '')
+			->willReturn('http://[::1]:8080');
+
+		$this->logger->expects($this->once())
+			->method('warning')
+			->with(
+				$this->stringContains('external port mapping'),
+				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://[::1]:8080'),
+			);
+
+		$this->assertSame('http://[::1]:8080', $this->resolver->resolve());
+	}
+
 	public function testHighPortOnKubernetesUrlDoesNotWarn(): void {
 		$this->config->method('getSystemValue')
 			->with('astrolabe_internal_url', '')
