@@ -169,6 +169,7 @@
       <code><![CDATA[$tokenProvider]]></code>
       <code><![CDATA[$tokenStorage]]></code>
       <code><![CDATA[$urlGenerator]]></code>
+      <code><![CDATA[$urlResolver]]></code>
       <code><![CDATA[$userSession]]></code>
     </PossiblyUnusedParam>
     <RiskyTruthyFalsyComparison>
@@ -256,7 +257,6 @@
       <code><![CDATA[$clientSecret]]></code>
       <code><![CDATA[$discovery]]></code>
       <code><![CDATA[$discoveryUrl]]></code>
-      <code><![CDATA[$internalUrl]]></code>
       <code><![CDATA[$mcpServerUrl]]></code>
       <code><![CDATA[$statusData]]></code>
       <code><![CDATA[$tokenEndpoint]]></code>
@@ -427,6 +427,11 @@
       <code><![CDATA[!$token]]></code>
       <code><![CDATA[$refreshCallback]]></code>
     </RiskyTruthyFalsyComparison>
+  </file>
+  <file src="lib/Service/NcInternalUrlResolver.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[__construct]]></code>
+    </PossiblyUnusedMethod>
   </file>
   <file src="lib/Service/WebhookPresets.php">
     <MissingClosureParamType>

@@ -84,4 +84,63 @@ final class NcInternalUrlResolverTest extends TestCase {
 
 		$this->assertSame('http://localhost:8080', $this->resolver->resolve());
 	}
+
+	public function testHighPortOn127LoopbackLogsExternalPortMappingWarning(): void {
+		$this->config->method('getSystemValue')
+			->with('astrolabe_internal_url', '')
+			->willReturn('http://127.0.0.1:8080');
+
+		$this->logger->expects($this->once())
+			->method('warning')
+			->with(
+				$this->stringContains('external port mapping'),
+				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === 'http://127.0.0.1:8080'),
+			);
+
+		$this->assertSame('http://127.0.0.1:8080', $this->resolver->resolve());
+	}
+
+	public function testHighPortOnKubernetesUrlDoesNotWarn(): void {
+		$this->config->method('getSystemValue')
+			->with('astrolabe_internal_url', '')
+			->willReturn('http://nextcloud.default.svc.cluster.local:8080');
+
+		// Kubernetes internal service URLs frequently use non-80 ports —
+		// they are legitimate and must not trigger the port-mapping warning.
+		$this->logger->expects($this->never())->method('warning');
+
+		$this->assertSame(
+			'http://nextcloud.default.svc.cluster.local:8080',
+			$this->resolver->resolve(),
+		);
+	}
+
+	/**
+	 * @dataProvider provideUnsupportedSchemes
+	 */
+	public function testUnsupportedSchemeFallsBackToLocalhost(string $url): void {
+		$this->config->method('getSystemValue')
+			->with('astrolabe_internal_url', '')
+			->willReturn($url);
+
+		$this->logger->expects($this->once())
+			->method('warning')
+			->with(
+				$this->stringContains('Unsupported scheme'),
+				$this->callback(fn ($ctx) => ($ctx['configured_url'] ?? null) === $url),
+			);
+
+		$this->assertSame('http://localhost', $this->resolver->resolve());
+	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function provideUnsupportedSchemes(): array {
+		return [
+			'file:// URL' => ['file:///etc/passwd'],
+			'ftp:// URL' => ['ftp://example.com/'],
+			'gopher:// URL' => ['gopher://example.com/x'],
+		];
+	}
 }

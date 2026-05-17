@@ -41,8 +41,8 @@ class NcInternalUrlResolver {
 	 * @return string Base URL (no trailing slash)
 	 */
 	public function resolve(): string {
-		$raw = $this->config->getSystemValue('astrolabe_internal_url', '');
-		$internalUrl = is_string($raw) ? trim($raw) : '';
+		$configured = $this->config->getSystemValue('astrolabe_internal_url', '');
+		$internalUrl = is_string($configured) ? trim($configured) : '';
 
 		if ($internalUrl === '') {
 			return 'http://localhost';
@@ -56,14 +56,37 @@ class NcInternalUrlResolver {
 			return 'http://localhost';
 		}
 
-		// High-numbered ports usually indicate an external port mapping
-		// (e.g. :8080) accidentally configured as the internal URL.
-		if (preg_match('/:\d{4,5}$/', $internalUrl)) {
+		// Scheme allowlist: only http/https are valid for OIDC endpoints.
+		// FILTER_VALIDATE_URL accepts file://, ftp://, gopher://, etc.,
+		// which would let an admin trigger arbitrary protocol fetches.
+		$scheme = parse_url($internalUrl, PHP_URL_SCHEME);
+		if ($scheme !== 'http' && $scheme !== 'https') {
+			$this->logger->warning(
+				'Unsupported scheme in astrolabe_internal_url, falling back to default',
+				[
+					'configured_url' => $internalUrl,
+					'scheme' => $scheme,
+				],
+			);
+			return 'http://localhost';
+		}
+
+		// Warn only when a loopback host is paired with a non-default port —
+		// that signature usually means the admin pasted the externally-mapped
+		// port (e.g. http://localhost:8080) where the internal URL belongs.
+		// Kubernetes service URLs like http://nextcloud.default.svc:8080 are
+		// legitimate and intentionally not flagged.
+		$host = parse_url($internalUrl, PHP_URL_HOST);
+		$port = parse_url($internalUrl, PHP_URL_PORT);
+		if (($host === 'localhost' || $host === '127.0.0.1')
+			&& is_int($port)
+			&& $port !== 80
+		) {
 			$this->logger->warning(
 				'astrolabe_internal_url appears to use external port mapping',
 				[
 					'configured_url' => $internalUrl,
-					'hint' => 'Internal URLs should use port 80, not mapped ports like :8080',
+					'hint' => 'For localhost, prefer port 80 (or no port) over mapped ports like :8080',
 				],
 			);
 		}

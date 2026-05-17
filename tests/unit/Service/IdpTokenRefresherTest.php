@@ -293,6 +293,33 @@ final class IdpTokenRefresherTest extends TestCase {
 		$this->assertNull($result);
 	}
 
+	public function testRefreshAccessTokenHandlesLocalServerException(): void {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', 'test-secret'],
+				['mcp_server_url', '', 'http://mcp-server:8000'],
+			]);
+
+		// Transient network failure — Nextcloud's HTTP client raises
+		// LocalServerException for connection-level errors. The refresher
+		// must log this as a warning, not an error, so callers don't
+		// surface a fatal-looking signal for retryable problems.
+		$this->httpClient->method('get')
+			->willThrowException(new \OCP\Http\Client\LocalServerException('connect failed'));
+
+		$this->logger->expects($this->once())
+			->method('warning')
+			->with(
+				$this->stringContains('Network error during refresh'),
+				$this->callback(fn ($ctx) => str_contains($ctx['error'], 'connect failed'))
+			);
+		$this->logger->expects($this->never())->method('error');
+
+		$result = $this->refresher->refreshAccessToken('test-refresh-token');
+
+		$this->assertNull($result);
+	}
+
 	public function testRefreshAccessTokenHandlesInvalidStatusResponse(): void {
 		// Setup config
 		$this->config->method('getSystemValue')

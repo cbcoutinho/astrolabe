@@ -421,9 +421,11 @@ class OauthController extends Controller {
 			throw new \Exception('Cannot connect to MCP server: ' . $e->getMessage());
 		}
 
-		// Determine OIDC discovery URL
-		// Priority: 1) MCP server's configured discovery URL, 2) Nextcloud OIDC app
-		if (isset($statusData['oidc']['discovery_url'])) {
+		// Determine OIDC discovery URL.
+		// Priority: 1) MCP server's configured discovery URL, 2) Nextcloud OIDC app.
+		$useExternalIdp = isset($statusData['oidc']['discovery_url']);
+		$internalBaseUrl = '';
+		if ($useExternalIdp) {
 			// MCP server has external IdP configured (e.g., Keycloak)
 			$discoveryUrl = $statusData['oidc']['discovery_url'];
 			$this->logger->info('Using IdP from MCP server configuration', [
@@ -482,7 +484,7 @@ class OauthController extends Controller {
 			// astrolabe_internal_url (e.g., misconfigured overwritehost), the auth
 			// endpoint will be rewritten silently; that is intentional —
 			// overwritehost wins because that's what browsers will use.
-			if (isset($internalBaseUrl)) {
+			if (!$useExternalIdp) {
 				$externalBaseUrl = $this->urlGenerator->getAbsoluteURL('/');
 				$externalBaseUrl = rtrim($externalBaseUrl, '/');
 				$internalBaseUrl = rtrim($internalBaseUrl, '/');
@@ -573,7 +575,11 @@ class OauthController extends Controller {
 		string $code,
 		string $codeVerifier,
 	): array {
-		// Query MCP server to discover which IdP it's configured to use
+		// Query MCP server to discover which IdP it's configured to use.
+		// TODO: buildAuthorizationUrl() already fetches /api/v1/status for the
+		// same MCP server URL during the authorize leg. Cache the status in the
+		// session keyed by mcpServerUrl to skip this second round-trip on the
+		// callback.
 		try {
 			$statusResponse = $this->httpClient->get($mcpServerUrl . '/api/v1/status');
 			$statusData = json_decode($statusResponse->getBody(), true);
