@@ -108,12 +108,13 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		}
 
 		try {
+			// The KNOWN_FIELDS guard above narrows $fieldId so the match is
+			// exhaustive without a default arm.
 			match($fieldId) {
 				'mcp_server_url' => $this->config->setSystemValue('mcp_server_url', (string)$value),
 				'astrolabe_client_id' => $this->config->setSystemValue('astrolabe_client_id', (string)$value),
 				'astrolabe_client_secret' => $this->config->setSystemValue('astrolabe_client_secret', (string)$value),
 				'astrolabe_internal_url' => $this->config->setSystemValue('astrolabe_internal_url', (string)$value),
-				default => null,
 			};
 
 			$this->logger->info('Astrolabe admin setting updated', [
