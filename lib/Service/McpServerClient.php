@@ -49,12 +49,55 @@ class McpServerClient {
 	 *
 	 * Use at every outbound HTTP call site so MCP server logs see a stable
 	 * client identity instead of Guzzle's default UA.
+	 *
+	 * @param array<string, mixed> $options
+	 * @return array<string, mixed>
 	 */
 	private function withUserAgent(array $options = []): array {
+		/** @var array<string, string> $headers */
 		$headers = $options['headers'] ?? [];
 		$headers['User-Agent'] = $this->userAgent;
 		$options['headers'] = $headers;
 		return $options;
+	}
+
+	/**
+	 * Run an HTTP request closure, optionally route non-2xx responses through
+	 * detectErrorResponse(), JSON-decode the body, and turn any failure
+	 * (transport, non-2xx, malformed JSON) into a structured ['error' => …]
+	 * array. Centralises the try / decode / catch boilerplate that previously
+	 * lived in every public method.
+	 *
+	 * @param callable(): IResponse $request HTTP request closure
+	 * @param string $errorMessage Log message on failure
+	 * @param array<string, mixed> $logContext Extra fields merged into the log entry
+	 * @param bool $usesErrorDetection When true, runs non-2xx responses through detectErrorResponse()
+	 * @return array<string, mixed>
+	 */
+	private function sendAndDecode(
+		callable $request,
+		string $errorMessage,
+		array $logContext = [],
+		bool $usesErrorDetection = false,
+	): array {
+		try {
+			$response = $request();
+			if ($usesErrorDetection) {
+				$errorResult = $this->detectErrorResponse($response);
+				if ($errorResult !== null) {
+					return $errorResult;
+				}
+			}
+			/** @var mixed $data */
+			$data = json_decode((string)$response->getBody(), true);
+			if (json_last_error() !== JSON_ERROR_NONE) {
+				throw new \RuntimeException('Invalid JSON response from server');
+			}
+			return is_array($data) ? $data : [];
+		} catch (\Exception $e) {
+			$this->logger->error($errorMessage, ['error' => $e->getMessage()] + $logContext);
+			return ['error' => $e->getMessage()];
+		}
 	}
 
 	/**
@@ -126,25 +169,14 @@ class McpServerClient {
 	 * }
 	 */
 	public function getStatus(): array {
-		try {
-			$response = $this->httpClient->get(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->get(
 				$this->baseUrl . '/api/v1/status',
 				$this->withUserAgent(),
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to get MCP server status', [
-				'error' => $e->getMessage(),
-				'server_url' => $this->baseUrl,
-			]);
-			return ['error' => $e->getMessage()];
-		}
+			),
+			'Failed to get MCP server status',
+			['server_url' => $this->baseUrl],
+		);
 	}
 
 	/**
@@ -163,29 +195,16 @@ class McpServerClient {
 	 * }
 	 */
 	public function getUserSession(string $userId, string $token): array {
-		try {
-			$response = $this->httpClient->get(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->get(
 				$this->baseUrl . '/api/v1/users/' . urlencode($userId) . '/session',
 				$this->withUserAgent([
-					'headers' => [
-						'Authorization' => 'Bearer ' . $token
-					]
-				])
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error("Failed to get session for user $userId", [
-				'error' => $e->getMessage(),
-				'user_id' => $userId,
-			]);
-			return ['error' => $e->getMessage()];
-		}
+					'headers' => ['Authorization' => 'Bearer ' . $token],
+				]),
+			),
+			"Failed to get session for user $userId",
+			['user_id' => $userId],
+		);
 	}
 
 	/**
@@ -198,29 +217,16 @@ class McpServerClient {
 	 * @return array{success?: bool, message?: string, error?: string}
 	 */
 	public function revokeUserAccess(string $userId, string $token): array {
-		try {
-			$response = $this->httpClient->post(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->post(
 				$this->baseUrl . '/api/v1/users/' . urlencode($userId) . '/revoke',
 				$this->withUserAgent([
-					'headers' => [
-						'Authorization' => 'Bearer ' . $token
-					]
-				])
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error("Failed to revoke access for user $userId", [
-				'error' => $e->getMessage(),
-				'user_id' => $userId,
-			]);
-			return ['error' => $e->getMessage()];
-		}
+					'headers' => ['Authorization' => 'Bearer ' . $token],
+				]),
+			),
+			"Failed to revoke access for user $userId",
+			['user_id' => $userId],
+		);
 	}
 
 	/**
@@ -240,24 +246,13 @@ class McpServerClient {
 	 * }
 	 */
 	public function getVectorSyncStatus(): array {
-		try {
-			$response = $this->httpClient->get(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->get(
 				$this->baseUrl . '/api/v1/vector-sync/status',
 				$this->withUserAgent(),
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to get vector sync status', [
-				'error' => $e->getMessage(),
-			]);
-			return ['error' => $e->getMessage()];
-		}
+			),
+			'Failed to get vector sync status',
+		);
 	}
 
 	/**
@@ -288,47 +283,35 @@ class McpServerClient {
 		?array $docTypes = null,
 		?string $token = null,
 	): array {
-		try {
-			$requestBody = [
-				'query' => $query,
-				'algorithm' => $algorithm,
-				'limit' => min($limit, 50), // Enforce max limit
-				'include_pca' => $includePca,
-			];
+		$requestBody = [
+			'query' => $query,
+			'algorithm' => $algorithm,
+			'limit' => min($limit, 50), // Enforce max limit
+			'include_pca' => $includePca,
+		];
 
-			// Add doc_types filter if specified
-			if ($docTypes !== null && count($docTypes) > 0) {
-				$requestBody['doc_types'] = $docTypes;
-			}
-
-			$options = ['json' => $requestBody];
-
-			// Add authorization header if token provided
-			if ($token !== null) {
-				$options['headers'] = [
-					'Authorization' => 'Bearer ' . $token
-				];
-			}
-
-			$response = $this->httpClient->post(
-				$this->baseUrl . '/api/v1/vector-viz/search',
-				$this->withUserAgent($options)
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to execute search', [
-				'error' => $e->getMessage(),
-				'query' => $query,
-				'algorithm' => $algorithm,
-			]);
-			return ['error' => $e->getMessage()];
+		// Add doc_types filter if specified
+		if ($docTypes !== null && count($docTypes) > 0) {
+			$requestBody['doc_types'] = $docTypes;
 		}
+
+		$options = ['json' => $requestBody];
+
+		// Add authorization header if token provided
+		if ($token !== null) {
+			$options['headers'] = [
+				'Authorization' => 'Bearer ' . $token,
+			];
+		}
+
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->post(
+				$this->baseUrl . '/api/v1/vector-viz/search',
+				$this->withUserAgent($options),
+			),
+			'Failed to execute search',
+			['query' => $query, 'algorithm' => $algorithm],
+		);
 	}
 
 	/**
@@ -369,8 +352,8 @@ class McpServerClient {
 		string $fusion = 'rrf',
 		float $scoreThreshold = 0.0,
 	): array {
-		try {
-			$response = $this->httpClient->post(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->post(
 				$this->baseUrl . '/api/v1/search',
 				$this->withUserAgent([
 					'headers' => [
@@ -386,23 +369,12 @@ class McpServerClient {
 						'offset' => $offset,
 						'include_pca' => false,
 						'include_chunks' => true,
-					]
-				])
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Unified search failed', [
-				'error' => $e->getMessage(),
-				'query' => $query,
-			]);
-			return ['error' => $e->getMessage()];
-		}
+					],
+				]),
+			),
+			'Unified search failed',
+			['query' => $query],
+		);
 	}
 
 	/**
@@ -474,35 +446,17 @@ class McpServerClient {
 	 * }
 	 */
 	public function listWebhooks(string $token): array {
-		try {
-			$response = $this->httpClient->get(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->get(
 				$this->baseUrl . '/api/v1/webhooks',
 				$this->withUserAgent([
-					'headers' => [
-						'Authorization' => 'Bearer ' . $token
-					],
+					'headers' => ['Authorization' => 'Bearer ' . $token],
 					'http_errors' => false,
-				])
-			);
-
-			$errorResult = $this->detectErrorResponse($response);
-			if ($errorResult !== null) {
-				return $errorResult;
-			}
-
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to list webhooks', [
-				'error' => $e->getMessage(),
-			]);
-			return ['error' => $e->getMessage()];
-		}
+				]),
+			),
+			'Failed to list webhooks',
+			usesErrorDetection: true,
+		);
 	}
 
 	/**
@@ -530,17 +484,17 @@ class McpServerClient {
 		?array $eventFilter,
 		string $token,
 	): array {
-		try {
-			$requestBody = [
-				'event' => $event,
-				'uri' => $uri,
-			];
+		$requestBody = [
+			'event' => $event,
+			'uri' => $uri,
+		];
 
-			if ($eventFilter !== null) {
-				$requestBody['event_filter'] = $eventFilter;
-			}
+		if ($eventFilter !== null) {
+			$requestBody['event_filter'] = $eventFilter;
+		}
 
-			$response = $this->httpClient->post(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->post(
 				$this->baseUrl . '/api/v1/webhooks',
 				$this->withUserAgent([
 					'headers' => [
@@ -549,28 +503,12 @@ class McpServerClient {
 					],
 					'json' => $requestBody,
 					'http_errors' => false,
-				])
-			);
-
-			$errorResult = $this->detectErrorResponse($response);
-			if ($errorResult !== null) {
-				return $errorResult;
-			}
-
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to create webhook', [
-				'error' => $e->getMessage(),
-				'event' => $event,
-			]);
-			return ['error' => $e->getMessage()];
-		}
+				]),
+			),
+			'Failed to create webhook',
+			['event' => $event],
+			usesErrorDetection: true,
+		);
 	}
 
 	/**
@@ -634,35 +572,17 @@ class McpServerClient {
 	 * }
 	 */
 	public function getInstalledApps(string $token): array {
-		try {
-			$response = $this->httpClient->get(
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->get(
 				$this->baseUrl . '/api/v1/apps',
 				$this->withUserAgent([
-					'headers' => [
-						'Authorization' => 'Bearer ' . $token
-					],
+					'headers' => ['Authorization' => 'Bearer ' . $token],
 					'http_errors' => false,
-				])
-			);
-
-			$errorResult = $this->detectErrorResponse($response);
-			if ($errorResult !== null) {
-				return $errorResult;
-			}
-
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to get installed apps', [
-				'error' => $e->getMessage(),
-			]);
-			return ['error' => $e->getMessage()];
-		}
+				]),
+			),
+			'Failed to get installed apps',
+			usesErrorDetection: true,
+		);
 	}
 
 	/**
@@ -690,44 +610,31 @@ class McpServerClient {
 		?int $chunkIndex = null,
 		?int $totalChunks = null,
 	): array {
-		try {
-			$query = [
-				'doc_type' => $docType,
-				'doc_id' => $docId,
-				'start' => $start,
-				'end' => $end,
-				'context' => 500
-			];
-			if ($chunkIndex !== null) {
-				$query['chunk_index'] = $chunkIndex;
-			}
-			if ($totalChunks !== null) {
-				$query['total_chunks'] = $totalChunks;
-			}
-			$response = $this->httpClient->get(
+		$query = [
+			'doc_type' => $docType,
+			'doc_id' => $docId,
+			'start' => $start,
+			'end' => $end,
+			'context' => 500,
+		];
+		if ($chunkIndex !== null) {
+			$query['chunk_index'] = $chunkIndex;
+		}
+		if ($totalChunks !== null) {
+			$query['total_chunks'] = $totalChunks;
+		}
+
+		return $this->sendAndDecode(
+			fn (): IResponse => $this->httpClient->get(
 				$this->baseUrl . '/api/v1/chunk-context',
 				$this->withUserAgent([
-					'headers' => [
-						'Authorization' => 'Bearer ' . $token
-					],
-					'query' => $query
-				])
-			);
-			$data = json_decode($response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to get chunk context', [
-				'error' => $e->getMessage(),
-				'doc_type' => $docType,
-				'doc_id' => $docId,
-			]);
-			return ['error' => $e->getMessage()];
-		}
+					'headers' => ['Authorization' => 'Bearer ' . $token],
+					'query' => $query,
+				]),
+			),
+			'Failed to get chunk context',
+			['doc_type' => $docType, 'doc_id' => $docId],
+		);
 	}
 
 	/**
