@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Service;
 
 use OCA\Astrolabe\Service\McpServerClient;
+use OCP\App\IAppManager;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -26,6 +27,7 @@ final class McpServerClientTest extends TestCase {
 	private IClient&MockObject $httpClient;
 	private IConfig&MockObject $config;
 	private LoggerInterface&MockObject $logger;
+	private IAppManager&MockObject $appManager;
 	private McpServerClient $client;
 
 	protected function setUp(): void {
@@ -35,6 +37,7 @@ final class McpServerClientTest extends TestCase {
 		$this->httpClient = $this->createMock(IClient::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
+		$this->appManager = $this->createMock(IAppManager::class);
 
 		$this->clientService->method('newClient')->willReturn($this->httpClient);
 
@@ -46,10 +49,15 @@ final class McpServerClientTest extends TestCase {
 				return $default;
 			});
 
+		$this->appManager->method('getAppVersion')
+			->with('astrolabe')
+			->willReturn('0.14.0');
+
 		$this->client = new McpServerClient(
 			$this->clientService,
 			$this->config,
 			$this->logger,
+			$this->appManager,
 		);
 	}
 
@@ -152,6 +160,46 @@ final class McpServerClientTest extends TestCase {
 		$this->assertArrayNotHasKey('error', $result);
 		$this->assertArrayNotHasKey('provisioning_required', $result);
 		$this->assertCount(1, $result['webhooks'] ?? []);
+	}
+
+	// =========================================================================
+	// User-Agent header — verifies outbound MCP calls identify the app/version
+	// so backend access logs can attribute requests to a specific Astrolabe build.
+	// =========================================================================
+
+	public function testOutboundRequestsIncludeAstrolabeUserAgent(): void {
+		$response = $this->makeResponse(200, json_encode(['status' => 'ok']));
+
+		$this->httpClient->expects($this->once())
+			->method('get')
+			->with(
+				$this->stringContains('/api/v1/status'),
+				$this->callback(function ($options) {
+					return isset($options['headers']['User-Agent'])
+						&& $options['headers']['User-Agent'] === 'Nextcloud-Astrolabe/0.14.0';
+				}),
+			)
+			->willReturn($response);
+
+		$this->client->getStatus();
+	}
+
+	public function testUserAgentDoesNotClobberCallerHeaders(): void {
+		$response = $this->makeResponse(200, json_encode(['webhooks' => []]));
+
+		$this->httpClient->expects($this->once())
+			->method('get')
+			->with(
+				$this->anything(),
+				$this->callback(function ($options) {
+					$headers = $options['headers'] ?? [];
+					return ($headers['Authorization'] ?? null) === 'Bearer access-token'
+						&& ($headers['User-Agent'] ?? null) === 'Nextcloud-Astrolabe/0.14.0';
+				}),
+			)
+			->willReturn($response);
+
+		$this->client->listWebhooks('access-token');
 	}
 
 	// =========================================================================

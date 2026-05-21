@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service;
 
+use OCP\App\IAppManager;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -22,11 +23,13 @@ class McpServerClient {
 	private IConfig $config;
 	private LoggerInterface $logger;
 	private string $baseUrl;
+	private string $userAgent;
 
 	public function __construct(
 		IClientService $clientService,
 		IConfig $config,
 		LoggerInterface $logger,
+		IAppManager $appManager,
 	) {
 		$this->httpClient = $clientService->newClient();
 		$this->config = $config;
@@ -35,6 +38,23 @@ class McpServerClient {
 		// Get MCP server configuration from Nextcloud config
 		$baseUrl = $this->config->getSystemValue('mcp_server_url', 'http://localhost:8000');
 		$this->baseUrl = is_string($baseUrl) ? $baseUrl : 'http://localhost:8000';
+
+		// User-Agent identifies this app + version to the MCP server, so backend
+		// access logs can see which Astrolabe release is calling them.
+		$this->userAgent = 'Nextcloud-Astrolabe/' . $appManager->getAppVersion('astrolabe');
+	}
+
+	/**
+	 * Merge a Nextcloud-Astrolabe User-Agent header into the request options.
+	 *
+	 * Use at every outbound HTTP call site so MCP server logs see a stable
+	 * client identity instead of Guzzle's default UA.
+	 */
+	private function withUserAgent(array $options = []): array {
+		$headers = $options['headers'] ?? [];
+		$headers['User-Agent'] = $this->userAgent;
+		$options['headers'] = $headers;
+		return $options;
 	}
 
 	/**
@@ -107,7 +127,10 @@ class McpServerClient {
 	 */
 	public function getStatus(): array {
 		try {
-			$response = $this->httpClient->get($this->baseUrl . '/api/v1/status');
+			$response = $this->httpClient->get(
+				$this->baseUrl . '/api/v1/status',
+				$this->withUserAgent(),
+			);
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
@@ -143,11 +166,11 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->get(
 				$this->baseUrl . '/api/v1/users/' . urlencode($userId) . '/session',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					]
-				]
+				])
 			);
 			$data = json_decode($response->getBody(), true);
 
@@ -178,11 +201,11 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->post(
 				$this->baseUrl . '/api/v1/users/' . urlencode($userId) . '/revoke',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					]
-				]
+				])
 			);
 			$data = json_decode($response->getBody(), true);
 
@@ -218,7 +241,10 @@ class McpServerClient {
 	 */
 	public function getVectorSyncStatus(): array {
 		try {
-			$response = $this->httpClient->get($this->baseUrl . '/api/v1/vector-sync/status');
+			$response = $this->httpClient->get(
+				$this->baseUrl . '/api/v1/vector-sync/status',
+				$this->withUserAgent(),
+			);
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
@@ -286,7 +312,7 @@ class McpServerClient {
 
 			$response = $this->httpClient->post(
 				$this->baseUrl . '/api/v1/vector-viz/search',
-				$options
+				$this->withUserAgent($options)
 			);
 			$data = json_decode($response->getBody(), true);
 
@@ -346,7 +372,7 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->post(
 				$this->baseUrl . '/api/v1/search',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token,
 						'Content-Type' => 'application/json',
@@ -361,7 +387,7 @@ class McpServerClient {
 						'include_pca' => false,
 						'include_chunks' => true,
 					]
-				]
+				])
 			);
 			$data = json_decode($response->getBody(), true);
 
@@ -451,12 +477,12 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->get(
 				$this->baseUrl . '/api/v1/webhooks',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
 					'http_errors' => false,
-				]
+				])
 			);
 
 			$errorResult = $this->detectErrorResponse($response);
@@ -516,14 +542,14 @@ class McpServerClient {
 
 			$response = $this->httpClient->post(
 				$this->baseUrl . '/api/v1/webhooks',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token,
 						'Content-Type' => 'application/json',
 					],
 					'json' => $requestBody,
 					'http_errors' => false,
-				]
+				])
 			);
 
 			$errorResult = $this->detectErrorResponse($response);
@@ -560,12 +586,12 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->delete(
 				$this->baseUrl . '/api/v1/webhooks/' . $webhookId,
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
 					'http_errors' => false,
-				]
+				])
 			);
 
 			$errorResult = $this->detectErrorResponse($response);
@@ -611,12 +637,12 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->get(
 				$this->baseUrl . '/api/v1/apps',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
 					'http_errors' => false,
-				]
+				])
 			);
 
 			$errorResult = $this->detectErrorResponse($response);
@@ -680,12 +706,12 @@ class McpServerClient {
 			}
 			$response = $this->httpClient->get(
 				$this->baseUrl . '/api/v1/chunk-context',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
 					'query' => $query
-				]
+				])
 			);
 			$data = json_decode($response->getBody(), true);
 
@@ -733,7 +759,7 @@ class McpServerClient {
 		try {
 			$response = $this->httpClient->get(
 				$this->baseUrl . '/api/v1/pdf-preview',
-				[
+				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
@@ -742,7 +768,7 @@ class McpServerClient {
 						'page' => $page,
 						'scale' => $scale,
 					]
-				]
+				])
 			);
 			/** @var array{success?: bool, image?: string, page_number?: int, total_pages?: int, error?: string} $data */
 			$data = json_decode((string)$response->getBody(), true);
