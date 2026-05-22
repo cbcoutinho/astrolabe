@@ -281,119 +281,16 @@
       <code><![CDATA[$baseUrl]]></code>
       <code><![CDATA[$clientId]]></code>
       <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
     </MixedAssignment>
     <MixedInferredReturnType>
-      <code><![CDATA[array]]></code>
-      <code><![CDATA[array{
-	 *   apps?: array<string>,
-	 *   error?: string,
-	 *   provisioning_required?: true
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   id?: int,
-	 *   event?: string,
-	 *   uri?: string,
-	 *   event_filter?: array,
-	 *   enabled?: bool,
-	 *   error?: string,
-	 *   provisioning_required?: true
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   results?: array,
-	 *   pca_coordinates?: array,
-	 *   algorithm_used?: string,
-	 *   total_documents?: int,
-	 *   error?: string
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   results?: array<array{
-	 *     id?: string|int,
-	 *     title?: string,
-	 *     doc_type?: string,
-	 *     excerpt?: string,
-	 *     score?: float,
-	 *     path?: string,
-	 *     board_id?: int,
-	 *     card_id?: int
-	 *   }>,
-	 *   total_found?: int,
-	 *   algorithm_used?: string,
-	 *   error?: string
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   session_id?: string,
-	 *   background_access_granted?: bool,
-	 *   background_access_details?: array,
-	 *   idp_profile?: array,
-	 *   error?: string
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   status?: string,
-	 *   indexed_documents?: int,
-	 *   pending_documents?: int,
-	 *   last_sync_time?: string,
-	 *   documents_per_second?: float,
-	 *   errors_24h?: int,
-	 *   error?: string
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   version?: string,
-	 *   auth_mode?: string,
-	 *   vector_sync_enabled?: bool,
-	 *   uptime_seconds?: int,
-	 *   management_api_version?: string,
-	 *   error?: string
-	 * }]]></code>
-      <code><![CDATA[array{
-	 *   webhooks?: array<array{
-	 *     id?: int,
-	 *     event?: string,
-	 *     uri?: string,
-	 *     event_filter?: array,
-	 *     enabled?: bool
-	 *   }>,
-	 *   error?: string,
-	 *   provisioning_required?: true
-	 * }]]></code>
       <code><![CDATA[array{success?: bool, error?: string, provisioning_required?: true}]]></code>
-      <code><![CDATA[array{success?: bool, message?: string, error?: string}]]></code>
       <code><![CDATA[string]]></code>
     </MixedInferredReturnType>
     <MixedReturnStatement>
       <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$data]]></code>
       <code><![CDATA[$this->config->getSystemValue('mcp_server_public_url', $this->baseUrl)]]></code>
     </MixedReturnStatement>
     <PossiblyInvalidArgument>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
-      <code><![CDATA[$response->getBody()]]></code>
       <code><![CDATA[$response->getBody()]]></code>
     </PossiblyInvalidArgument>
     <PossiblyUnusedMethod>

@@ -73,6 +73,8 @@ class McpServerClient {
 	 * @param array<string, mixed> $logContext Extra fields merged into the log entry
 	 * @param bool $usesErrorDetection When true, runs non-2xx responses through detectErrorResponse()
 	 * @return array<string, mixed>
+	 *
+	 * @psalm-suppress MixedReturnTypeCoercion - body returns dynamic json_decode shape; callers narrow via their own @return.
 	 */
 	private function sendAndDecode(
 		callable $request,
@@ -167,6 +169,8 @@ class McpServerClient {
 	 *   management_api_version?: string,
 	 *   error?: string
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function getStatus(): array {
 		return $this->sendAndDecode(
@@ -193,6 +197,8 @@ class McpServerClient {
 	 *   idp_profile?: array,
 	 *   error?: string
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function getUserSession(string $userId, string $token): array {
 		return $this->sendAndDecode(
@@ -215,6 +221,8 @@ class McpServerClient {
 	 * @param string $userId The user ID whose access to revoke
 	 * @param string $token OAuth bearer token
 	 * @return array{success?: bool, message?: string, error?: string}
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function revokeUserAccess(string $userId, string $token): array {
 		return $this->sendAndDecode(
@@ -244,6 +252,8 @@ class McpServerClient {
 	 *   errors_24h?: int,
 	 *   error?: string
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function getVectorSyncStatus(): array {
 		return $this->sendAndDecode(
@@ -274,6 +284,8 @@ class McpServerClient {
 	 *   total_documents?: int,
 	 *   error?: string
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function search(
 		string $query,
@@ -342,6 +354,8 @@ class McpServerClient {
 	 *   algorithm_used?: string,
 	 *   error?: string
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function searchForUnifiedSearch(
 		string $query,
@@ -444,6 +458,8 @@ class McpServerClient {
 	 *   error?: string,
 	 *   provisioning_required?: true
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function listWebhooks(string $token): array {
 		return $this->sendAndDecode(
@@ -477,6 +493,8 @@ class McpServerClient {
 	 *   error?: string,
 	 *   provisioning_required?: true
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function createWebhook(
 		string $event,
@@ -570,6 +588,8 @@ class McpServerClient {
 	 *   error?: string,
 	 *   provisioning_required?: true
 	 * }
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function getInstalledApps(string $token): array {
 		return $this->sendAndDecode(
