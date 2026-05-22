@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.15.0 (2026-05-22)
+
+### Feat
+
+- **mcp-client**: identify outbound calls with Astrolabe User-Agent
+- **presets**: add deck_sync preset for Deck card webhooks
+
+### Fix
+
+- **psalm**: suppress helper-vs-shape return-type mismatches + prune baseline
+
+### Refactor
+
+- **mcp-client**: fix Psalm Mixed* errors + dedupe HTTP boilerplate
+
 ## v0.14.1 (2026-05-17)
 
 ### Fix
