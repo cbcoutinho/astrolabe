@@ -67,6 +67,19 @@ class IdpTokenRefresher {
 	}
 
 	/**
+	 * Cap exception-message snippets surfaced via $lastError. Guzzle
+	 * exceptions can embed a full response body; we want enough to
+	 * diagnose, not a wall. Applied uniformly across every catch block
+	 * so the admin-visible error stays bounded.
+	 */
+	private function truncateForLastError(string $message): string {
+		if (strlen($message) > 500) {
+			return substr($message, 0, 500) . '…';
+		}
+		return $message;
+	}
+
+	/**
 	 * Refresh access token using refresh token.
 	 *
 	 * Calls IdP's token endpoint directly (NOT MCP server).
@@ -194,8 +207,11 @@ class IdpTokenRefresher {
 			return $tokenData;
 
 		} catch (\OCP\Http\Client\LocalServerException $e) {
-			// Network/connection error - may be transient
-			$this->lastError = 'Network error reaching IdP/MCP server: ' . $e->getMessage();
+			// Network/connection error - may be transient. The full
+			// untruncated message still goes to logs; only the
+			// admin-surfaced lastError is bounded.
+			$this->lastError = 'Network error reaching IdP/MCP server: '
+				. $this->truncateForLastError($e->getMessage());
 			$this->logger->warning('IdpTokenRefresher: Network error during refresh', [
 				'error' => $e->getMessage(),
 			]);
@@ -203,12 +219,7 @@ class IdpTokenRefresher {
 		} catch (\Exception $e) {
 			$statusCode = $e->getCode();
 
-			// Truncate exception message — Guzzle exceptions can embed a
-			// large response body. We want enough to diagnose, not a wall.
-			$messageSnippet = $e->getMessage();
-			if (strlen($messageSnippet) > 500) {
-				$messageSnippet = substr($messageSnippet, 0, 500) . '…';
-			}
+			$messageSnippet = $this->truncateForLastError($e->getMessage());
 
 			// Log with appropriate level based on error type
 			if ($statusCode === 401 || $statusCode === 403) {

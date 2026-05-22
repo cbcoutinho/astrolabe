@@ -27,6 +27,16 @@ use Psr\Log\LoggerInterface;
  * Handles form submissions and AJAX requests from settings panels.
  */
 class ApiController extends Controller {
+	/**
+	 * Canonical user-facing message for the "MCP server authorization
+	 * required" failure mode. Used by every endpoint that bails out when
+	 * ``$this->tokenStorage->getAccessToken()`` returns null, so the
+	 * banner the user sees is identical regardless of which endpoint
+	 * tripped it.
+	 */
+	private const AUTH_REQUIRED_MESSAGE =
+		'MCP server authorization required. Please authorize the app first.';
+
 	private McpServerClient $client;
 	private IUserSession $userSession;
 	private IURLGenerator $urlGenerator;
@@ -101,6 +111,34 @@ class ApiController extends Controller {
 			$this->authRequiredBody($message, $userId),
 			Http::STATUS_UNAUTHORIZED
 		);
+	}
+
+	/**
+	 * Build the refresh callback passed to McpTokenStorage::getAccessToken().
+	 *
+	 * Every endpoint that talks to the MCP server needs the same closure:
+	 * call the IdP, propagate the failure (null) as-is, and on success
+	 * normalize the returned shape with sane defaults for the optional
+	 * ``refresh_token`` (IdP may rotate or omit it) and ``expires_in``.
+	 * Centralizing it here keeps the six endpoints structurally identical
+	 * and below SonarCloud's duplication threshold.
+	 *
+	 * @return callable(string): ?array{access_token: string, refresh_token: string, expires_in: int}
+	 */
+	private function makeRefreshCallback(): callable {
+		return function (string $refreshToken): ?array {
+			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
+
+			if ($newTokenData === null) {
+				return null;
+			}
+
+			return [
+				'access_token' => $newTokenData['access_token'],
+				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
+				'expires_in' => $newTokenData['expires_in'] ?? 3600,
+			];
+		};
 	}
 
 	/**
@@ -199,29 +237,10 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback that calls IdP directly
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
 		// Get user's OAuth token for MCP server with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
+		$accessToken = $this->tokenStorage->getAccessToken($userId, $this->makeRefreshCallback());
 		if ($accessToken === null) {
-			return $this->unauthorizedResponse(
-				'MCP server authorization required. Please authorize the app first.',
-				$userId
-			);
+			return $this->unauthorizedResponse(self::AUTH_REQUIRED_MESSAGE, $userId);
 		}
 
 		// Validate algorithm
@@ -465,26 +484,10 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
 		// Get access token with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
+		$accessToken = $this->tokenStorage->getAccessToken($userId, $this->makeRefreshCallback());
 		if ($accessToken === null) {
-			return $this->unauthorizedResponse('MCP server authorization required', $userId);
+			return $this->unauthorizedResponse(self::AUTH_REQUIRED_MESSAGE, $userId);
 		}
 
 		// Get installed apps to filter presets
@@ -569,26 +572,10 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
 		// Get access token with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
+		$accessToken = $this->tokenStorage->getAccessToken($userId, $this->makeRefreshCallback());
 		if ($accessToken === null) {
-			return $this->unauthorizedResponse('MCP server authorization required', $userId);
+			return $this->unauthorizedResponse(self::AUTH_REQUIRED_MESSAGE, $userId);
 		}
 
 		// Get preset configuration
@@ -672,26 +659,10 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
 		// Get access token with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
+		$accessToken = $this->tokenStorage->getAccessToken($userId, $this->makeRefreshCallback());
 		if ($accessToken === null) {
-			return $this->unauthorizedResponse('MCP server authorization required', $userId);
+			return $this->unauthorizedResponse(self::AUTH_REQUIRED_MESSAGE, $userId);
 		}
 
 		// Get preset configuration
@@ -807,26 +778,10 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
 		// Get user's OAuth token for MCP server with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
+		$accessToken = $this->tokenStorage->getAccessToken($userId, $this->makeRefreshCallback());
 		if ($accessToken === null) {
-			return $this->unauthorizedResponse('MCP server authorization required.', $userId);
+			return $this->unauthorizedResponse(self::AUTH_REQUIRED_MESSAGE, $userId);
 		}
 
 		$result = $this->client->getChunkContext(
@@ -870,26 +825,10 @@ class ApiController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
 		// Get user's OAuth token for MCP server with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
+		$accessToken = $this->tokenStorage->getAccessToken($userId, $this->makeRefreshCallback());
 		if ($accessToken === null) {
-			return $this->unauthorizedResponse('MCP server authorization required.', $userId);
+			return $this->unauthorizedResponse(self::AUTH_REQUIRED_MESSAGE, $userId);
 		}
 
 		$result = $this->client->getPdfPreview($file_path, $page, $scale, $accessToken);

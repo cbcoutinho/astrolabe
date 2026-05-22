@@ -242,7 +242,7 @@
 					:type="diagnosticsResultType"
 					class="diagnostic-result">
 					<p><strong>{{ diagnosticsResult.conclusion }}</strong></p>
-					<pre>{{ JSON.stringify(diagnosticsResult, null, 2) }}</pre>
+					<pre>{{ JSON.stringify(diagnosticsResultDetails, null, 2) }}</pre>
 				</NcNoteCard>
 				<NcNoteCard v-if="diagnosticsError" type="error" class="diagnostic-result">
 					<p>{{ diagnosticsError }}</p>
@@ -349,6 +349,15 @@ const diagnosticsResultType = computed(() => {
 	if (attempt === 'success') return 'success'
 	if (attempt === 'failed') return 'error'
 	return 'info'
+})
+
+// `conclusion` is already shown as the bold headline above the JSON
+// blob — strip it from the details payload so the same sentence does
+// not appear twice in the same card.
+const diagnosticsResultDetails = computed(() => {
+	if (!diagnosticsResult.value) return null
+	const { conclusion, ...rest } = diagnosticsResult.value
+	return rest
 })
 
 // Methods

@@ -540,7 +540,6 @@ final class IdpTokenRefresherTest extends TestCase {
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
 				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
-				['astrolabe_internal_url', '', ''],
 			]);
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');
