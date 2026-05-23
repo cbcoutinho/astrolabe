@@ -73,8 +73,12 @@ class IdpTokenRefresher {
 	 * so the admin-visible error stays bounded.
 	 */
 	private function truncateForLastError(string $message): string {
-		if (strlen($message) > 500) {
-			return substr($message, 0, 500) . '…';
+		// Use mb_* — strlen/substr operate on bytes and can split a
+		// multi-byte UTF-8 code point at the cap boundary (the IdP's
+		// error_description may contain non-ASCII), producing a
+		// malformed string.
+		if (mb_strlen($message) > 500) {
+			return mb_substr($message, 0, 500) . '…';
 		}
 		return $message;
 	}

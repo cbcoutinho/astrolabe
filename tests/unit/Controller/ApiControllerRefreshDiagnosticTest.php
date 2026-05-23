@@ -4,20 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
-use OCA\Astrolabe\Controller\ApiController;
-use OCA\Astrolabe\Service\IdpTokenRefresher;
-use OCA\Astrolabe\Service\McpServerClient;
-use OCA\Astrolabe\Service\McpTokenStorage;
 use OCP\AppFramework\Http;
-use OCP\IConfig;
-use OCP\IGroupManager;
-use OCP\IRequest;
-use OCP\IURLGenerator;
 use OCP\IUser;
-use OCP\IUserSession;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
 
 /**
  * Controller tests for the OAuth refresh diagnostic endpoint
@@ -29,68 +17,11 @@ use Psr\Log\LoggerInterface;
  * persists a rotated refresh_token under the storage lock, and returns
  * a structured report including IdpTokenRefresher::getLastError() on
  * failure. The cases below cover the auth gate, the
- * "never authorized" / failed / successful refresh paths, and the
- * stale-read race fix (re-reading the refresh_token inside the lock).
+ * "never authorized" / failed / successful refresh paths, the
+ * stale-read race fix (re-reading the refresh_token inside the lock),
+ * and the concurrent-deletion abort case.
  */
-final class ApiControllerRefreshDiagnosticTest extends TestCase {
-	private McpServerClient&MockObject $client;
-	private IUserSession&MockObject $userSession;
-	private IURLGenerator&MockObject $urlGenerator;
-	private LoggerInterface&MockObject $logger;
-	private McpTokenStorage&MockObject $tokenStorage;
-	private IConfig&MockObject $config;
-	private IdpTokenRefresher&MockObject $tokenRefresher;
-	private IGroupManager&MockObject $groupManager;
-	private ApiController $controller;
-
-	protected function setUp(): void {
-		parent::setUp();
-
-		$request = $this->createMock(IRequest::class);
-		$this->client = $this->createMock(McpServerClient::class);
-		$this->userSession = $this->createMock(IUserSession::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->logger = $this->createMock(LoggerInterface::class);
-		$this->tokenStorage = $this->createMock(McpTokenStorage::class);
-		$this->config = $this->createMock(IConfig::class);
-		$this->tokenRefresher = $this->createMock(IdpTokenRefresher::class);
-		$this->groupManager = $this->createMock(IGroupManager::class);
-
-		$this->controller = new ApiController(
-			'astrolabe',
-			$request,
-			$this->client,
-			$this->userSession,
-			$this->urlGenerator,
-			$this->logger,
-			$this->tokenStorage,
-			$this->config,
-			$this->tokenRefresher,
-			$this->groupManager,
-		);
-	}
-
-	/**
-	 * Helper: wire an authenticated, admin user. Tests that need
-	 * non-admin or no user override this.
-	 */
-	private function authenticateAdmin(): void {
-		$user = $this->createMock(IUser::class);
-		$user->method('getUID')->willReturn('admin');
-		$this->userSession->method('getUser')->willReturn($user);
-		$this->groupManager->method('isAdmin')->with('admin')->willReturn(true);
-	}
-
-	/**
-	 * Helper: pass-through withTokenLock that just invokes the callable
-	 * so the test exercises the locked region without needing a real
-	 * locking provider.
-	 */
-	private function passthroughLock(): void {
-		$this->tokenStorage->method('withTokenLock')
-			->willReturnCallback(fn ($userId, $callback) => $callback());
-	}
-
+final class ApiControllerRefreshDiagnosticTest extends AbstractApiControllerTestCase {
 	public function testReturns401WhenUnauthenticated(): void {
 		$this->userSession->method('getUser')->willReturn(null);
 
@@ -254,6 +185,44 @@ final class ApiControllerRefreshDiagnosticTest extends TestCase {
 			'FRESH-refresh',
 			$capturedRefreshArg,
 			'Diagnostic must use the refresh_token re-read inside the lock, not the pre-lock snapshot',
+		);
+	}
+
+	public function testReportsConcurrentDeletionGracefully(): void {
+		// If RefreshUserTokens (or a user-triggered revoke) deletes the
+		// stored token between the outer getUserToken() and lock
+		// acquisition, the diagnostic must NOT call refreshAccessToken()
+		// and must NOT surface "Refresh failed — see refresh_error" with
+		// a null refresh_error. It must report a distinct "aborted"
+		// outcome so the admin can rerun the diagnostic.
+		$this->authenticateAdmin();
+		$this->passthroughLock();
+
+		$now = time();
+		$outerToken = [
+			'access_token' => 'old-access',
+			'refresh_token' => 'old-refresh',
+			'expires_at' => $now - 10,
+		];
+		// Outer read returns a token; inner read (inside the lock)
+		// returns null — the concurrent-deletion race.
+		$this->tokenStorage->method('getUserToken')
+			->willReturnOnConsecutiveCalls($outerToken, null);
+		$this->tokenStorage->method('isExpired')->willReturn(true);
+
+		$this->tokenRefresher->expects($this->never())->method('refreshAccessToken');
+		$this->tokenStorage->expects($this->never())->method('storeUserToken');
+
+		$response = $this->controller->refreshDiagnostic();
+		$data = $response->getData();
+
+		$this->assertEquals(Http::STATUS_OK, $response->getStatus());
+		$this->assertTrue($data['success']);
+		$this->assertEquals('aborted', $data['diagnostic']['refresh_attempt']);
+		$this->assertArrayNotHasKey('refresh_error', $data['diagnostic']);
+		$this->assertStringContainsString(
+			'concurrently deleted',
+			$data['diagnostic']['conclusion'],
 		);
 	}
 }

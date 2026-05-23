@@ -34,8 +34,8 @@ class ApiController extends Controller {
 	 * banner the user sees is identical regardless of which endpoint
 	 * tripped it.
 	 */
-	private const AUTH_REQUIRED_MESSAGE =
-		'MCP server authorization required. Please authorize the app first.';
+	private const AUTH_REQUIRED_MESSAGE
+		= 'MCP server authorization required. Please authorize the app first.';
 
 	private McpServerClient $client;
 	private IUserSession $userSession;
@@ -133,10 +133,20 @@ class ApiController extends Controller {
 				return null;
 			}
 
+			// Array values come back as mixed; pin the types here so
+			// the closure's declared return shape (consumed by
+			// McpTokenStorage::getAccessToken) is honored without
+			// Psalm flagging a MixedReturnTypeCoercion.
+			/** @var string $accessToken */
+			$accessToken = $newTokenData['access_token'];
+			/** @var string $newRefreshToken */
+			$newRefreshToken = $newTokenData['refresh_token'] ?? $refreshToken;
+			$expiresIn = (int)($newTokenData['expires_in'] ?? 3600);
+
 			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
+				'access_token' => $accessToken,
+				'refresh_token' => $newRefreshToken,
+				'expires_in' => $expiresIn,
 			];
 		};
 	}
@@ -945,12 +955,22 @@ class ApiController extends Controller {
 		// RefreshUserTokens rotated the refresh_token in the meantime, we'd
 		// redeem an already-consumed value and report a false "revoked"
 		// failure for a chain that is actually healthy.
-		$refreshResult = $this->tokenStorage->withTokenLock($userId, function () use ($userId, $refreshToken): ?array {
+		// Capture a concurrent-deletion race separately from a real
+		// refresh failure: if a background job (RefreshUserTokens) or a
+		// user-triggered revoke deletes the token between the outer
+		// read and lock acquisition, `refreshAccessToken()` is never
+		// called and `getLastError()` would return null, leading to a
+		// misleading "see refresh_error" conclusion below.
+		$concurrentDeletion = false;
+		$refreshResult = $this->tokenStorage->withTokenLock($userId, function () use ($userId, $refreshToken, &$concurrentDeletion): ?array {
 			$latestToken = $this->tokenStorage->getUserToken($userId);
 			if ($latestToken === null) {
-				// Concurrent failed refresh wiped the token between the
-				// outer read and lock acquisition; treat as failure so the
-				// caller sees a consistent state.
+				// Token deleted between outer read and lock acquisition
+				// — surfaced by the caller via $concurrentDeletion so
+				// the diagnostic reports an "aborted" outcome rather
+				// than a misleading "failed, see refresh_error" with a
+				// null error.
+				$concurrentDeletion = true;
 				return null;
 			}
 			// Strict check: array values come back as mixed, so guard the
@@ -984,7 +1004,13 @@ class ApiController extends Controller {
 			return $result;
 		});
 
-		if ($refreshResult !== null && isset($refreshResult['access_token'])) {
+		if ($concurrentDeletion) {
+			// No refresh was attempted — the field is intentionally
+			// absent so callers don't confuse "aborted" with "failed
+			// with no detail".
+			$diagnostic['refresh_attempt'] = 'aborted';
+			$diagnostic['conclusion'] = 'Token was concurrently deleted by another process (RefreshUserTokens job or revoke) between the outer read and lock acquisition. No refresh attempt was made; rerun the diagnostic to see the current state.';
+		} elseif ($refreshResult !== null && isset($refreshResult['access_token'])) {
 			$diagnostic['refresh_attempt'] = 'success';
 			$diagnostic['new_access_token_expires_in'] = (int)($refreshResult['expires_in'] ?? 0);
 			$diagnostic['idp_rotated_refresh_token'] = isset($refreshResult['refresh_token']);
