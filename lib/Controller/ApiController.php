@@ -961,17 +961,19 @@ class ApiController extends Controller {
 		// read and lock acquisition, `refreshAccessToken()` is never
 		// called and `getLastError()` would return null, leading to a
 		// misleading "see refresh_error" conclusion below.
-		$concurrentDeletion = false;
-		$refreshResult = $this->tokenStorage->withTokenLock($userId, function () use ($userId, $refreshToken, &$concurrentDeletion): ?array {
+		$refreshResult = $this->tokenStorage->withTokenLock($userId, function () use ($userId, $refreshToken): ?array {
 			$latestToken = $this->tokenStorage->getUserToken($userId);
 			if ($latestToken === null) {
-				// Token deleted between outer read and lock acquisition
-				// — surfaced by the caller via $concurrentDeletion so
-				// the diagnostic reports an "aborted" outcome rather
-				// than a misleading "failed, see refresh_error" with a
-				// null error.
-				$concurrentDeletion = true;
-				return null;
+				// Sentinel — the 'aborted' key distinguishes
+				// "concurrent deletion, no refresh attempted" from
+				// "refresh attempted and failed" (null). Returned
+				// through withTokenLock's mixed return; narrowed at
+				// the call site below. Using a return-value sentinel
+				// instead of a by-reference capture also keeps psalm
+				// happy: it doesn't track mutations through closure
+				// reference captures and would otherwise infer the
+				// outer flag as always-false.
+				return ['aborted' => true];
 			}
 			// Strict check: array values come back as mixed, so guard the
 			// type explicitly rather than relying on truthy/falsy. Fall
@@ -1004,7 +1006,7 @@ class ApiController extends Controller {
 			return $result;
 		});
 
-		if ($concurrentDeletion) {
+		if (is_array($refreshResult) && isset($refreshResult['aborted'])) {
 			// No refresh was attempted — the field is intentionally
 			// absent so callers don't confuse "aborted" with "failed
 			// with no detail".

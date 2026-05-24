@@ -521,21 +521,18 @@ final class IdpTokenRefresherTest extends TestCase {
 	}
 
 	public function testGetLastErrorIsClearedOnSuccess(): void {
-		// First, fail a refresh so lastError is set.
-		$failingConfig = $this->createMock(IConfig::class);
-		$failingConfig->method('getSystemValue')
-			->willReturn('');
-		$failingRefresher = new IdpTokenRefresher(
-			$failingConfig,
-			$this->clientService,
-			$this->logger,
-			$this->mcpServerClient,
-			$this->urlResolver,
-		);
-		$failingRefresher->refreshAccessToken('test-refresh-token');
-		$this->assertNotNull($failingRefresher->getLastError());
+		// Put $this->refresher into a failed state by calling with an
+		// empty refresh_token — hits the early return at the top of
+		// refreshAccessToken() and sets lastError without any HTTP
+		// traffic. Critical: the failure and the success-path
+		// assertion below MUST run on the same instance, otherwise the
+		// "cleared on success" check is trivially true on a fresh
+		// instance whose lastError was never set.
+		$this->assertNull($this->refresher->refreshAccessToken(''));
+		$this->assertNotNull($this->refresher->getLastError());
 
-		// Now arrange a successful refresh and ensure lastError is reset.
+		// Now arrange a successful refresh on the same instance and
+		// ensure lastError is reset.
 		$this->config->method('getSystemValue')
 			->willReturnMap([
 				['astrolabe_client_secret', '', 'test-secret'],
