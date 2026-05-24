@@ -957,7 +957,13 @@ class ApiController extends Controller {
 		$diagnostic['has_refresh_token'] = $refreshToken !== '';
 		$diagnostic['access_token_expired'] = $this->tokenStorage->isExpired($token);
 		$diagnostic['expires_in_seconds'] = $expiresAt - $now;
-		$diagnostic['issued_at'] = $issuedAt;
+		// Omit issued_at entirely when the stored token doesn't carry it,
+		// matching how refresh_error is only present when set. A null in
+		// the JSON would be ambiguous: "field unavailable" vs. "explicitly
+		// unset".
+		if ($issuedAt !== null) {
+			$diagnostic['issued_at'] = $issuedAt;
+		}
 		$diagnostic['expires_at'] = $expiresAt;
 
 		// Attempt a refresh and capture the outcome.

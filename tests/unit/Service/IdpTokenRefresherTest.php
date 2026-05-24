@@ -540,6 +540,11 @@ final class IdpTokenRefresherTest extends TestCase {
 			]);
 		$this->mcpServerClient->method('getClientId')
 			->willReturn('test-client-id');
+		// Resolve the Nextcloud OIDC token endpoint to a real-looking URL
+		// instead of the empty string PHPUnit returns from an unconfigured
+		// mock — matches the pattern used in the sibling success-path
+		// tests (e.g. testRefreshAccessTokenWithInternalNextcloudOidc).
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
 
 		$statusResponse = $this->createMock(IResponse::class);
 		$statusResponse->method('getBody')->willReturn(json_encode(['version' => '1.0.0']));

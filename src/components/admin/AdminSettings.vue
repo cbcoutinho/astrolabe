@@ -223,32 +223,6 @@
 				</div>
 			</div>
 
-			<!-- OAuth Diagnostics -->
-			<div class="admin-section">
-				<h3>{{ t('astrolabe', 'OAuth Refresh Diagnostics') }}</h3>
-				<p class="section-description">
-					{{ t('astrolabe', 'Inspect why semantic search may be repeatedly prompting for re-authorization. Runs a real refresh against your own stored token and reports the outcome — useful when log access is restricted (e.g. Hetzner Storage Share).') }}
-				</p>
-				<div class="form-actions">
-					<NcButton
-						variant="secondary"
-						:disabled="diagnosticsLoading"
-						@click="runRefreshDiagnostic">
-						{{ diagnosticsLoading ? t('astrolabe', 'Running…') : t('astrolabe', 'Run diagnostic') }}
-					</NcButton>
-				</div>
-				<NcNoteCard
-					v-if="diagnosticsResult"
-					:type="diagnosticsResultType"
-					class="diagnostic-result">
-					<p><strong>{{ diagnosticsResult.conclusion }}</strong></p>
-					<pre>{{ JSON.stringify(diagnosticsResultDetails, null, 2) }}</pre>
-				</NcNoteCard>
-				<NcNoteCard v-if="diagnosticsError" type="error" class="diagnostic-result">
-					<p>{{ diagnosticsError }}</p>
-				</NcNoteCard>
-			</div>
-
 			<!-- Documentation -->
 			<div class="admin-section">
 				<h3>{{ t('astrolabe', 'Documentation') }}</h3>
@@ -266,6 +240,36 @@
 				</ul>
 			</div>
 		</template>
+
+		<!-- OAuth Diagnostics — rendered outside the v-else so it stays
+		     reachable when the MCP server is unreachable. The diagnostic
+		     endpoint talks to token storage and the IdP only, so it must
+		     remain available in exactly the failure mode it's designed to
+		     investigate. -->
+		<div v-if="!loading" class="admin-section">
+			<h3>{{ t('astrolabe', 'OAuth Refresh Diagnostics') }}</h3>
+			<p class="section-description">
+				{{ t('astrolabe', 'Inspect why semantic search may be repeatedly prompting for re-authorization. Runs a real refresh against your own stored token and reports the outcome — useful when log access is restricted (e.g. Hetzner Storage Share).') }}
+			</p>
+			<div class="form-actions">
+				<NcButton
+					variant="secondary"
+					:disabled="diagnosticsLoading"
+					@click="runRefreshDiagnostic">
+					{{ diagnosticsLoading ? t('astrolabe', 'Running…') : t('astrolabe', 'Run diagnostic') }}
+				</NcButton>
+			</div>
+			<NcNoteCard
+				v-if="diagnosticsResult"
+				:type="diagnosticsResultType"
+				class="diagnostic-result">
+				<p><strong>{{ diagnosticsResult.conclusion }}</strong></p>
+				<pre>{{ JSON.stringify(diagnosticsResultDetails, null, 2) }}</pre>
+			</NcNoteCard>
+			<NcNoteCard v-if="diagnosticsError" type="error" class="diagnostic-result">
+				<p>{{ diagnosticsError }}</p>
+			</NcNoteCard>
+		</div>
 	</div>
 </template>
 
