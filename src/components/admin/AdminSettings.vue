@@ -340,14 +340,16 @@ const selectedFusionOption = computed(() =>
 	fusionOptions.value.find(opt => opt.id === settings.value.fusion) || fusionOptions.value[0],
 )
 
-// NcNoteCard variant for the diagnostic result panel. The "no stored
-// token" early-return path leaves refresh_attempt undefined; render it
-// as a neutral info card rather than the amber warning the previous
-// two-arm ternary fell through to.
+// NcNoteCard variant for the diagnostic result panel. The "concurrently
+// deleted" race (refresh_attempt === 'aborted') is unusual and worth
+// flagging visually, so it maps to 'warning' rather than the neutral
+// 'info' used for the "no stored token" early-return path (where
+// refresh_attempt is undefined).
 const diagnosticsResultType = computed(() => {
 	const attempt = diagnosticsResult.value?.refresh_attempt
 	if (attempt === 'success') return 'success'
 	if (attempt === 'failed') return 'error'
+	if (attempt === 'aborted') return 'warning'
 	return 'info'
 })
 

@@ -59,4 +59,28 @@ final class ApiControllerSearchAuthTest extends AbstractApiControllerTestCase {
 		$this->assertArrayHasKey('refresh_error', $data);
 		$this->assertStringContainsString('invalid_grant', $data['refresh_error']);
 	}
+
+	public function testSearchOmitsRefreshErrorForAdminWhenLastErrorNull(): void {
+		// Guards the `if ($refreshError !== null)` clause in
+		// authRequiredBody(): even for an admin, the key must be absent
+		// rather than serialized as `"refresh_error": null` when the
+		// refresher has no captured error (e.g. the refresh path was
+		// never entered because there is no stored token).
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn('admin');
+		$this->userSession->method('getUser')->willReturn($user);
+		$this->groupManager->method('isAdmin')->with('admin')->willReturn(true);
+
+		$this->tokenStorage->method('getAccessToken')->willReturn(null);
+		$this->tokenRefresher->method('getLastError')->willReturn(null);
+
+		$response = $this->controller->search('hello world');
+		$data = $response->getData();
+
+		$this->assertEquals(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+		$this->assertIsArray($data);
+		$this->assertFalse($data['success']);
+		$this->assertArrayNotHasKey('refresh_error', $data);
+		$this->assertNotEmpty($data['error']);
+	}
 }

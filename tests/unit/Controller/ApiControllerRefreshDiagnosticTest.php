@@ -188,6 +188,44 @@ final class ApiControllerRefreshDiagnosticTest extends AbstractApiControllerTest
 		);
 	}
 
+	public function testReportsFailedRefreshWithEmptyStoredRefreshToken(): void {
+		// Exercises the empty-`refresh_token` fallback path in
+		// ApiController::refreshDiagnostic (the `is_string && !== ''`
+		// guard inside the lock falls back to the pre-lock value, which
+		// is also empty). This is a real scenario when a user completed
+		// initial authorization without the `offline_access` scope, so
+		// the IdP never issued a refresh_token. The diagnostic must
+		// report `has_refresh_token: false` and surface the refresher's
+		// captured reason via `refresh_error`.
+		$this->authenticateAdmin();
+		$this->passthroughLock();
+		$now = time();
+		$storedToken = [
+			'access_token' => 'old-access',
+			'refresh_token' => '',
+			'expires_at' => $now - 10,
+			'issued_at' => $now - 3610,
+		];
+		$this->tokenStorage->method('getUserToken')->willReturn($storedToken);
+		$this->tokenStorage->method('isExpired')->willReturn(true);
+
+		$this->tokenRefresher->method('refreshAccessToken')
+			->with('')
+			->willReturn(null);
+		$this->tokenRefresher->method('getLastError')
+			->willReturn('No refresh token stored for user');
+		$this->tokenStorage->expects($this->never())->method('storeUserToken');
+
+		$response = $this->controller->refreshDiagnostic();
+		$data = $response->getData();
+
+		$this->assertEquals(Http::STATUS_OK, $response->getStatus());
+		$this->assertTrue($data['success']);
+		$this->assertFalse($data['diagnostic']['has_refresh_token']);
+		$this->assertEquals('failed', $data['diagnostic']['refresh_attempt']);
+		$this->assertStringContainsString('refresh token', $data['diagnostic']['refresh_error']);
+	}
+
 	public function testReportsConcurrentDeletionGracefully(): void {
 		// If RefreshUserTokens (or a user-triggered revoke) deletes the
 		// stored token between the outer getUserToken() and lock
