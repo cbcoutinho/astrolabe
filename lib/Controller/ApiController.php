@@ -890,6 +890,19 @@ class ApiController extends Controller {
 	 *
 	 * Never returns the access_token or refresh_token themselves — only
 	 * their presence and expiration metadata.
+	 *
+	 * SECURITY — admin gating is layered:
+	 *   1. Nextcloud default: methods without #[NoAdminRequired] are
+	 *      admin-only at the SecurityMiddleware dispatch layer. This
+	 *      method INTENTIONALLY omits that attribute and MUST NOT have
+	 *      one added — doing so would widen exposure to any logged-in
+	 *      user and let an attacker who compromised a non-admin account
+	 *      read $lastError (which can embed truncated IdP error_description
+	 *      snippets).
+	 *   2. In-method isAdmin($userId) re-check below: defense-in-depth so
+	 *      future refactors (changing the class-level default, invoking
+	 *      this from another controller, etc.) cannot silently lower the
+	 *      gate without also tripping this guard.
 	 */
 	public function refreshDiagnostic(): JSONResponse {
 		$user = $this->userSession->getUser();
@@ -931,8 +944,14 @@ class ApiController extends Controller {
 		$now = time();
 		$expiresAt = (int)($token['expires_at'] ?? 0);
 		$issuedAt = isset($token['issued_at']) ? (int)$token['issued_at'] : null;
-		/** @var string $refreshToken */
-		$refreshToken = $token['refresh_token'] ?? '';
+		// Array values come back as mixed; guard the type at the outer
+		// read the same way the inner-lock read does (see $candidate
+		// below). A corrupted storage entry (non-string under
+		// 'refresh_token') would otherwise reach refreshAccessToken()
+		// with an unexpected type.
+		/** @psalm-suppress MixedAssignment — array values are mixed; guarded below */
+		$rawRefreshToken = $token['refresh_token'] ?? '';
+		$refreshToken = is_string($rawRefreshToken) ? $rawRefreshToken : '';
 
 		$diagnostic['has_stored_token'] = true;
 		$diagnostic['has_refresh_token'] = $refreshToken !== '';
