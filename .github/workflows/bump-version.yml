@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: bump-version-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   bump-version:
     if: "!startsWith(github.event.head_commit.message, 'bump:') && !startsWith(github.event.head_commit.message, 'chore(release):')"
