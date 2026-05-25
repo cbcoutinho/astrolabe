@@ -25,6 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.15.1 (2026-05-25)
+
+### Fix
+
+- **oauth**: address PR #80 round 3 review
+- **oauth**: runtime type-guard outer refresh_token read
+- **oauth**: drop closure by-ref capture; fix self-trivial test
+- **oauth**: address PR #80 round 2 review + green CI
+- **psalm**: suppress MixedAssignment on guarded refresh_token candidate
+- **psalm**: replace ?: on mixed array value with explicit type check
+- **oauth**: address review feedback on refresh-diagnostic surfacing
+- **oauth**: surface refresh failure reason; add admin diagnostic
+
+### Refactor
+
+- **oauth**: address PR #80 review feedback
+
 ## v0.15.0 (2026-05-22)
 
 ### Feat
