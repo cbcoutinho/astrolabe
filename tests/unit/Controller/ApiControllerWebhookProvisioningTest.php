@@ -4,19 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
-use OCA\Astrolabe\Controller\ApiController;
-use OCA\Astrolabe\Service\IdpTokenRefresher;
-use OCA\Astrolabe\Service\McpServerClient;
-use OCA\Astrolabe\Service\McpTokenStorage;
 use OCP\AppFramework\Http;
-use OCP\IConfig;
-use OCP\IRequest;
-use OCP\IURLGenerator;
 use OCP\IUser;
-use OCP\IUserSession;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
 
 /**
  * Controller-level test for the 428 (Precondition Required) provisioning
@@ -27,27 +16,9 @@ use Psr\Log\LoggerInterface;
  * the controller responds with HTTP 428 and the same flag in the body so
  * AdminSettings.vue can render the authorization CTA.
  */
-final class ApiControllerWebhookProvisioningTest extends TestCase {
-	private McpServerClient&MockObject $client;
-	private IUserSession&MockObject $userSession;
-	private IURLGenerator&MockObject $urlGenerator;
-	private LoggerInterface&MockObject $logger;
-	private McpTokenStorage&MockObject $tokenStorage;
-	private IConfig&MockObject $config;
-	private IdpTokenRefresher&MockObject $tokenRefresher;
-	private ApiController $controller;
-
+final class ApiControllerWebhookProvisioningTest extends AbstractApiControllerTestCase {
 	protected function setUp(): void {
 		parent::setUp();
-
-		$request = $this->createMock(IRequest::class);
-		$this->client = $this->createMock(McpServerClient::class);
-		$this->userSession = $this->createMock(IUserSession::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->logger = $this->createMock(LoggerInterface::class);
-		$this->tokenStorage = $this->createMock(McpTokenStorage::class);
-		$this->config = $this->createMock(IConfig::class);
-		$this->tokenRefresher = $this->createMock(IdpTokenRefresher::class);
 
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('admin');
@@ -55,18 +26,6 @@ final class ApiControllerWebhookProvisioningTest extends TestCase {
 
 		// getAccessToken always returns a token so we can reach the MCP call.
 		$this->tokenStorage->method('getAccessToken')->willReturn('access-token');
-
-		$this->controller = new ApiController(
-			'astrolabe',
-			$request,
-			$this->client,
-			$this->userSession,
-			$this->urlGenerator,
-			$this->logger,
-			$this->tokenStorage,
-			$this->config,
-			$this->tokenRefresher,
-		);
 	}
 
 	public function testGetWebhookPresetsReturns428WhenProvisioningRequired(): void {

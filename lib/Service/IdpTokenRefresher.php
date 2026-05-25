@@ -25,6 +25,25 @@ class IdpTokenRefresher {
 	private McpServerClient $mcpServerClient;
 	private NcInternalUrlResolver $urlResolver;
 
+	/**
+	 * Short, human-readable reason for the last refresh failure on this
+	 * service instance, or null if the last attempt succeeded / no attempt
+	 * has been made yet. Cleared at the start of every refreshAccessToken()
+	 * call. Surfaced to admin callers via ApiController so an authorization
+	 * failure in the UI doesn't require reading nextcloud.log to diagnose.
+	 *
+	 * SECURITY: The string may include truncated IdP response body
+	 * snippets — Guzzle wraps the HTTP response body in its exception
+	 * message, and OIDC providers (Keycloak, Cognito, …) embed
+	 * `error_description` and similar fields there. Callers that surface
+	 * this value over the API MUST gate it on an admin check; the
+	 * ApiController::authRequiredBody() / unauthorizedResponse() helpers
+	 * are the only sanctioned exposure path and both enforce that guard.
+	 * Do not widen exposure without re-evaluating what IdP-side detail
+	 * could leak.
+	 */
+	private ?string $lastError = null;
+
 	public function __construct(
 		IConfig $config,
 		IClientService $clientService,
@@ -40,6 +59,31 @@ class IdpTokenRefresher {
 	}
 
 	/**
+	 * Reason the most recent refreshAccessToken() call returned null, or
+	 * null if it succeeded.
+	 */
+	public function getLastError(): ?string {
+		return $this->lastError;
+	}
+
+	/**
+	 * Cap exception-message snippets surfaced via $lastError. Guzzle
+	 * exceptions can embed a full response body; we want enough to
+	 * diagnose, not a wall. Applied uniformly across every catch block
+	 * so the admin-visible error stays bounded.
+	 */
+	private function truncateForLastError(string $message): string {
+		// Use mb_* — strlen/substr operate on bytes and can split a
+		// multi-byte UTF-8 code point at the cap boundary (the IdP's
+		// error_description may contain non-ASCII), producing a
+		// malformed string.
+		if (mb_strlen($message) > 500) {
+			return mb_substr($message, 0, 500) . '…';
+		}
+		return $message;
+	}
+
+	/**
 	 * Refresh access token using refresh token.
 	 *
 	 * Calls IdP's token endpoint directly (NOT MCP server).
@@ -48,10 +92,19 @@ class IdpTokenRefresher {
 	 * @return array|null New token data or null on failure
 	 */
 	public function refreshAccessToken(string $refreshToken): ?array {
+		$this->lastError = null;
+
+		if ($refreshToken === '') {
+			$this->lastError = 'No refresh token stored — original OAuth response did not include one (offline_access likely not advertised by the IdP).';
+			$this->logger->warning('IdpTokenRefresher: Cannot refresh with empty refresh_token');
+			return null;
+		}
+
 		// Check if confidential client secret is configured
 		$clientSecret = $this->config->getSystemValue('astrolabe_client_secret', '');
 
 		if (empty($clientSecret)) {
+			$this->lastError = 'astrolabe_client_secret is not configured. Refresh requires a confidential client.';
 			$this->logger->warning('Cannot refresh: no client secret configured. Confidential client required for token refresh.');
 			return null;
 		}
@@ -158,7 +211,11 @@ class IdpTokenRefresher {
 			return $tokenData;
 
 		} catch (\OCP\Http\Client\LocalServerException $e) {
-			// Network/connection error - may be transient
+			// Network/connection error - may be transient. The full
+			// untruncated message still goes to logs; only the
+			// admin-surfaced lastError is bounded.
+			$this->lastError = 'Network error reaching IdP/MCP server: '
+				. $this->truncateForLastError($e->getMessage());
 			$this->logger->warning('IdpTokenRefresher: Network error during refresh', [
 				'error' => $e->getMessage(),
 			]);
@@ -166,20 +223,27 @@ class IdpTokenRefresher {
 		} catch (\Exception $e) {
 			$statusCode = $e->getCode();
 
+			$messageSnippet = $this->truncateForLastError($e->getMessage());
+
 			// Log with appropriate level based on error type
 			if ($statusCode === 401 || $statusCode === 403) {
 				// Auth error - token is invalid, should be deleted
+				$this->lastError = "IdP rejected refresh_token (HTTP $statusCode). Refresh token likely expired or revoked. Detail: $messageSnippet";
 				$this->logger->error('IdpTokenRefresher: Auth error - token invalid', [
 					'status_code' => $statusCode,
 					'error' => $e->getMessage(),
 				]);
 			} elseif ($statusCode >= 500) {
 				// Server error - may be transient
+				$this->lastError = "IdP server error (HTTP $statusCode) during refresh. Detail: $messageSnippet";
 				$this->logger->warning('IdpTokenRefresher: Server error during refresh', [
 					'status_code' => $statusCode,
 					'error' => $e->getMessage(),
 				]);
 			} else {
+				$this->lastError = $statusCode
+					? "Token refresh failed (HTTP $statusCode): $messageSnippet"
+					: "Token refresh failed: $messageSnippet";
 				$this->logger->error('IdpTokenRefresher: Token refresh failed', [
 					'status_code' => $statusCode,
 					'error' => $e->getMessage(),

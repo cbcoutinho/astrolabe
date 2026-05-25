@@ -465,4 +465,101 @@ final class IdpTokenRefresherTest extends TestCase {
 
 		$this->assertNull($result);
 	}
+
+	// =========================================================================
+	// getLastError() tests — surface refresh-failure reason to admin callers
+	// =========================================================================
+
+	public function testGetLastErrorIsNullBeforeAnyAttempt(): void {
+		$this->assertNull($this->refresher->getLastError());
+	}
+
+	public function testGetLastErrorReportsEmptyRefreshToken(): void {
+		// No mock setup needed — empty refresh_token short-circuits before
+		// any config or HTTP access.
+		$result = $this->refresher->refreshAccessToken('');
+
+		$this->assertNull($result);
+		$error = $this->refresher->getLastError();
+		$this->assertNotNull($error);
+		$this->assertStringContainsString('No refresh token stored', $error);
+	}
+
+	public function testGetLastErrorReportsMissingClientSecret(): void {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', ''],
+			]);
+
+		$result = $this->refresher->refreshAccessToken('test-refresh-token');
+
+		$this->assertNull($result);
+		$error = $this->refresher->getLastError();
+		$this->assertNotNull($error);
+		$this->assertStringContainsString('astrolabe_client_secret is not configured', $error);
+	}
+
+	public function testGetLastErrorReportsHttpFailure(): void {
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', 'test-secret'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
+			]);
+
+		// Simulate an unauthorized response from the IdP via an exception
+		// carrying status 401 in its code (mirroring Guzzle's behavior).
+		$this->httpClient->method('get')
+			->willThrowException(new \Exception('IdP rejected request', 401));
+
+		$result = $this->refresher->refreshAccessToken('test-refresh-token');
+
+		$this->assertNull($result);
+		$error = $this->refresher->getLastError();
+		$this->assertNotNull($error);
+		$this->assertStringContainsString('HTTP 401', $error);
+		$this->assertStringContainsString('refresh token likely expired or revoked', strtolower($error));
+	}
+
+	public function testGetLastErrorIsClearedOnSuccess(): void {
+		// Put $this->refresher into a failed state by calling with an
+		// empty refresh_token — hits the early return at the top of
+		// refreshAccessToken() and sets lastError without any HTTP
+		// traffic. Critical: the failure and the success-path
+		// assertion below MUST run on the same instance, otherwise the
+		// "cleared on success" check is trivially true on a fresh
+		// instance whose lastError was never set.
+		$this->assertNull($this->refresher->refreshAccessToken(''));
+		$this->assertNotNull($this->refresher->getLastError());
+
+		// Now arrange a successful refresh on the same instance and
+		// ensure lastError is reset.
+		$this->config->method('getSystemValue')
+			->willReturnMap([
+				['astrolabe_client_secret', '', 'test-secret'],
+				['mcp_server_url', '', 'http://mcp-server:8000'], // NOSONAR
+			]);
+		$this->mcpServerClient->method('getClientId')
+			->willReturn('test-client-id');
+		// Resolve the Nextcloud OIDC token endpoint to a real-looking URL
+		// instead of the empty string PHPUnit returns from an unconfigured
+		// mock — matches the pattern used in the sibling success-path
+		// tests (e.g. testRefreshAccessTokenWithInternalNextcloudOidc).
+		$this->urlResolver->method('resolve')->willReturn('http://localhost'); // NOSONAR
+
+		$statusResponse = $this->createMock(IResponse::class);
+		$statusResponse->method('getBody')->willReturn(json_encode(['version' => '1.0.0']));
+		$tokenResponse = $this->createMock(IResponse::class);
+		$tokenResponse->method('getBody')->willReturn(json_encode([
+			'access_token' => 'new-access-token',
+			'refresh_token' => 'new-refresh-token',
+			'expires_in' => 3600,
+		]));
+		$this->httpClient->method('get')->willReturn($statusResponse);
+		$this->httpClient->method('post')->willReturn($tokenResponse);
+
+		$result = $this->refresher->refreshAccessToken('test-refresh-token');
+
+		$this->assertNotNull($result);
+		$this->assertNull($this->refresher->getLastError());
+	}
 }

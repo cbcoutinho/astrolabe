@@ -94,6 +94,11 @@ return [
 			'url' => '/api/admin/search-settings',
 			'verb' => 'POST',
 		],
+		[
+			'name' => 'api#refreshDiagnostic',
+			'url' => '/api/admin/refresh-diagnostic',
+			'verb' => 'POST',
+		],
 
 		// Webhook management routes (admin only)
 		[
