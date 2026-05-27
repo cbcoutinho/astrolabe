@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
+use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
 use OCA\Astrolabe\Service\McpServerClient;
-use OCA\Astrolabe\Service\McpTokenStorage;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -23,33 +23,18 @@ use Psr\Log\LoggerInterface;
  * Handles storing and validating app passwords for multi-user BasicAuth mode.
  */
 class CredentialsController extends Controller {
-	private McpTokenStorage $tokenStorage;
-	private IUserSession $userSession;
-	private LoggerInterface $logger;
-	private IConfig $config;
-	private McpServerClient $client;
-	private IClientService $httpClientService;
-	private IURLGenerator $urlGenerator;
-
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		McpTokenStorage $tokenStorage,
-		IUserSession $userSession,
-		LoggerInterface $logger,
-		IConfig $config,
-		McpServerClient $client,
-		IClientService $httpClientService,
-		IURLGenerator $urlGenerator,
+		private BackgroundSyncCredentialStorage $credentialStorage,
+		private IUserSession $userSession,
+		private LoggerInterface $logger,
+		private IConfig $config,
+		private McpServerClient $client,
+		private IClientService $httpClientService,
+		private IURLGenerator $urlGenerator,
 	) {
 		parent::__construct($appName, $request);
-		$this->tokenStorage = $tokenStorage;
-		$this->userSession = $userSession;
-		$this->logger = $logger;
-		$this->config = $config;
-		$this->client = $client;
-		$this->httpClientService = $httpClientService;
-		$this->urlGenerator = $urlGenerator;
 	}
 
 	/**
@@ -96,7 +81,7 @@ class CredentialsController extends Controller {
 
 		// Store encrypted app password locally in Nextcloud
 		try {
-			$this->tokenStorage->storeBackgroundSyncPassword($userId, $appPassword);
+			$this->credentialStorage->storeAppPassword($userId, $appPassword);
 			$this->logger->info("Stored app password locally for user: $userId");
 		} catch (\Exception $e) {
 			$this->logger->error("Failed to store app password locally for user $userId", [
@@ -248,38 +233,34 @@ class CredentialsController extends Controller {
 
 		$userId = $user->getUID();
 
-		$hasAccess = $this->tokenStorage->hasBackgroundSyncAccess($userId);
-		$syncType = $this->tokenStorage->getBackgroundSyncType($userId);
-		$provisionedAt = $this->tokenStorage->getBackgroundSyncProvisionedAt($userId);
+		$hasAccess = $this->credentialStorage->hasAccess($userId);
+		$provisionedAt = $this->credentialStorage->getProvisionedAt($userId);
 
 		return new JSONResponse([
 			'success' => true,
 			'has_background_access' => $hasAccess,
-			'sync_type' => $syncType,
+			'sync_type' => $hasAccess ? 'app_password' : null,
 			'provisioned_at' => $provisionedAt,
 		], Http::STATUS_OK);
 	}
 
 	/**
-	 * Get credentials for a specific user (admin only).
+	 * Get credentials metadata for a specific user (admin only).
 	 *
-	 * Note: This does NOT return the actual password, only metadata.
+	 * Returns presence/timestamps; never the credential itself.
 	 *
 	 * @param string $userId User ID to check
 	 * @return JSONResponse
 	 */
 	public function getCredentials(string $userId): JSONResponse {
-		// This endpoint should only be accessible by admins
-		// For now, just return metadata (not actual credentials)
-		$hasAccess = $this->tokenStorage->hasBackgroundSyncAccess($userId);
-		$syncType = $this->tokenStorage->getBackgroundSyncType($userId);
-		$provisionedAt = $this->tokenStorage->getBackgroundSyncProvisionedAt($userId);
+		$hasAccess = $this->credentialStorage->hasAccess($userId);
+		$provisionedAt = $this->credentialStorage->getProvisionedAt($userId);
 
 		return new JSONResponse([
 			'success' => true,
 			'user_id' => $userId,
 			'has_background_access' => $hasAccess,
-			'sync_type' => $syncType,
+			'sync_type' => $hasAccess ? 'app_password' : null,
 			'provisioned_at' => $provisionedAt,
 		], Http::STATUS_OK);
 	}
@@ -302,10 +283,7 @@ class CredentialsController extends Controller {
 		$userId = $user->getUID();
 
 		try {
-			// Delete both OAuth tokens and app password (if any exist)
-			$this->tokenStorage->deleteUserToken($userId);
-			$this->tokenStorage->deleteBackgroundSyncPassword($userId);
-
+			$this->credentialStorage->deleteAppPassword($userId);
 			$this->logger->info("Deleted background sync credentials for user: $userId");
 
 			return new JSONResponse([

@@ -1,14 +1,14 @@
 /**
  * Personal settings page JavaScript for Astrolabe.
  *
- * Loads styles for the personal settings page and handles form interactions.
+ * Handles the two app-password forms (provision + revoke). Search itself
+ * is handled by App.vue and the unified search provider; this script
+ * does not touch any OAuth flow.
  */
 
 import './styles/settings.css'
 
-// Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
-	// Helper function to show error notifications
 	function showError(message) {
 		if (typeof OC !== 'undefined' && OC.Notification) {
 			OC.Notification.showTemporary(message, { type: 'error' })
@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	}
 
-	// App password form with error handling
 	const appPasswordForm = document.getElementById('mcp-app-password-form')
 	if (appPasswordForm) {
 		appPasswordForm.addEventListener('submit', async function(e) {
@@ -46,7 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				const result = await response.json()
 
 				if (response.ok && result.success) {
-					showSuccess(t('astrolabe', 'Background sync access successfully provisioned!'))
+					showSuccess(t('astrolabe', 'Background indexing enabled.'))
 					setTimeout(() => window.location.reload(), 1000)
 				} else {
 					showError(result.error || t('astrolabe', 'Failed to save app password. Please check that it is valid.'))
@@ -61,33 +60,12 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 	}
 
-	// Revoke form confirmation
-	const revokeForm = document.getElementById('mcp-revoke-form')
-	if (revokeForm) {
-		revokeForm.addEventListener('submit', function(e) {
-			if (!confirm(t('astrolabe', 'Are you sure you want to disable indexing? Your content will be removed from semantic search.'))) {
-				e.preventDefault()
-			}
-		})
-	}
-
-	// Disconnect form confirmation
-	const disconnectForm = document.getElementById('mcp-disconnect-form')
-	if (disconnectForm) {
-		disconnectForm.addEventListener('submit', function(e) {
-			if (!confirm(t('astrolabe', 'Are you sure you want to disconnect from Astrolabe? You will need to re-authorize to use semantic search.'))) {
-				e.preventDefault()
-			}
-		})
-	}
-
-	// Revoke background access form with error handling
 	const revokeBackgroundForm = document.getElementById('mcp-revoke-background-form')
 	if (revokeBackgroundForm) {
 		revokeBackgroundForm.addEventListener('submit', async function(e) {
 			e.preventDefault()
 
-			if (!confirm(t('astrolabe', 'Are you sure you want to revoke background sync access? The MCP server will no longer be able to access your Nextcloud data for background operations.'))) {
+			if (!confirm(t('astrolabe', 'Disable background indexing? The MCP server will lose access to your Nextcloud files.'))) {
 				return
 			}
 
@@ -96,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 			try {
 				submitButton.disabled = true
-				submitButton.textContent = t('astrolabe', 'Revoking...')
+				submitButton.textContent = t('astrolabe', 'Disabling...')
 
 				const formData = new FormData(revokeBackgroundForm)
 				const response = await fetch(revokeBackgroundForm.action, {
@@ -107,10 +85,10 @@ document.addEventListener('DOMContentLoaded', function() {
 				const result = await response.json()
 
 				if (response.ok && result.success) {
-					showSuccess(t('astrolabe', 'Background sync access revoked successfully.'))
+					showSuccess(t('astrolabe', 'Background indexing disabled.'))
 					setTimeout(() => window.location.reload(), 1000)
 				} else {
-					showError(result.error || t('astrolabe', 'Failed to revoke background sync access.'))
+					showError(result.error || t('astrolabe', 'Failed to disable background indexing.'))
 				}
 			} catch (error) {
 				console.error('Revoke error:', error)

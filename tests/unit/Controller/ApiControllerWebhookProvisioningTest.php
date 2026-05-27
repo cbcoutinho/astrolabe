@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
 use OCP\AppFramework\Http;
-use OCP\IUser;
 
 /**
  * Controller-level test for the 428 (Precondition Required) provisioning
@@ -19,13 +18,7 @@ use OCP\IUser;
 final class ApiControllerWebhookProvisioningTest extends AbstractApiControllerTestCase {
 	protected function setUp(): void {
 		parent::setUp();
-
-		$user = $this->createMock(IUser::class);
-		$user->method('getUID')->willReturn('admin');
-		$this->userSession->method('getUser')->willReturn($user);
-
-		// getAccessToken always returns a token so we can reach the MCP call.
-		$this->tokenStorage->method('getAccessToken')->willReturn('access-token');
+		$this->authenticateUserWithToken();
 	}
 
 	public function testGetWebhookPresetsReturns428WhenProvisioningRequired(): void {

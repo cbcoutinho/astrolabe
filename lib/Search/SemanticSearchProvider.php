@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Search;
 
 use OCA\Astrolabe\AppInfo\Application;
-use OCA\Astrolabe\Service\IdpTokenRefresher;
 use OCA\Astrolabe\Service\McpServerClient;
-use OCA\Astrolabe\Service\McpTokenStorage;
+use OCA\Astrolabe\Service\McpTokenMinter;
+use OCA\Astrolabe\Service\McpTokenMintException;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\Files\FileInfo;
 use OCP\Files\IMimeTypeDetector;
@@ -30,13 +30,14 @@ use Psr\Log\LoggerInterface;
  * (notes, files, calendar, deck cards).
  *
  * Security: Results are filtered server-side to only include documents
- * owned by the searching user. User identity comes from OAuth token.
+ * the searching user has access to. User identity comes from the
+ * session-derived JWT minted by McpTokenMinter for the current
+ * Nextcloud session user.
  */
 class SemanticSearchProvider implements IProvider {
 	public function __construct(
 		private McpServerClient $client,
-		private McpTokenStorage $tokenStorage,
-		private IdpTokenRefresher $tokenRefresher,
+		private McpTokenMinter $tokenMinter,
 		private IConfig $config,
 		private IL10N $l10n,
 		private IURLGenerator $urlGenerator,
@@ -75,7 +76,8 @@ class SemanticSearchProvider implements IProvider {
 	 * Execute semantic search via MCP server.
 	 *
 	 * SECURITY: Results are filtered server-side to only include documents
-	 * owned by the searching user. User identity comes from OAuth token.
+	 * the searching user has access to. User identity comes from a JWT
+	 * minted on-demand from the Nextcloud session.
 	 */
 	public function search(IUser $user, ISearchQuery $query): SearchResult {
 		$term = $query->getTerm();
@@ -89,28 +91,17 @@ class SemanticSearchProvider implements IProvider {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback matching ApiController pattern
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
-		// Get OAuth token for user with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
-		if ($accessToken === null) {
-			// User hasn't authorized the app yet - return empty results
-			$this->logger->debug('No OAuth token for user in semantic search', [
+		// Mint a session-derived JWT for the MCP server. Unified Search
+		// runs on every keystroke in the global search bar, so a mint
+		// failure (e.g. the `oidc` app is broken or the client is missing
+		// from admin settings) must NOT raise — log and return empty so
+		// the rest of unified search keeps working.
+		try {
+			$accessToken = $this->tokenMinter->mintForUser($userId);
+		} catch (McpTokenMintException $e) {
+			$this->logger->debug('Skipping semantic search: token mint failed', [
 				'user_id' => $userId,
+				'error' => $e->getMessage(),
 			]);
 			return SearchResult::complete($this->getName(), []);
 		}

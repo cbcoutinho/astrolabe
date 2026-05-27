@@ -3,38 +3,19 @@
 declare(strict_types=1);
 
 /**
- * Routes configuration for MCP Server UI app.
+ * Routes configuration for the Astrolabe app.
  *
- * Defines URL routes for OAuth flow and form handlers.
+ * Astrolabe authenticates to the MCP server with short-lived JWTs minted
+ * on demand from the current Nextcloud session (McpTokenMinter), so
+ * there are no longer any OAuth authorize / callback / refresh routes.
+ * The only persisted per-user credential is the Nextcloud app password
+ * used by the MCP server for background WebDAV indexing; that is
+ * provisioned via the CredentialsController routes below.
  */
 
 return [
 	'routes' => [
-		// OAuth routes
-		[
-			'name' => 'oauth#initiateOAuth',
-			'url' => '/oauth/authorize',
-			'verb' => 'GET',
-		],
-		[
-			'name' => 'oauth#oauthCallback',
-			'url' => '/oauth/callback',
-			'verb' => 'GET',
-		],
-		[
-			'name' => 'oauth#disconnect',
-			'url' => '/oauth/disconnect',
-			'verb' => 'POST',
-		],
-
-		// API routes (form handlers)
-		[
-			'name' => 'api#revokeAccess',
-			'url' => '/api/revoke',
-			'verb' => 'POST',
-		],
-
-		// Background sync credentials routes
+		// Background sync credentials (app password for MCP server WebDAV access)
 		[
 			'name' => 'credentials#storeAppPassword',
 			'url' => '/api/v1/background-sync/credentials',
@@ -56,7 +37,7 @@ return [
 			'verb' => 'GET',
 		],
 
-		// Vector search API routes
+		// Vector search API
 		[
 			'name' => 'api#search',
 			'url' => '/api/search',
@@ -78,7 +59,7 @@ return [
 			'verb' => 'GET',
 		],
 
-		// Admin settings routes
+		// Admin settings
 		[
 			'name' => 'api#serverStatus',
 			'url' => '/api/admin/server-status',
@@ -94,13 +75,8 @@ return [
 			'url' => '/api/admin/search-settings',
 			'verb' => 'POST',
 		],
-		[
-			'name' => 'api#refreshDiagnostic',
-			'url' => '/api/admin/refresh-diagnostic',
-			'verb' => 'POST',
-		],
 
-		// Webhook management routes (admin only)
+		// Webhook management (admin)
 		[
 			'name' => 'api#getWebhookPresets',
 			'url' => '/api/admin/webhooks/presets',

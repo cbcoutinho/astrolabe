@@ -29,7 +29,7 @@ Astrolabe connects to a semantic search service that understands the meaning of 
 
 See [documentation](https://github.com/cbcoutinho/nextcloud-mcp-server) for configuration details.
 	]]></description>
-	<version>0.15.1</version>
+	<version>0.16.0</version>
 	<licence>agpl</licence>
 	<author homepage="https://github.com/cbcoutinho">Chris Coutinho</author>
 	<namespace>Astrolabe</namespace>
@@ -41,6 +41,10 @@ See [documentation](https://github.com/cbcoutinho/nextcloud-mcp-server) for conf
 	<screenshot>https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/third_party/astrolabe/screenshots/03-chunk-viewer-open.png?raw=1</screenshot>
 	<dependencies>
 		<nextcloud min-version="31" max-version="33"/>
+		<!-- Required: Astrolabe mints session-derived JWTs by dispatching
+		     OCA\OIDCIdentityProvider\Event\TokenGenerationRequestEvent.
+		     If the `oidc` app is missing, the token-mint path raises. -->
+		<app>oidc</app>
 	</dependencies>
 	<settings>
 		<personal>OCA\Astrolabe\Settings\Personal</personal>
@@ -57,7 +61,4 @@ See [documentation](https://github.com/cbcoutinho/nextcloud-mcp-server) for conf
 			<type>link</type>
 		</navigation>
 	</navigations>
-	<background-jobs>
-		<job>OCA\Astrolabe\BackgroundJob\RefreshUserTokens</job>
-	</background-jobs>
 </info>
