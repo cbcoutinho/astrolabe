@@ -287,6 +287,11 @@ class CredentialsController extends Controller {
 		$userId = $user->getUID();
 
 		try {
+			// Tell the MCP server to drop its copy first, while we still hold
+			// the app password it needs to authenticate the request. Best-effort:
+			// a failure here must not block clearing the local credential.
+			$this->revokeFromMcpServer($userId);
+
 			$this->credentialStorage->deleteAppPassword($userId);
 			$this->logger->info("Deleted background sync credentials for user: $userId");
 
@@ -302,6 +307,51 @@ class CredentialsController extends Controller {
 				'success' => false,
 				'error' => 'Failed to delete credentials'
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Best-effort: tell the MCP server to delete its stored app password for
+	 * this user, so revoking background indexing actually drops the server's
+	 * WebDAV access (it otherwise retains the credential). Authenticated with
+	 * the app password itself (BasicAuth), mirroring storeAppPassword. Any
+	 * failure is logged and swallowed — the local credential is still removed.
+	 */
+	private function revokeFromMcpServer(string $userId): void {
+		$mcpServerUrl = $this->config->getSystemValue('mcp_server_url', '');
+		if (empty($mcpServerUrl)) {
+			return;
+		}
+
+		$appPassword = $this->credentialStorage->getAppPassword($userId);
+		if (empty($appPassword)) {
+			$this->logger->debug("No stored app password to revoke from MCP for user: $userId");
+			return;
+		}
+
+		try {
+			$httpClient = $this->httpClientService->newClient();
+			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . urlencode($userId) . '/app-password';
+
+			$response = $httpClient->delete($mcpEndpoint, [
+				'auth' => [$userId, $appPassword],
+				'headers' => [
+					'Accept' => 'application/json',
+				],
+				'timeout' => 10,
+			]);
+
+			$statusCode = $response->getStatusCode();
+			if ($statusCode === 200) {
+				$this->logger->info("Revoked app password from MCP server for user: $userId");
+			} else {
+				$this->logger->warning("MCP server returned HTTP $statusCode revoking app password for user: $userId");
+			}
+		} catch (\Exception $e) {
+			// MCP unreachable / already gone — local revoke still proceeds.
+			$this->logger->warning("Failed to revoke app password from MCP server for user $userId", [
+				'error' => $e->getMessage(),
+			]);
 		}
 	}
 }
