@@ -21,6 +21,6 @@
 	</extraFiles>
 	<stubs>
 		<!-- Runtime-only `oidc` app classes (not a Composer dependency). -->
-		<file name="tests/psalm-stubs/oidc-events.php"/>
+		<file name="tests/psalm-stubs/oidc-events.phpstub"/>
 	</stubs>
 </psalm>

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
-use OCA\Astrolabe\Service\McpServerClient;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -13,7 +12,6 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\IRequest;
-use OCP\IURLGenerator;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
@@ -30,9 +28,7 @@ class CredentialsController extends Controller {
 		private IUserSession $userSession,
 		private LoggerInterface $logger,
 		private IConfig $config,
-		private McpServerClient $client,
 		private IClientService $httpClientService,
-		private IURLGenerator $urlGenerator,
 	) {
 		parent::__construct($appName, $request);
 	}

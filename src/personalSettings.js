@@ -11,6 +11,31 @@
 
 import './styles/settings.css'
 
+// Mint a dedicated app password from the current session (no copy-paste) and
+// hand it to the MCP server via the existing storeAppPassword endpoint.
+// core/getapppassword exchanges the active *login* session for a fresh app
+// password. Requires the OCS-APIRequest header + CSRF token.
+async function mintSessionAppPassword() {
+	const ocsBase = OC.linkToOCS('core', 2) // -> <webroot>/ocs/v2.php/core/
+	const resp = await fetch(ocsBase + 'getapppassword', {
+		method: 'GET',
+		headers: {
+			'OCS-APIRequest': 'true',
+			Accept: 'application/json',
+			requesttoken: OC.requestToken,
+		},
+	})
+	if (!resp.ok) {
+		throw new Error('getapppassword returned ' + resp.status)
+	}
+	const data = await resp.json()
+	const appPassword = data?.ocs?.data?.apppassword
+	if (!appPassword) {
+		throw new Error('getapppassword response missing apppassword')
+	}
+	return appPassword
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 	function showError(message) {
 		if (typeof OC !== 'undefined' && OC.Notification) {
@@ -26,31 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		} else {
 			alert(message)
 		}
-	}
-
-	// Mint a dedicated app password from the current session (no copy-paste)
-	// and hand it to the MCP server via the existing storeAppPassword endpoint.
-	async function mintSessionAppPassword() {
-		// core/getapppassword exchanges the active *login* session for a fresh
-		// app password. Requires the OCS-APIRequest header + CSRF token.
-		const ocsBase = OC.linkToOCS('core', 2) // -> <webroot>/ocs/v2.php/core/
-		const resp = await fetch(ocsBase + 'getapppassword', {
-			method: 'GET',
-			headers: {
-				'OCS-APIRequest': 'true',
-				Accept: 'application/json',
-				requesttoken: OC.requestToken,
-			},
-		})
-		if (!resp.ok) {
-			throw new Error('getapppassword returned ' + resp.status)
-		}
-		const data = await resp.json()
-		const appPassword = data?.ocs?.data?.apppassword
-		if (!appPassword) {
-			throw new Error('getapppassword response missing apppassword')
-		}
-		return appPassword
 	}
 
 	const enableButton = document.getElementById('mcp-enable-background-button')

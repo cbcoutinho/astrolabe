@@ -58,13 +58,13 @@ class McpTokenMinterTest extends TestCase {
 		$this->config->method('getSystemValue')->willReturnMap([
 			['astrolabe_client_id', '', 'astrolabe-client'],
 			['mcp_server_public_url', '', ''],
-			['mcp_server_url', '', 'http://mcp-internal:8000'],
+			['mcp_server_url', '', 'https://mcp-internal:8000'],
 		]);
 
 		$this->eventDispatcher->expects($this->once())
 			->method('dispatchTyped')
 			->willReturnCallback(function (TokenGenerationRequestEvent $event): void {
-				$this->assertSame('http://mcp-internal:8000', $event->getResource());
+				$this->assertSame('https://mcp-internal:8000', $event->getResource());
 				$event->setAccessToken('tok');
 			});
 

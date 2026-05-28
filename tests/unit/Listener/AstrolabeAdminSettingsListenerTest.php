@@ -103,7 +103,7 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 			'someotherapp',
 			'astrolabe-admin-settings',
 			'mcp_server_url',
-			'http://other',
+			'https://other',
 		);
 
 		$this->listener->handle($event);
@@ -119,7 +119,7 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 			Application::APP_ID,
 			'some-other-form',
 			'mcp_server_url',
-			'http://other',
+			'https://other',
 		);
 
 		$this->listener->handle($event);
