@@ -59,8 +59,12 @@ class CredentialsController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Validate app password format (xxxxx-xxxxx-xxxxx-xxxxx-xxxxx)
-		if (!preg_match('/^[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}$/', $appPassword)) {
+		// Sanity-check the shape only — the authoritative validation is
+		// validateAppPassword() below (a real auth against Nextcloud). Accept
+		// both the dashed format a user copies from Security settings
+		// (xxxxx-xxxxx-xxxxx-xxxxx-xxxxx) AND the raw token returned by the
+		// one-click `core/getapppassword` flow (a long alphanumeric string).
+		if (!preg_match('/^[a-zA-Z0-9-]{20,256}$/', $appPassword)) {
 			$this->logger->warning("Invalid app password format for user: $userId");
 			return new JSONResponse([
 				'success' => false,

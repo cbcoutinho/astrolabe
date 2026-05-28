@@ -74,30 +74,14 @@ style('astrolabe', 'astrolabe-main');
 		</div>
 	<?php else: ?>
 		<div class="mcp-grant-section">
-			<p><strong><?php p($l->t('Step 1:')); ?></strong>
-				<a href="<?php p($urlGenerator->linkToRoute('settings.PersonalSettings.index', ['section' => 'security'])); ?>" target="_blank">
-					<?php p($l->t('Generate an app password in Security settings')); ?>
-				</a>
+			<button type="button" class="button primary" id="mcp-enable-background-button"
+					data-store-url="<?php p($urlGenerator->linkToRoute('astrolabe.credentials.storeAppPassword')); ?>">
+				<span class="icon icon-checkmark"></span>
+				<?php p($l->t('Enable background indexing')); ?>
+			</button>
+			<p class="mcp-help-text">
+				<?php p($l->t('One click generates a dedicated app password from your current session, sends it to the MCP server, and stores it encrypted in your user preferences. No copy-paste needed — you can disable it again at any time.')); ?>
 			</p>
-
-			<p><strong><?php p($l->t('Step 2:')); ?></strong> <?php p($l->t('Enter the app password below:')); ?></p>
-
-			<form method="post" action="<?php p($urlGenerator->linkToRoute('astrolabe.credentials.storeAppPassword')); ?>" id="mcp-app-password-form">
-				<input type="hidden" name="requesttoken" value="<?php p($_['requesttoken']); ?>">
-				<div class="mcp-input-group">
-					<input type="password" name="appPassword" id="mcp-app-password-input"
-						   placeholder="xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-						   pattern="[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}"
-						   required>
-					<button type="submit" class="button primary" id="mcp-save-app-password-button">
-						<span class="icon icon-checkmark"></span>
-						<?php p($l->t('Save')); ?>
-					</button>
-				</div>
-				<p class="mcp-help-text">
-					<?php p($l->t('The app password is validated against Nextcloud, then sent to the MCP server and stored encrypted in your user preferences.')); ?>
-				</p>
-			</form>
 		</div>
 	<?php endif; ?>
 </div>

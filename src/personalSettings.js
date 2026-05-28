@@ -1,9 +1,12 @@
 /**
  * Personal settings page JavaScript for Astrolabe.
  *
- * Handles the two app-password forms (provision + revoke). Search itself
- * is handled by App.vue and the unified search provider; this script
- * does not touch any OAuth flow.
+ * Handles the one-click background-indexing opt-in (provision + revoke).
+ * Provisioning mints a dedicated app password from the current Nextcloud
+ * session via the core `getapppassword` OCS endpoint and hands it to the
+ * MCP server — the user never copies or pastes a credential. Search itself
+ * is handled by App.vue and the unified search provider; this script does
+ * not touch any OAuth flow.
  */
 
 import './styles/settings.css'
@@ -25,20 +28,48 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	}
 
-	const appPasswordForm = document.getElementById('mcp-app-password-form')
-	if (appPasswordForm) {
-		appPasswordForm.addEventListener('submit', async function(e) {
-			e.preventDefault()
-			const submitButton = document.getElementById('mcp-save-app-password-button')
-			const originalText = submitButton.textContent
+	// Mint a dedicated app password from the current session (no copy-paste)
+	// and hand it to the MCP server via the existing storeAppPassword endpoint.
+	async function mintSessionAppPassword() {
+		// core/getapppassword exchanges the active *login* session for a fresh
+		// app password. Requires the OCS-APIRequest header + CSRF token.
+		const ocsBase = OC.linkToOCS('core', 2) // -> <webroot>/ocs/v2.php/core/
+		const resp = await fetch(ocsBase + 'getapppassword', {
+			method: 'GET',
+			headers: {
+				'OCS-APIRequest': 'true',
+				Accept: 'application/json',
+				requesttoken: OC.requestToken,
+			},
+		})
+		if (!resp.ok) {
+			throw new Error('getapppassword returned ' + resp.status)
+		}
+		const data = await resp.json()
+		const appPassword = data?.ocs?.data?.apppassword
+		if (!appPassword) {
+			throw new Error('getapppassword response missing apppassword')
+		}
+		return appPassword
+	}
+
+	const enableButton = document.getElementById('mcp-enable-background-button')
+	if (enableButton) {
+		enableButton.addEventListener('click', async function() {
+			const originalText = enableButton.textContent
+			const storeUrl = enableButton.dataset.storeUrl
 
 			try {
-				submitButton.disabled = true
-				submitButton.textContent = t('astrolabe', 'Saving...')
+				enableButton.disabled = true
+				enableButton.textContent = t('astrolabe', 'Enabling...')
 
-				const formData = new FormData(appPasswordForm)
-				const response = await fetch(appPasswordForm.action, {
+				const appPassword = await mintSessionAppPassword()
+
+				const formData = new FormData()
+				formData.append('appPassword', appPassword)
+				const response = await fetch(storeUrl, {
 					method: 'POST',
+					headers: { requesttoken: OC.requestToken },
 					body: formData,
 				})
 
@@ -48,14 +79,14 @@ document.addEventListener('DOMContentLoaded', function() {
 					showSuccess(t('astrolabe', 'Background indexing enabled.'))
 					setTimeout(() => window.location.reload(), 1000)
 				} else {
-					showError(result.error || t('astrolabe', 'Failed to save app password. Please check that it is valid.'))
+					showError(result.error || t('astrolabe', 'Failed to enable background indexing.'))
 				}
 			} catch (error) {
-				console.error('App password provisioning error:', error)
-				showError(t('astrolabe', 'Unable to connect to server. Please check that the MCP server is running and try again.'))
+				console.error('Background indexing provisioning error:', error)
+				showError(t('astrolabe', 'Could not enable background indexing. Please try again.'))
 			} finally {
-				submitButton.disabled = false
-				submitButton.textContent = originalText
+				enableButton.disabled = false
+				enableButton.textContent = originalText
 			}
 		})
 	}
