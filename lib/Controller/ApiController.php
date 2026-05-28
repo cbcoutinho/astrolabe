@@ -46,30 +46,31 @@ class ApiController extends Controller {
 	 * Single helper so every endpoint in this controller bails out the
 	 * same way and the SonarCloud duplication threshold stays untripped.
 	 *
-	 * @return array{0: string, 1: null}|array{0: null, 1: JSONResponse}
-	 *                                                                   [$token, null] on success; [null, $response] on failure.
+	 * Returns the minted token (string) on success, or a JSONResponse to
+	 * return as-is on failure. Callers narrow with ``instanceof JSONResponse``
+	 * so the success path keeps a non-null string without tripping Psalm's
+	 * nullable-return checks (a tuple return decorrelates the two halves).
 	 */
-	private function tokenForCurrentUser(): array {
+	private function tokenForCurrentUser(): JSONResponse|string {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
-			return [null, new JSONResponse([
+			return new JSONResponse([
 				'success' => false,
 				'error' => 'User not authenticated',
-			], Http::STATUS_UNAUTHORIZED)];
+			], Http::STATUS_UNAUTHORIZED);
 		}
 
 		try {
-			$token = $this->tokenMinter->mintForUser($user->getUID());
-			return [$token, null];
+			return $this->tokenMinter->mintForUser($user->getUID());
 		} catch (McpTokenMintException $e) {
 			$this->logger->error('MCP token mint failed', [
 				'user_id' => $user->getUID(),
 				'error' => $e->getMessage(),
 			]);
-			return [null, new JSONResponse([
+			return new JSONResponse([
 				'success' => false,
 				'error' => $e->getMessage(),
-			], Http::STATUS_SERVICE_UNAVAILABLE)];
+			], Http::STATUS_SERVICE_UNAVAILABLE);
 		}
 	}
 
@@ -93,9 +94,9 @@ class ApiController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		[$accessToken, $errorResponse] = $this->tokenForCurrentUser();
-		if ($accessToken === null) {
-			return $errorResponse;
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		// Validate algorithm
@@ -269,9 +270,9 @@ class ApiController extends Controller {
 	 * gate — being a logged-in Nextcloud admin is enough.
 	 */
 	public function getWebhookPresets(): JSONResponse {
-		[$accessToken, $errorResponse] = $this->tokenForCurrentUser();
-		if ($accessToken === null) {
-			return $errorResponse;
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		$installedAppsResult = $this->client->getInstalledApps($accessToken);
@@ -324,9 +325,9 @@ class ApiController extends Controller {
 	 * the MCP server. Admin-only.
 	 */
 	public function enableWebhookPreset(string $presetId): JSONResponse {
-		[$accessToken, $errorResponse] = $this->tokenForCurrentUser();
-		if ($accessToken === null) {
-			return $errorResponse;
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		$preset = WebhookPresets::getPreset($presetId);
@@ -390,9 +391,9 @@ class ApiController extends Controller {
 	 * Disable a webhook preset by deleting its registered events. Admin-only.
 	 */
 	public function disableWebhookPreset(string $presetId): JSONResponse {
-		[$accessToken, $errorResponse] = $this->tokenForCurrentUser();
-		if ($accessToken === null) {
-			return $errorResponse;
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		$preset = WebhookPresets::getPreset($presetId);
@@ -478,9 +479,9 @@ class ApiController extends Controller {
 		?int $chunk_index = null,
 		?int $total_chunks = null,
 	): JSONResponse {
-		[$accessToken, $errorResponse] = $this->tokenForCurrentUser();
-		if ($accessToken === null) {
-			return $errorResponse;
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		$result = $this->client->getChunkContext(
@@ -512,9 +513,9 @@ class ApiController extends Controller {
 		int $page = 1,
 		float $scale = 2.0,
 	): JSONResponse {
-		[$accessToken, $errorResponse] = $this->tokenForCurrentUser();
-		if ($accessToken === null) {
-			return $errorResponse;
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		$result = $this->client->getPdfPreview($file_path, $page, $scale, $accessToken);

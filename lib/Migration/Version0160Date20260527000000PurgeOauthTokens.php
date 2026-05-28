@@ -22,6 +22,8 @@ use Psr\Log\LoggerInterface;
  * `background_sync_type` / `background_sync_provisioned_at` are
  * intentionally left in place — they remain the MCP server's credential
  * for fetching user files via WebDAV.
+ *
+ * @psalm-suppress UnusedClass — discovered + run by the Nextcloud migration framework.
  */
 class Version0160Date20260527000000PurgeOauthTokens extends SimpleMigrationStep {
 	public function __construct(

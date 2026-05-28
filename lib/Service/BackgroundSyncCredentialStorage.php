@@ -23,6 +23,7 @@ use Psr\Log\LoggerInterface;
  *   - background_sync_provisioned_at — unix timestamp
  */
 class BackgroundSyncCredentialStorage {
+	/** @psalm-suppress PossiblyUnusedMethod — instantiated by the Nextcloud DI container. */
 	public function __construct(
 		private IConfig $config,
 		private ICrypto $crypto,

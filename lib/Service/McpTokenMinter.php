@@ -28,6 +28,7 @@ class McpTokenMinter {
 	/** @var array<string, string> request-scoped cache keyed by "uid|scopes" */
 	private array $cache = [];
 
+	/** @psalm-suppress PossiblyUnusedMethod — instantiated by the Nextcloud DI container. */
 	public function __construct(
 		private IEventDispatcher $eventDispatcher,
 		private IConfig $config,

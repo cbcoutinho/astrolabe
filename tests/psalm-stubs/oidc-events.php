@@ -1,0 +1,29 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Psalm stub for the Nextcloud `oidc` app's event(s) that Astrolabe dispatches.
+ *
+ * The `oidc` app is a runtime dependency (declared in appinfo/info.xml) but is
+ * NOT a Composer/static-analysis dependency, so Psalm cannot see this class and
+ * would otherwise infer `mixed` for the event and its return values. This stub
+ * gives Psalm the real shape used by McpTokenMinter.
+ */
+
+namespace OCA\OIDCIdentityProvider\Event;
+
+use OCP\EventDispatcher\Event;
+
+class TokenGenerationRequestEvent extends Event {
+	public function __construct(
+		string $clientIdentifier,
+		string $userId,
+		string $scopes,
+		string $resource,
+	) {
+	}
+
+	public function getAccessToken(): ?string {
+	}
+}

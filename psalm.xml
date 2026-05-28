@@ -19,4 +19,8 @@
 	<extraFiles>
 		<directory name="vendor"/>
 	</extraFiles>
+	<stubs>
+		<!-- Runtime-only `oidc` app classes (not a Composer dependency). -->
+		<file name="tests/psalm-stubs/oidc-events.php"/>
+	</stubs>
 </psalm>
