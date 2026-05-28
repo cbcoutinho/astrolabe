@@ -318,13 +318,13 @@ class CredentialsController extends Controller {
 	 * failure is logged and swallowed — the local credential is still removed.
 	 */
 	private function revokeFromMcpServer(string $userId): void {
-		$mcpServerUrl = $this->config->getSystemValue('mcp_server_url', '');
-		if (empty($mcpServerUrl)) {
+		$mcpServerUrl = (string)$this->config->getSystemValue('mcp_server_url', '');
+		if ($mcpServerUrl === '') {
 			return;
 		}
 
 		$appPassword = $this->credentialStorage->getAppPassword($userId);
-		if (empty($appPassword)) {
+		if ($appPassword === null || $appPassword === '') {
 			$this->logger->debug("No stored app password to revoke from MCP for user: $userId");
 			return;
 		}
