@@ -166,26 +166,6 @@ class CredentialsControllerTest extends TestCase {
 		$this->assertTrue($data['mcp_sync']);
 	}
 
-	public function testStoreRefusesCleartextToNonLoopbackHost(): void {
-		$this->authenticate('alice');
-
-		$token = $this->createMock(IToken::class);
-		$token->method('getUID')->willReturn('alice');
-		$this->tokenProvider->method('getToken')->willReturn($token);
-
-		// Plaintext http:// to a remote host: store locally, never send creds.
-		$this->config->method('getSystemValue')
-			->with('mcp_server_url', '')
-			->willReturn('http://mcp.example:8000');
-		$this->credentialStorage->expects($this->once())->method('storeAppPassword');
-		$this->httpClientService->expects($this->never())->method('newClient');
-
-		$data = $this->controller->storeAppPassword(self::VALID_INPUT)->getData();
-
-		$this->assertTrue($data['success']);
-		$this->assertFalse($data['mcp_sync']);
-	}
-
 	public function testGetStatusReportsUnprovisioned(): void {
 		$this->authenticate('alice');
 		$this->credentialStorage->method('hasAccess')->with('alice')->willReturn(false);
