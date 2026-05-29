@@ -25,6 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.16.0 (2026-05-29)
+
+### Feat
+
+- one-click background-indexing opt-in via session app password
+- mint MCP tokens from Nextcloud session instead of storing OAuth refresh tokens
+
+### Fix
+
+- warn (not block) on cleartext MCP transport; drop http test literal
+- address PR #89 review (bugs, security, perf, test coverage)
+- rename test fixture to clear SonarCloud S2068 (hardcoded credential)
+- validate app password internally, not via HTTP loopback
+- give reduce() an initial value in personalSettings (SonarCloud S6959)
+- address PR review (bugs, security, quality, tests, app-password name)
+- clear SonarCloud findings (gate + cleanable smells)
+- resolve all Psalm errors (PR #89 static-analysis debt)
+- make revokeFromMcpServer Psalm-clean
+- deprovision the MCP server when background indexing is disabled
+
 ## v0.15.1 (2026-05-25)
 
 ### Fix
