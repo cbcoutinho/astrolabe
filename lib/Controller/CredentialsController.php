@@ -9,6 +9,8 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Authentication\Exceptions\InvalidTokenException;
+use OCP\Authentication\Token\IProvider;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\IRequest;
@@ -29,6 +31,7 @@ class CredentialsController extends Controller {
 		private LoggerInterface $logger,
 		private IConfig $config,
 		private IClientService $httpClientService,
+		private IProvider $tokenProvider,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -174,48 +177,29 @@ class CredentialsController extends Controller {
 	 * @return bool True if valid, false otherwise
 	 */
 	private function validateAppPassword(string $userId, string $appPassword): bool {
+		// Validate the app password internally via Nextcloud's token provider —
+		// no HTTP round-trip. An outbound loopback call is fragile across
+		// deployments: `overwrite.cli.url` points at the *external* host (e.g.
+		// localhost:8080, the host-mapped port) which is unreachable from
+		// inside the container, and trusted-domain checks can reject raw-IP
+		// hosts. getToken() hashes the supplied token and looks it up directly
+		// in the auth backend.
 		try {
-			// Validate against the server's own loopback so we don't depend on
-			// getAbsoluteURL() (which returns the rewritten external URL, not
-			// reachable from inside the container). Configurable via
-			// `overwrite.cli.url`, defaulting to the loopback address that works
-			// for a standard single-container deployment.
-			$baseUrl = (string)$this->config->getSystemValue('overwrite.cli.url', 'http://127.0.0.1');
-
-			// Make a test request to Nextcloud API with BasicAuth
-			// Using OCS API user endpoint as a lightweight test
-			$testUrl = $baseUrl . '/ocs/v1.php/cloud/user?format=json';
-
-			$this->logger->debug("Validating app password for user: $userId against $testUrl");
-
-			// Use Nextcloud's HTTP client
-			$httpClient = $this->httpClientService->newClient();
-
-			$response = $httpClient->get($testUrl, [
-				'auth' => [$userId, $appPassword],
-				'headers' => [
-					'OCS-APIRequest' => 'true',
-					'Accept' => 'application/json',
-				],
-				'timeout' => 10,
-			]);
-
-			$statusCode = $response->getStatusCode();
-
-			// Success is 200 OK
-			if ($statusCode === 200) {
-				$this->logger->debug("App password validation successful for user: $userId");
-				return true;
-			}
-
-			$this->logger->warning("App password validation failed for user: $userId (HTTP $statusCode)");
-			return false;
-		} catch (\Exception $e) {
-			$this->logger->error("Exception during app password validation for user $userId", [
-				'error' => $e->getMessage()
-			]);
+			$token = $this->tokenProvider->getToken($appPassword);
+		} catch (InvalidTokenException) {
+			// Covers expired and wiped tokens too — both extend
+			// InvalidTokenException — all of which are invalid for our purposes.
+			$this->logger->warning("App password not recognised for user: $userId");
 			return false;
 		}
+
+		if ($token->getUID() !== $userId) {
+			$this->logger->warning("App password belongs to a different user than: $userId");
+			return false;
+		}
+
+		$this->logger->debug("App password validation successful for user: $userId");
+		return true;
 	}
 
 	/**
