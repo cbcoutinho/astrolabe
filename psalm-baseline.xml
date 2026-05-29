@@ -132,16 +132,7 @@
   <file src="lib/Service/McpServerClient.php">
     <MixedAssignment>
       <code><![CDATA[$baseUrl]]></code>
-      <code><![CDATA[$data]]></code>
     </MixedAssignment>
-    <MixedInferredReturnType>
-      <code><![CDATA[array{success?: bool, error?: string, provisioning_required?: true}]]></code>
-      <code><![CDATA[string]]></code>
-    </MixedInferredReturnType>
-    <MixedReturnStatement>
-      <code><![CDATA[$data]]></code>
-      <code><![CDATA[$this->config->getSystemValue('mcp_server_public_url', $this->baseUrl)]]></code>
-    </MixedReturnStatement>
     <PossiblyInvalidArgument>
       <code><![CDATA[$response->getBody()]]></code>
     </PossiblyInvalidArgument>

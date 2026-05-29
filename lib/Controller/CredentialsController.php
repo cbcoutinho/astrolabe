@@ -110,6 +110,17 @@ class CredentialsController extends Controller {
 			], Http::STATUS_OK);
 		}
 
+		if (!$this->isCredentialTransportSafe($mcpServerUrl)) {
+			$this->logger->warning("Refusing to send credentials over cleartext to non-loopback MCP server URL for user: $userId");
+			return new JSONResponse([
+				'success' => true,
+				'partial_success' => true,
+				'local_storage' => true,
+				'mcp_sync' => false,
+				'message' => 'App password saved locally (MCP server URL must use https:// for non-loopback hosts)'
+			], Http::STATUS_OK);
+		}
+
 		try {
 			$httpClient = $this->httpClientService->newClient();
 
@@ -299,6 +310,28 @@ class CredentialsController extends Controller {
 	 * the app password itself (BasicAuth), mirroring storeAppPassword. Any
 	 * failure is logged and swallowed — the local credential is still removed.
 	 */
+	/**
+	 * Whether BasicAuth credentials may be transmitted to the given URL.
+	 *
+	 * HTTPS is always safe. Plaintext HTTP is only acceptable to a loopback
+	 * host (localhost / 127.0.0.1 / ::1), where the traffic never leaves the
+	 * machine — the documented default MCP deployment is http://localhost:8000.
+	 * Any other http:// target would put the app password on the wire in the
+	 * clear, so it is refused. This also satisfies SonarCloud S5332 (cleartext
+	 * transmission of sensitive data).
+	 */
+	private function isCredentialTransportSafe(string $url): bool {
+		$scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
+		if ($scheme === 'https') {
+			return true;
+		}
+		if ($scheme === 'http') {
+			$host = strtolower((string)parse_url($url, PHP_URL_HOST));
+			return in_array($host, ['localhost', '127.0.0.1', '::1', '[::1]'], true);
+		}
+		return false;
+	}
+
 	private function revokeFromMcpServer(string $userId): void {
 		$mcpServerUrl = (string)$this->config->getSystemValue('mcp_server_url', '');
 		if ($mcpServerUrl === '') {
@@ -308,6 +341,11 @@ class CredentialsController extends Controller {
 		$appPassword = $this->credentialStorage->getAppPassword($userId);
 		if ($appPassword === null || $appPassword === '') {
 			$this->logger->debug("No stored app password to revoke from MCP for user: $userId");
+			return;
+		}
+
+		if (!$this->isCredentialTransportSafe($mcpServerUrl)) {
+			$this->logger->warning("Refusing to send credentials over cleartext to non-loopback MCP server URL when revoking for user: $userId");
 			return;
 		}
 
@@ -324,7 +362,8 @@ class CredentialsController extends Controller {
 			]);
 
 			$statusCode = $response->getStatusCode();
-			if ($statusCode === 200) {
+			// MCP returns 204 No Content on a successful delete; accept any 2xx.
+			if ($statusCode >= 200 && $statusCode < 300) {
 				$this->logger->info("Revoked app password from MCP server for user: $userId");
 			} else {
 				$this->logger->warning("MCP server returned HTTP $statusCode revoking app password for user: $userId");

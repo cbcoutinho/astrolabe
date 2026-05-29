@@ -365,7 +365,12 @@ class McpServerClient {
 	 * @return string The public URL users/browsers see
 	 */
 	public function getPublicServerUrl(): string {
-		return $this->config->getSystemValue('mcp_server_public_url', $this->baseUrl);
+		// getSystemValue's default only applies when the key is *absent*; a key
+		// present with an empty-string value returns '', not $this->baseUrl. So
+		// fall back explicitly on empty, mirroring McpTokenMinter's resource
+		// resolution.
+		$publicUrl = (string)$this->config->getSystemValue('mcp_server_public_url', '');
+		return $publicUrl !== '' ? $publicUrl : $this->baseUrl;
 	}
 
 
@@ -488,12 +493,19 @@ class McpServerClient {
 				return ['success' => true];
 			}
 
+			/** @var mixed $data */
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
 				throw new \RuntimeException('Invalid JSON response from server');
 			}
 
+			// A body of literal "null" decodes to null (valid JSON), so guard
+			// like sendAndDecode() does — callers index into the return array.
+			if (!is_array($data)) {
+				return [];
+			}
+			/** @var array{success?: bool, error?: string, provisioning_required?: true} $data */
 			return $data;
 		} catch (\Exception $e) {
 			$this->logger->error('Failed to delete webhook', [
