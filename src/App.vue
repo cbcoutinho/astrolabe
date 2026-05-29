@@ -133,9 +133,6 @@
 				<!-- Error State -->
 				<NcNoteCard v-if="error" type="error" class="mcp-error">
 					<div>{{ error }}</div>
-					<div v-if="errorDetail" class="mcp-error-detail">
-						{{ errorDetail }}
-					</div>
 				</NcNoteCard>
 
 				<!-- Results -->
@@ -440,11 +437,6 @@ export default {
 			scoreThreshold: 0,
 			loading: false,
 			error: null,
-			// Secondary detail line shown under `error` — admin-only.
-			// Populated from err.response.data.refresh_error (the IdP
-			// failure reason captured by IdpTokenRefresher), which is
-			// only set by the backend when the caller is an admin.
-			errorDetail: null,
 			results: [],
 			algorithmUsed: '',
 			searched: false,
@@ -628,7 +620,6 @@ export default {
 
 			this.loading = true
 			this.error = null
-			this.errorDetail = null
 			this.searched = true
 			this.coordinates = []
 			this.queryCoords = []
@@ -667,23 +658,11 @@ export default {
 				}
 			} catch (err) {
 				console.error('Search error:', err)
-				// Check if this is an HTTP error with a response
 				if (err.response && err.response.data && err.response.data.error) {
-					// Use the specific error message from the backend. For admin
-					// users the 401 body may include a refresh_error key with
-					// the IdpTokenRefresher failure reason — surface it as a
-					// secondary detail line so the admin can diagnose without
-					// DevTools, while keeping the main banner short.
 					this.error = err.response.data.error
-					this.errorDetail = err.response.data.refresh_error || null
-				} else if (err.response && err.response.status === 401) {
-					// Unauthorized - user needs to authorize the app
-					this.error = this.t('astrolabe', 'Authorization required. Please complete Step 1 in Settings → Astrolabe.')
 				} else if (err.response && err.response.status === 503) {
-					// Service unavailable - MCP server not reachable
 					this.error = this.t('astrolabe', 'Search service unavailable. Please try again later.')
 				} else {
-					// Actual network error or unknown error
 					this.error = this.t('astrolabe', 'Network error. Please try again.')
 				}
 				this.results = []
@@ -707,11 +686,8 @@ export default {
 				}
 			} catch (err) {
 				console.error('Status error:', err)
-				// Extract error message from response if available
 				if (err.response && err.response.data && err.response.data.error) {
 					this.statusError = err.response.data.error
-				} else if (err.response && err.response.status === 401) {
-					this.statusError = this.t('astrolabe', 'Authorization required. Please complete Step 1 in Settings → Astrolabe.')
 				} else {
 					this.statusError = this.t('astrolabe', 'Network error. Please try again.')
 				}

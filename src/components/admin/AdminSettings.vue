@@ -93,9 +93,9 @@
 				</div>
 
 				<NcNoteCard v-else-if="webhooksProvisioningRequired" type="warning">
-					<p><strong>{{ t('astrolabe', 'Authorization Required') }}</strong></p>
+					<p><strong>{{ t('astrolabe', 'MCP server background access not provisioned') }}</strong></p>
 					<p>
-						{{ t('astrolabe', 'To manage webhooks, you must first authorize Astrolabe with the MCP server in your Personal Settings. This grants the MCP server an app password it can use to call Nextcloud APIs on your behalf.') }}
+						{{ t('astrolabe', 'The MCP server needs an app password to call Nextcloud APIs on behalf of an admin. Enable background indexing for this admin account in Personal Settings, then reload this page.') }}
 					</p>
 					<div class="webhook-auth-actions">
 						<NcButton variant="primary" @click="openPersonalSettings">
@@ -155,7 +155,7 @@
 						<ul>
 							<li>{{ t('astrolabe', 'The webhook_listeners app must be installed and enabled in Nextcloud') }}</li>
 							<li>{{ t('astrolabe', 'The MCP server must be reachable from your Nextcloud instance') }}</li>
-							<li>{{ t('astrolabe', 'You must have authorized Astrolabe with the MCP server (see Personal Settings)') }}</li>
+							<li>{{ t('astrolabe', 'The MCP server must have an app password for the calling admin (see Personal Settings)') }}</li>
 						</ul>
 					</NcNoteCard>
 				</template>
@@ -240,36 +240,6 @@
 				</ul>
 			</div>
 		</template>
-
-		<!-- OAuth Diagnostics — rendered outside the v-else so it stays
-		     reachable when the MCP server is unreachable. The diagnostic
-		     endpoint talks to token storage and the IdP only, so it must
-		     remain available in exactly the failure mode it's designed to
-		     investigate. -->
-		<div v-if="!loading" class="admin-section">
-			<h3>{{ t('astrolabe', 'OAuth Refresh Diagnostics') }}</h3>
-			<p class="section-description">
-				{{ t('astrolabe', 'Inspect why semantic search may be repeatedly prompting for re-authorization. Runs a real refresh against your own stored token and reports the outcome — useful when log access is restricted (e.g. Hetzner Storage Share).') }}
-			</p>
-			<div class="form-actions">
-				<NcButton
-					variant="secondary"
-					:disabled="diagnosticsLoading"
-					@click="runRefreshDiagnostic">
-					{{ diagnosticsLoading ? t('astrolabe', 'Running…') : t('astrolabe', 'Run diagnostic') }}
-				</NcButton>
-			</div>
-			<NcNoteCard
-				v-if="diagnosticsResult"
-				:type="diagnosticsResultType"
-				class="diagnostic-result">
-				<p><strong>{{ diagnosticsResult.conclusion }}</strong></p>
-				<pre>{{ JSON.stringify(diagnosticsResultDetails, null, 2) }}</pre>
-			</NcNoteCard>
-			<NcNoteCard v-if="diagnosticsError" type="error" class="diagnostic-result">
-				<p>{{ diagnosticsError }}</p>
-			</NcNoteCard>
-		</div>
 	</div>
 </template>
 
@@ -299,18 +269,12 @@ const vectorSyncStatus = ref(null)
 const vectorSyncEnabled = ref(false)
 const saving = ref(false)
 
-// OAuth refresh diagnostic state
-const diagnosticsLoading = ref(false)
-const diagnosticsResult = ref(null)
-const diagnosticsError = ref(null)
-
 // Webhook management state
 const webhooksLoading = ref(false)
 const webhooksError = ref(null)
 // Set when the MCP server reports HTTP 428 (Precondition Required) — the
-// admin has not completed Login Flow v2 provisioning yet, so the MCP server
-// has no app password to call Nextcloud APIs with. Drives the "Authorization
-// Required" CTA card below.
+// admin has not provisioned background indexing yet, so the MCP server has
+// no app password to call Nextcloud APIs with. Drives the CTA card below.
 const webhooksProvisioningRequired = ref(false)
 const webhookPresets = ref([])
 
@@ -343,28 +307,6 @@ const selectedAlgorithmOption = computed(() =>
 const selectedFusionOption = computed(() =>
 	fusionOptions.value.find(opt => opt.id === settings.value.fusion) || fusionOptions.value[0],
 )
-
-// NcNoteCard variant for the diagnostic result panel. The "concurrently
-// deleted" race (refresh_attempt === 'aborted') is unusual and worth
-// flagging visually, so it maps to 'warning' rather than the neutral
-// 'info' used for the "no stored token" early-return path (where
-// refresh_attempt is undefined).
-const diagnosticsResultType = computed(() => {
-	const attempt = diagnosticsResult.value?.refresh_attempt
-	if (attempt === 'success') return 'success'
-	if (attempt === 'failed') return 'error'
-	if (attempt === 'aborted') return 'warning'
-	return 'info'
-})
-
-// `conclusion` is already shown as the bold headline above the JSON
-// blob — strip it from the details payload so the same sentence does
-// not appear twice in the same card.
-const diagnosticsResultDetails = computed(() => {
-	if (!diagnosticsResult.value) return null
-	const { conclusion, ...rest } = diagnosticsResult.value
-	return rest
-})
 
 // Methods
 async function loadServerStatus() {
@@ -505,31 +447,6 @@ async function toggleWebhookPreset(preset) {
 
 function openPersonalSettings() {
 	window.location.href = generateUrl('/settings/user/astrolabe')
-}
-
-async function runRefreshDiagnostic() {
-	diagnosticsLoading.value = true
-	diagnosticsResult.value = null
-	diagnosticsError.value = null
-
-	try {
-		// POST because the diagnostic mutates state — it stores a rotated
-		// refresh_token on success (under withTokenLock to stay in sync
-		// with the background refresher). GET would be both wrong per
-		// HTTP semantics and CSRF-triggerable (Nextcloud's CSRF middleware
-		// doesn't gate GET).
-		const response = await axios.post(generateUrl('/apps/astrolabe/api/admin/refresh-diagnostic'))
-		if (response.data.success) {
-			diagnosticsResult.value = response.data.diagnostic
-		} else {
-			diagnosticsError.value = response.data.error || t('astrolabe', 'Diagnostic returned no result')
-		}
-	} catch (err) {
-		console.error('Refresh diagnostic failed:', err)
-		diagnosticsError.value = err.response?.data?.error || err.message || t('astrolabe', 'Network error')
-	} finally {
-		diagnosticsLoading.value = false
-	}
 }
 
 function formatUptime(seconds) {

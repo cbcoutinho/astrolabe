@@ -17,11 +17,8 @@ use Psr\Log\LoggerInterface;
 /**
  * Unit tests for AstrolabeAdminSettingsListener.
  *
- * Focuses on write-time validation of astrolabe_internal_url: the save
- * itself must always succeed, but invalid values should produce a log
- * warning so managed-NC operators see the misconfiguration immediately
- * rather than discovering the silent http://localhost fallback at OAuth
- * runtime.
+ * After the auth refactor the listener handles three system-config fields:
+ * mcp_server_url, mcp_server_public_url, astrolabe_client_id.
  */
 final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	private IConfig&MockObject $config;
@@ -36,90 +33,44 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	}
 
 	/**
-	 * @dataProvider provideInvalidInternalUrls
+	 * @dataProvider provideKnownFields
 	 */
-	public function testInvalidInternalUrlLogsWarningOnSave(string $value): void {
-		$warningSeen = false;
-		$this->logger->method('warning')
-			->willReturnCallback(function (string $message) use (&$warningSeen): void {
-				if (str_contains($message, 'astrolabe_internal_url set to a value that will fall back')) {
-					$warningSeen = true;
-				}
-			});
-
-		// Save still succeeds — config.setSystemValue gets the raw value.
+	public function testRoundTripsKnownFields(string $fieldId, string $value): void {
 		$this->config->expects($this->once())
 			->method('setSystemValue')
-			->with('astrolabe_internal_url', $value);
+			->with($fieldId, $value);
 
-		$this->listener->handle($this->buildEvent('astrolabe_internal_url', $value));
+		$saveEvent = $this->buildSetEvent($fieldId, $value);
+		$this->listener->handle($saveEvent);
+		$this->assertTrue($saveEvent->isPropagationStopped());
 
-		$this->assertTrue($warningSeen, 'Expected fallback-warning to be logged for invalid scheme');
-	}
-
-	/**
-	 * @return array<string, array{string}>
-	 */
-	public static function provideInvalidInternalUrls(): array {
-		return [
-			'bare hostname' => ['cloud.example.com'],
-			'ftp scheme' => ['ftp://example.com'],
-			'file scheme' => ['file:///etc/passwd'],
-			'malformed' => ['not-a-url'],
-		];
-	}
-
-	/**
-	 * @dataProvider provideValidInternalUrls
-	 */
-	public function testValidInternalUrlDoesNotLogFallbackWarning(string $value): void {
-		$this->logger->method('warning')
-			->willReturnCallback(function (string $message): void {
-				$this->assertStringNotContainsString(
-					'astrolabe_internal_url set to a value that will fall back',
-					$message,
-					'Valid http/https URL must not trigger the fallback warning',
-				);
-			});
-
-		$this->config->expects($this->once())
-			->method('setSystemValue')
-			->with('astrolabe_internal_url', $value);
-
-		$this->listener->handle($this->buildEvent('astrolabe_internal_url', $value));
-	}
-
-	/**
-	 * @return array<string, array{string}>
-	 */
-	public static function provideValidInternalUrls(): array {
-		return [
-			'https URL' => ['https://cloud.example.com'],
-			'http URL' => ['http://localhost'], // NOSONAR
-			'http with port' => ['http://nextcloud.default.svc:8080'], // NOSONAR
-			'empty string (will skip validation)' => [''],
-			'whitespace only (will skip validation)' => ['   '],
-		];
-	}
-
-	public function testReadReturnsConfiguredInternalUrl(): void {
 		$this->config->expects($this->once())
 			->method('getSystemValue')
-			->with('astrolabe_internal_url', '')
-			->willReturn('https://nc.example.com');
+			->with($fieldId, '')
+			->willReturn($value);
 
-		$event = $this->buildGetEvent('astrolabe_internal_url');
-		$this->listener->handle($event);
-
-		$this->assertSame('https://nc.example.com', $event->getValue());
+		$readEvent = $this->buildGetEvent($fieldId);
+		$this->listener->handle($readEvent);
+		$this->assertSame($value, $readEvent->getValue());
 	}
 
-	public function testUnknownFieldDoesNotStopPropagation(): void {
-		// Unknown field IDs must not be silently consumed by this listener —
-		// otherwise a future rename would drop saves with no log trail.
+	/**
+	 * @return array<string, array{string, string}>
+	 */
+	public static function provideKnownFields(): array {
+		return [
+			'internal MCP URL' => ['mcp_server_url', 'http://localhost:8000'],
+			'public MCP URL' => ['mcp_server_public_url', 'https://mcp.example.com'],
+			'OIDC client identifier' => ['astrolabe_client_id', 'astrolabe-client'],
+		];
+	}
+
+	public function testUnknownFieldDoesNotStopPropagationOnSave(): void {
+		// Unknown field IDs must not be silently consumed — otherwise a
+		// future rename would drop saves with no log trail.
 		$this->config->expects($this->never())->method('setSystemValue');
 
-		$event = $this->buildEvent('some_unknown_field', 'whatever');
+		$event = $this->buildSetEvent('some_unknown_field', 'whatever');
 		$this->listener->handle($event);
 
 		$this->assertFalse(
@@ -128,25 +79,54 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 		);
 	}
 
-	public function testInvalidUrlWarningDoesNotBlockOtherFields(): void {
-		// Other fields must not trigger the internal-url validation path.
-		$this->logger->method('warning')
-			->willReturnCallback(function (string $message): void {
-				$this->assertStringNotContainsString(
-					'astrolabe_internal_url',
-					$message,
-					'mcp_server_url save must not produce an internal-url warning',
-				);
-			});
+	public function testUnknownFieldIsIgnoredOnRead(): void {
+		// The listener must not touch config for unknown field IDs;
+		// another handler in the chain may own the field.
+		$this->config->expects($this->never())->method('getSystemValue');
 
-		$this->config->expects($this->once())
-			->method('setSystemValue')
-			->with('mcp_server_url', 'ftp://example.com');
+		$event = $this->buildGetEvent('some_unknown_field');
+		$this->listener->handle($event);
 
-		$this->listener->handle($this->buildEvent('mcp_server_url', 'ftp://example.com'));
+		// DeclarativeSettingsGetValueEvent::getValue() throws when nothing
+		// has set the value yet, which is the contract for "this handler
+		// didn't claim the field".
+		$this->expectException(\Exception::class);
+		$event->getValue();
 	}
 
-	private function buildEvent(string $fieldId, mixed $value): DeclarativeSettingsSetValueEvent {
+	public function testIgnoresEventForDifferentApp(): void {
+		$this->config->expects($this->never())->method('setSystemValue');
+
+		$user = $this->createMock(IUser::class);
+		$event = new DeclarativeSettingsSetValueEvent(
+			$user,
+			'someotherapp',
+			'astrolabe-admin-settings',
+			'mcp_server_url',
+			'https://other',
+		);
+
+		$this->listener->handle($event);
+		$this->assertFalse($event->isPropagationStopped());
+	}
+
+	public function testIgnoresEventForDifferentForm(): void {
+		$this->config->expects($this->never())->method('setSystemValue');
+
+		$user = $this->createMock(IUser::class);
+		$event = new DeclarativeSettingsSetValueEvent(
+			$user,
+			Application::APP_ID,
+			'some-other-form',
+			'mcp_server_url',
+			'https://other',
+		);
+
+		$this->listener->handle($event);
+		$this->assertFalse($event->isPropagationStopped());
+	}
+
+	private function buildSetEvent(string $fieldId, mixed $value): DeclarativeSettingsSetValueEvent {
 		$user = $this->createMock(IUser::class);
 		return new DeclarativeSettingsSetValueEvent(
 			$user,

@@ -51,8 +51,6 @@ class Admin implements ISettings {
 		$serverUrl = $this->config->getSystemValue('mcp_server_url', '');
 		$clientId = $this->config->getSystemValue('astrolabe_client_id', '');
 		$clientIdConfigured = !empty($clientId);
-		$clientSecret = $this->config->getSystemValue('astrolabe_client_secret', '');
-		$clientSecretConfigured = !empty($clientSecret);
 
 		// Load search settings from app config
 		$searchSettings = [
@@ -84,7 +82,6 @@ class Admin implements ISettings {
 			'config' => [
 				'serverUrl' => $serverUrl,
 				'clientIdConfigured' => $clientIdConfigured,
-				'clientSecretConfigured' => $clientSecretConfigured,
 			],
 			'searchSettings' => $searchSettings,
 		]);

@@ -1,14 +1,71 @@
 /**
  * Personal settings page JavaScript for Astrolabe.
  *
- * Loads styles for the personal settings page and handles form interactions.
+ * Handles the one-click background-indexing opt-in (provision + revoke).
+ * Provisioning mints a dedicated app password from the current Nextcloud
+ * session via the core `getapppassword` OCS endpoint and hands it to the
+ * MCP server — the user never copies or pastes a credential. Search itself
+ * is handled by App.vue and the unified search provider; this script does
+ * not touch any OAuth flow.
  */
 
 import './styles/settings.css'
 
-// Wait for DOM to be ready
+// Mint a dedicated app password from the current session (no copy-paste) and
+// hand it to the MCP server via the existing storeAppPassword endpoint.
+// core/getapppassword exchanges the active *login* session for a fresh app
+// password. Requires the OCS-APIRequest header + CSRF token.
+async function mintSessionAppPassword() {
+	const ocsBase = OC.linkToOCS('core', 2) // -> <webroot>/ocs/v2.php/core/
+	const resp = await fetch(ocsBase + 'getapppassword', {
+		method: 'GET',
+		headers: {
+			'OCS-APIRequest': 'true',
+			Accept: 'application/json',
+			requesttoken: OC.requestToken,
+		},
+	})
+	if (!resp.ok) {
+		throw new Error('getapppassword returned ' + resp.status)
+	}
+	const data = await resp.json()
+	const appPassword = data?.ocs?.data?.apppassword
+	if (!appPassword) {
+		throw new Error('getapppassword response missing apppassword')
+	}
+	// getapppassword names the new token after the request User-Agent (the
+	// browser). Give it a recognisable name in Security settings instead.
+	// Best-effort: the credential works regardless of its display name.
+	await renameNewestAppToken('Astrolabe Background Sync').catch(() => {})
+	return appPassword
+}
+
+// Rename the most recently created app token (the one core/getapppassword just
+// minted) via the Security-settings authtokens API. Best-effort.
+async function renameNewestAppToken(name) {
+	const base = OC.generateUrl('/settings/personal/authtokens')
+	const listResp = await fetch(base, {
+		headers: { requesttoken: OC.requestToken, Accept: 'application/json' },
+	})
+	if (!listResp.ok) {
+		return
+	}
+	const tokens = await listResp.json()
+	if (!Array.isArray(tokens) || tokens.length === 0) {
+		return
+	}
+	const newest = tokens.reduce((a, b) => (b.id > a.id ? b : a), tokens[0])
+	await fetch(base + '/' + newest.id, {
+		method: 'PUT',
+		headers: {
+			requesttoken: OC.requestToken,
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ name }),
+	})
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-	// Helper function to show error notifications
 	function showError(message) {
 		if (typeof OC !== 'undefined' && OC.Notification) {
 			OC.Notification.showTemporary(message, { type: 'error' })
@@ -25,69 +82,50 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	}
 
-	// App password form with error handling
-	const appPasswordForm = document.getElementById('mcp-app-password-form')
-	if (appPasswordForm) {
-		appPasswordForm.addEventListener('submit', async function(e) {
-			e.preventDefault()
-			const submitButton = document.getElementById('mcp-save-app-password-button')
-			const originalText = submitButton.textContent
+	const enableButton = document.getElementById('mcp-enable-background-button')
+	if (enableButton) {
+		enableButton.addEventListener('click', async function() {
+			const originalText = enableButton.textContent
+			const storeUrl = enableButton.dataset.storeUrl
 
 			try {
-				submitButton.disabled = true
-				submitButton.textContent = t('astrolabe', 'Saving...')
+				enableButton.disabled = true
+				enableButton.textContent = t('astrolabe', 'Enabling...')
 
-				const formData = new FormData(appPasswordForm)
-				const response = await fetch(appPasswordForm.action, {
+				const appPassword = await mintSessionAppPassword()
+
+				const formData = new FormData()
+				formData.append('appPassword', appPassword)
+				const response = await fetch(storeUrl, {
 					method: 'POST',
+					headers: { requesttoken: OC.requestToken },
 					body: formData,
 				})
 
 				const result = await response.json()
 
 				if (response.ok && result.success) {
-					showSuccess(t('astrolabe', 'Background sync access successfully provisioned!'))
+					showSuccess(t('astrolabe', 'Background indexing enabled.'))
 					setTimeout(() => window.location.reload(), 1000)
 				} else {
-					showError(result.error || t('astrolabe', 'Failed to save app password. Please check that it is valid.'))
+					showError(result.error || t('astrolabe', 'Failed to enable background indexing.'))
 				}
 			} catch (error) {
-				console.error('App password provisioning error:', error)
-				showError(t('astrolabe', 'Unable to connect to server. Please check that the MCP server is running and try again.'))
+				console.error('Background indexing provisioning error:', error)
+				showError(t('astrolabe', 'Could not enable background indexing. Please try again.'))
 			} finally {
-				submitButton.disabled = false
-				submitButton.textContent = originalText
+				enableButton.disabled = false
+				enableButton.textContent = originalText
 			}
 		})
 	}
 
-	// Revoke form confirmation
-	const revokeForm = document.getElementById('mcp-revoke-form')
-	if (revokeForm) {
-		revokeForm.addEventListener('submit', function(e) {
-			if (!confirm(t('astrolabe', 'Are you sure you want to disable indexing? Your content will be removed from semantic search.'))) {
-				e.preventDefault()
-			}
-		})
-	}
-
-	// Disconnect form confirmation
-	const disconnectForm = document.getElementById('mcp-disconnect-form')
-	if (disconnectForm) {
-		disconnectForm.addEventListener('submit', function(e) {
-			if (!confirm(t('astrolabe', 'Are you sure you want to disconnect from Astrolabe? You will need to re-authorize to use semantic search.'))) {
-				e.preventDefault()
-			}
-		})
-	}
-
-	// Revoke background access form with error handling
 	const revokeBackgroundForm = document.getElementById('mcp-revoke-background-form')
 	if (revokeBackgroundForm) {
 		revokeBackgroundForm.addEventListener('submit', async function(e) {
 			e.preventDefault()
 
-			if (!confirm(t('astrolabe', 'Are you sure you want to revoke background sync access? The MCP server will no longer be able to access your Nextcloud data for background operations.'))) {
+			if (!confirm(t('astrolabe', 'Disable background indexing? The MCP server will lose access to your Nextcloud files.'))) {
 				return
 			}
 
@@ -96,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 			try {
 				submitButton.disabled = true
-				submitButton.textContent = t('astrolabe', 'Revoking...')
+				submitButton.textContent = t('astrolabe', 'Disabling...')
 
 				const formData = new FormData(revokeBackgroundForm)
 				const response = await fetch(revokeBackgroundForm.action, {
@@ -107,10 +145,10 @@ document.addEventListener('DOMContentLoaded', function() {
 				const result = await response.json()
 
 				if (response.ok && result.success) {
-					showSuccess(t('astrolabe', 'Background sync access revoked successfully.'))
+					showSuccess(t('astrolabe', 'Background indexing disabled.'))
 					setTimeout(() => window.location.reload(), 1000)
 				} else {
-					showError(result.error || t('astrolabe', 'Failed to revoke background sync access.'))
+					showError(result.error || t('astrolabe', 'Failed to disable background indexing.'))
 				}
 			} catch (error) {
 				console.error('Revoke error:', error)

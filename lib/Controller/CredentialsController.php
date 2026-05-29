@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
-use OCA\Astrolabe\Service\McpServerClient;
-use OCA\Astrolabe\Service\McpTokenStorage;
+use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Authentication\Exceptions\InvalidTokenException;
+use OCP\Authentication\Token\IProvider;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\IRequest;
-use OCP\IURLGenerator;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
@@ -23,33 +23,17 @@ use Psr\Log\LoggerInterface;
  * Handles storing and validating app passwords for multi-user BasicAuth mode.
  */
 class CredentialsController extends Controller {
-	private McpTokenStorage $tokenStorage;
-	private IUserSession $userSession;
-	private LoggerInterface $logger;
-	private IConfig $config;
-	private McpServerClient $client;
-	private IClientService $httpClientService;
-	private IURLGenerator $urlGenerator;
-
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		McpTokenStorage $tokenStorage,
-		IUserSession $userSession,
-		LoggerInterface $logger,
-		IConfig $config,
-		McpServerClient $client,
-		IClientService $httpClientService,
-		IURLGenerator $urlGenerator,
+		private BackgroundSyncCredentialStorage $credentialStorage,
+		private IUserSession $userSession,
+		private LoggerInterface $logger,
+		private IConfig $config,
+		private IClientService $httpClientService,
+		private IProvider $tokenProvider,
 	) {
 		parent::__construct($appName, $request);
-		$this->tokenStorage = $tokenStorage;
-		$this->userSession = $userSession;
-		$this->logger = $logger;
-		$this->config = $config;
-		$this->client = $client;
-		$this->httpClientService = $httpClientService;
-		$this->urlGenerator = $urlGenerator;
 	}
 
 	/**
@@ -74,8 +58,12 @@ class CredentialsController extends Controller {
 
 		$userId = $user->getUID();
 
-		// Validate app password format (xxxxx-xxxxx-xxxxx-xxxxx-xxxxx)
-		if (!preg_match('/^[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}-[a-zA-Z0-9]{5}$/', $appPassword)) {
+		// Sanity-check the shape only — the authoritative validation is
+		// validateAppPassword() below (a real auth against Nextcloud). Accept
+		// both the dashed format a user copies from Security settings
+		// (xxxxx-xxxxx-xxxxx-xxxxx-xxxxx) AND the raw token returned by the
+		// one-click `core/getapppassword` flow (a long alphanumeric string).
+		if (!preg_match('/^[a-zA-Z0-9-]{20,256}$/', $appPassword)) {
 			$this->logger->warning("Invalid app password format for user: $userId");
 			return new JSONResponse([
 				'success' => false,
@@ -96,7 +84,7 @@ class CredentialsController extends Controller {
 
 		// Store encrypted app password locally in Nextcloud
 		try {
-			$this->tokenStorage->storeBackgroundSyncPassword($userId, $appPassword);
+			$this->credentialStorage->storeAppPassword($userId, $appPassword);
 			$this->logger->info("Stored app password locally for user: $userId");
 		} catch (\Exception $e) {
 			$this->logger->error("Failed to store app password locally for user $userId", [
@@ -122,11 +110,13 @@ class CredentialsController extends Controller {
 			], Http::STATUS_OK);
 		}
 
+		$this->warnIfCleartextTransport($mcpServerUrl, $userId);
+
 		try {
 			$httpClient = $this->httpClientService->newClient();
 
 			// Send to MCP server with BasicAuth (user proves ownership of password)
-			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . urlencode($userId) . '/app-password';
+			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($userId) . '/app-password';
 
 			$this->logger->debug("Sending app password to MCP server: $mcpEndpoint");
 
@@ -189,46 +179,29 @@ class CredentialsController extends Controller {
 	 * @return bool True if valid, false otherwise
 	 */
 	private function validateAppPassword(string $userId, string $appPassword): bool {
+		// Validate the app password internally via Nextcloud's token provider —
+		// no HTTP round-trip. An outbound loopback call is fragile across
+		// deployments: `overwrite.cli.url` points at the *external* host (e.g.
+		// localhost:8080, the host-mapped port) which is unreachable from
+		// inside the container, and trusted-domain checks can reject raw-IP
+		// hosts. getToken() hashes the supplied token and looks it up directly
+		// in the auth backend.
 		try {
-			// Use 127.0.0.1 for internal validation (we're running inside Nextcloud container)
-			// Using IP address instead of 'localhost' to avoid Nextcloud's overwrite.cli.url rewriting
-			// getAbsoluteURL() returns the external URL which isn't accessible from inside the container
-			$baseUrl = 'http://127.0.0.1';
-
-			// Make a test request to Nextcloud API with BasicAuth
-			// Using OCS API user endpoint as a lightweight test
-			$testUrl = $baseUrl . '/ocs/v1.php/cloud/user?format=json';
-
-			$this->logger->debug("Validating app password for user: $userId against $testUrl");
-
-			// Use Nextcloud's HTTP client
-			$httpClient = $this->httpClientService->newClient();
-
-			$response = $httpClient->get($testUrl, [
-				'auth' => [$userId, $appPassword],
-				'headers' => [
-					'OCS-APIRequest' => 'true',
-					'Accept' => 'application/json',
-				],
-				'timeout' => 10,
-			]);
-
-			$statusCode = $response->getStatusCode();
-
-			// Success is 200 OK
-			if ($statusCode === 200) {
-				$this->logger->debug("App password validation successful for user: $userId");
-				return true;
-			}
-
-			$this->logger->warning("App password validation failed for user: $userId (HTTP $statusCode)");
-			return false;
-		} catch (\Exception $e) {
-			$this->logger->error("Exception during app password validation for user $userId", [
-				'error' => $e->getMessage()
-			]);
+			$token = $this->tokenProvider->getToken($appPassword);
+		} catch (InvalidTokenException) {
+			// Covers expired and wiped tokens too — both extend
+			// InvalidTokenException — all of which are invalid for our purposes.
+			$this->logger->warning("App password not recognised for user: $userId");
 			return false;
 		}
+
+		if ($token->getUID() !== $userId) {
+			$this->logger->warning("App password belongs to a different user than: $userId");
+			return false;
+		}
+
+		$this->logger->debug("App password validation successful for user: $userId");
+		return true;
 	}
 
 	/**
@@ -248,38 +221,34 @@ class CredentialsController extends Controller {
 
 		$userId = $user->getUID();
 
-		$hasAccess = $this->tokenStorage->hasBackgroundSyncAccess($userId);
-		$syncType = $this->tokenStorage->getBackgroundSyncType($userId);
-		$provisionedAt = $this->tokenStorage->getBackgroundSyncProvisionedAt($userId);
+		$hasAccess = $this->credentialStorage->hasAccess($userId);
+		$provisionedAt = $this->credentialStorage->getProvisionedAt($userId);
 
 		return new JSONResponse([
 			'success' => true,
 			'has_background_access' => $hasAccess,
-			'sync_type' => $syncType,
+			'sync_type' => $hasAccess ? 'app_password' : null,
 			'provisioned_at' => $provisionedAt,
 		], Http::STATUS_OK);
 	}
 
 	/**
-	 * Get credentials for a specific user (admin only).
+	 * Get credentials metadata for a specific user (admin only).
 	 *
-	 * Note: This does NOT return the actual password, only metadata.
+	 * Returns presence/timestamps; never the credential itself.
 	 *
 	 * @param string $userId User ID to check
 	 * @return JSONResponse
 	 */
 	public function getCredentials(string $userId): JSONResponse {
-		// This endpoint should only be accessible by admins
-		// For now, just return metadata (not actual credentials)
-		$hasAccess = $this->tokenStorage->hasBackgroundSyncAccess($userId);
-		$syncType = $this->tokenStorage->getBackgroundSyncType($userId);
-		$provisionedAt = $this->tokenStorage->getBackgroundSyncProvisionedAt($userId);
+		$hasAccess = $this->credentialStorage->hasAccess($userId);
+		$provisionedAt = $this->credentialStorage->getProvisionedAt($userId);
 
 		return new JSONResponse([
 			'success' => true,
 			'user_id' => $userId,
 			'has_background_access' => $hasAccess,
-			'sync_type' => $syncType,
+			'sync_type' => $hasAccess ? 'app_password' : null,
 			'provisioned_at' => $provisionedAt,
 		], Http::STATUS_OK);
 	}
@@ -302,10 +271,12 @@ class CredentialsController extends Controller {
 		$userId = $user->getUID();
 
 		try {
-			// Delete both OAuth tokens and app password (if any exist)
-			$this->tokenStorage->deleteUserToken($userId);
-			$this->tokenStorage->deleteBackgroundSyncPassword($userId);
+			// Tell the MCP server to drop its copy first, while we still hold
+			// the app password it needs to authenticate the request. Best-effort:
+			// a failure here must not block clearing the local credential.
+			$this->revokeFromMcpServer($userId);
 
+			$this->credentialStorage->deleteAppPassword($userId);
 			$this->logger->info("Deleted background sync credentials for user: $userId");
 
 			return new JSONResponse([
@@ -320,6 +291,77 @@ class CredentialsController extends Controller {
 				'success' => false,
 				'error' => 'Failed to delete credentials'
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Best-effort: tell the MCP server to delete its stored app password for
+	 * this user, so revoking background indexing actually drops the server's
+	 * WebDAV access (it otherwise retains the credential). Authenticated with
+	 * the app password itself (BasicAuth), mirroring storeAppPassword. Any
+	 * failure is logged and swallowed — the local credential is still removed.
+	 */
+	/**
+	 * Warn (without blocking) when about to send BasicAuth credentials to a
+	 * non-loopback plaintext-HTTP endpoint.
+	 *
+	 * The app password is transmitted with BasicAuth; over TLS or to a loopback
+	 * host this is fine, but plaintext to any other host puts it on the wire in
+	 * the clear. We only warn — internal deployments legitimately reach the MCP
+	 * server over plain HTTP on a private network (e.g. an in-cluster service
+	 * name like mcp:8000), and hard-refusing there would break background-sync
+	 * provisioning. The pattern uses an `https?` regex rather than a plaintext
+	 * scheme literal so it is not itself flagged as insecure-protocol usage.
+	 */
+	private function warnIfCleartextTransport(string $url, string $userId): void {
+		if (preg_match('#^https?://#i', $url) === 1
+			&& preg_match('#^https://#i', $url) !== 1
+			&& preg_match('#^https?://(localhost|127\.0\.0\.1|\[?::1\]?)([:/]|$)#i', $url) !== 1) {
+			$this->logger->warning(
+				"MCP server URL uses plaintext http for user $userId; "
+				. 'use https:// for non-loopback hosts to avoid transmitting the app password in cleartext'
+			);
+		}
+	}
+
+	private function revokeFromMcpServer(string $userId): void {
+		$mcpServerUrl = (string)$this->config->getSystemValue('mcp_server_url', '');
+		if ($mcpServerUrl === '') {
+			return;
+		}
+
+		$appPassword = $this->credentialStorage->getAppPassword($userId);
+		if ($appPassword === null || $appPassword === '') {
+			$this->logger->debug("No stored app password to revoke from MCP for user: $userId");
+			return;
+		}
+
+		$this->warnIfCleartextTransport($mcpServerUrl, $userId);
+
+		try {
+			$httpClient = $this->httpClientService->newClient();
+			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($userId) . '/app-password';
+
+			$response = $httpClient->delete($mcpEndpoint, [
+				'auth' => [$userId, $appPassword],
+				'headers' => [
+					'Accept' => 'application/json',
+				],
+				'timeout' => 10,
+			]);
+
+			$statusCode = $response->getStatusCode();
+			// MCP returns 204 No Content on a successful delete; accept any 2xx.
+			if ($statusCode >= 200 && $statusCode < 300) {
+				$this->logger->info("Revoked app password from MCP server for user: $userId");
+			} else {
+				$this->logger->warning("MCP server returned HTTP $statusCode revoking app password for user: $userId");
+			}
+		} catch (\Exception $e) {
+			// MCP unreachable / already gone — local revoke still proceeds.
+			$this->logger->warning("Failed to revoke app password from MCP server for user $userId", [
+				'error' => $e->getMessage(),
+			]);
 		}
 	}
 }

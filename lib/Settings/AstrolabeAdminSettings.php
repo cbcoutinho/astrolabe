@@ -22,40 +22,49 @@ class AstrolabeAdminSettings implements IDeclarativeSettingsForm {
 			'section_id' => 'astrolabe',
 			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL,
 			'title' => $this->l->t('MCP Server Configuration'),
-			'description' => $this->l->t('Configure the connection to your Nextcloud MCP Server'),
+			'description' => $this->l->t(
+				'Astrolabe authenticates to the MCP server with short-lived JWTs '
+				. "minted by the Nextcloud 'oidc' app for the current session user. "
+				. "Register an OIDC client in the 'oidc' app whose resource URL "
+				. 'matches your MCP server, then enter its client ID below.'
+			),
 			'doc_url' => 'https://github.com/cbcoutinho/nextcloud-mcp-server',
 
 			'fields' => [
 				[
 					'id' => 'mcp_server_url',
-					'title' => $this->l->t('MCP Server URL'),
-					'description' => $this->l->t('The base URL of your Nextcloud MCP Server instance (e.g., http://localhost:8000)'),
+					'title' => $this->l->t('MCP Server URL (internal)'),
+					'description' => $this->l->t(
+						'Base URL Astrolabe uses to reach the MCP server (e.g. http://localhost:8000). '
+						. 'Use https:// when background indexing is enabled — the user app password '
+						. 'is sent to this URL, so an http:// endpoint would transmit it unencrypted.'
+					),
 					'type' => DeclarativeSettingsTypes::URL,
 					'placeholder' => 'http://localhost:8000',
 					'default' => '',
 				],
 				[
-					'id' => 'astrolabe_client_id',
-					'title' => $this->l->t('OAuth Client ID'),
-					'description' => $this->l->t('The OAuth client ID for Astrolabe (required for multi-user deployments)'),
-					'type' => DeclarativeSettingsTypes::TEXT,
-					'placeholder' => $this->l->t('Enter OAuth client ID'),
-					'default' => '',
-				],
-				[
-					'id' => 'astrolabe_client_secret',
-					'title' => $this->l->t('OAuth Client Secret'),
-					'description' => $this->l->t('Optional: Client secret for OAuth. If not set, PKCE will be used as fallback.'),
-					'type' => DeclarativeSettingsTypes::PASSWORD,
-					'placeholder' => $this->l->t('Enter client secret (optional)'),
-					'default' => '',
-				],
-				[
-					'id' => 'astrolabe_internal_url',
-					'title' => $this->l->t('Nextcloud OIDC base URL (optional)'),
-					'description' => $this->l->t('Base URL Astrolabe uses to reach this Nextcloud\'s OIDC endpoints. Leave empty for self-hosted deployments where Astrolabe runs alongside Nextcloud (defaults to http://localhost). For managed Nextcloud, set this to your public Nextcloud URL (e.g. https://cloud.example.com).'),
+					'id' => 'mcp_server_public_url',
+					'title' => $this->l->t('MCP Server URL (public)'),
+					'description' => $this->l->t(
+						'Public URL the MCP server is reachable at from the outside world. '
+						. 'Used as the `aud` claim of minted access tokens (RFC 8707 resource indicator). '
+						. 'Leave empty to use the internal URL above.'
+					),
 					'type' => DeclarativeSettingsTypes::URL,
-					'placeholder' => 'https://cloud.example.com',
+					'placeholder' => 'https://mcp.example.com',
+					'default' => '',
+				],
+				[
+					'id' => 'astrolabe_client_id',
+					'title' => $this->l->t('OIDC client identifier'),
+					'description' => $this->l->t(
+						"Identifier of the OIDC client registered in the Nextcloud 'oidc' app. "
+						. "Astrolabe dispatches OIDCIdentityProvider's TokenGenerationRequestEvent "
+						. 'against this client to mint per-user access tokens for the MCP server.'
+					),
+					'type' => DeclarativeSettingsTypes::TEXT,
+					'placeholder' => $this->l->t('Enter OIDC client ID'),
 					'default' => '',
 				],
 			],

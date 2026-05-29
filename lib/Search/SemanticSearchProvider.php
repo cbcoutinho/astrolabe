@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Search;
 
 use OCA\Astrolabe\AppInfo\Application;
-use OCA\Astrolabe\Service\IdpTokenRefresher;
 use OCA\Astrolabe\Service\McpServerClient;
-use OCA\Astrolabe\Service\McpTokenStorage;
+use OCA\Astrolabe\Service\McpTokenMinter;
+use OCA\Astrolabe\Service\McpTokenMintException;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\Files\FileInfo;
 use OCP\Files\IMimeTypeDetector;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IPreview;
@@ -30,19 +31,25 @@ use Psr\Log\LoggerInterface;
  * (notes, files, calendar, deck cards).
  *
  * Security: Results are filtered server-side to only include documents
- * owned by the searching user. User identity comes from OAuth token.
+ * the searching user has access to. User identity comes from the
+ * session-derived JWT minted by McpTokenMinter for the current
+ * Nextcloud session user.
  */
 class SemanticSearchProvider implements IProvider {
+	/** Seconds to cache the (non-user-specific) MCP status across keystrokes. */
+	private const STATUS_CACHE_TTL = 30;
+	private const STATUS_CACHE_KEY = 'mcp_status';
+
 	public function __construct(
 		private McpServerClient $client,
-		private McpTokenStorage $tokenStorage,
-		private IdpTokenRefresher $tokenRefresher,
+		private McpTokenMinter $tokenMinter,
 		private IConfig $config,
 		private IL10N $l10n,
 		private IURLGenerator $urlGenerator,
 		private IMimeTypeDetector $mimeTypeDetector,
 		private IPreview $previewManager,
 		private LoggerInterface $logger,
+		private ICacheFactory $cacheFactory,
 	) {
 	}
 
@@ -75,7 +82,8 @@ class SemanticSearchProvider implements IProvider {
 	 * Execute semantic search via MCP server.
 	 *
 	 * SECURITY: Results are filtered server-side to only include documents
-	 * owned by the searching user. User identity comes from OAuth token.
+	 * the searching user has access to. User identity comes from a JWT
+	 * minted on-demand from the Nextcloud session.
 	 */
 	public function search(IUser $user, ISearchQuery $query): SearchResult {
 		$term = $query->getTerm();
@@ -89,35 +97,27 @@ class SemanticSearchProvider implements IProvider {
 
 		$userId = $user->getUID();
 
-		// Create refresh callback matching ApiController pattern
-		/** @return array{access_token: string, refresh_token: string, expires_in: int}|null */
-		$refreshCallback = function (string $refreshToken): ?array {
-			$newTokenData = $this->tokenRefresher->refreshAccessToken($refreshToken);
-
-			if ($newTokenData === null) {
-				return null;
-			}
-
-			return [
-				'access_token' => $newTokenData['access_token'],
-				'refresh_token' => $newTokenData['refresh_token'] ?? $refreshToken,
-				'expires_in' => $newTokenData['expires_in'] ?? 3600,
-			];
-		};
-
-		// Get OAuth token for user with automatic refresh
-		$accessToken = $this->tokenStorage->getAccessToken($userId, $refreshCallback);
-		if ($accessToken === null) {
-			// User hasn't authorized the app yet - return empty results
-			$this->logger->debug('No OAuth token for user in semantic search', [
+		// Mint a session-derived JWT for the MCP server. Unified Search
+		// runs on every keystroke in the global search bar, so a mint
+		// failure (e.g. the `oidc` app is broken or the client is missing
+		// from admin settings) must NOT raise — log and return empty so
+		// the rest of unified search keeps working.
+		try {
+			$accessToken = $this->tokenMinter->mintForUser($userId);
+		} catch (McpTokenMintException $e) {
+			$this->logger->debug('Skipping semantic search: token mint failed', [
 				'user_id' => $userId,
+				'error' => $e->getMessage(),
 			]);
 			return SearchResult::complete($this->getName(), []);
 		}
 
 		// Check if MCP server is available and vector sync enabled
-		$status = $this->client->getStatus();
-		if (!empty($status['error']) || !($status['vector_sync_enabled'] ?? false)) {
+		// Cached briefly: Unified Search fires on every keystroke and the MCP
+		// status is neither user-specific nor fast-changing, so this avoids an
+		// outbound HTTP GET per character.
+		$status = $this->getCachedStatus();
+		if (!empty($status['error']) || ($status['vector_sync_enabled'] ?? false) !== true) {
 			$this->logger->debug('MCP server not available or vector sync disabled', [
 				'status' => $status,
 			]);
@@ -189,6 +189,33 @@ class SemanticSearchProvider implements IProvider {
 		}
 
 		return SearchResult::complete($this->getName(), $entries);
+	}
+
+	/**
+	 * Fetch the MCP server status, cached across keystrokes.
+	 *
+	 * The status (server reachable + vector_sync_enabled) is global, not
+	 * per-user, and does not change between keystrokes, yet the provider runs
+	 * on every keystroke of the global search bar. Cache a healthy status for
+	 * a short TTL to avoid an HTTP GET per character. Errors/unavailable states
+	 * are deliberately NOT cached, so search resumes the instant the server
+	 * recovers rather than staying suppressed for the TTL.
+	 *
+	 * @return array Decoded MCP status payload (same shape as McpServerClient::getStatus)
+	 */
+	private function getCachedStatus(): array {
+		$cache = $this->cacheFactory->createDistributed('astrolabe_semantic_search');
+		/** @var mixed $cached */
+		$cached = $cache->get(self::STATUS_CACHE_KEY);
+		if (is_array($cached)) {
+			return $cached;
+		}
+
+		$status = $this->client->getStatus();
+		if (empty($status['error'])) {
+			$cache->set(self::STATUS_CACHE_KEY, $status, self::STATUS_CACHE_TTL);
+		}
+		return $status;
 	}
 
 	/**

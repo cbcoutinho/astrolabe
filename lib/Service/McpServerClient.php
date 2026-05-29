@@ -183,59 +183,6 @@ class McpServerClient {
 		);
 	}
 
-	/**
-	 * Get user session details.
-	 *
-	 * Requires authentication via OAuth bearer token.
-	 *
-	 * @param string $userId The user ID to query
-	 * @param string $token OAuth bearer token
-	 * @return array{
-	 *   session_id?: string,
-	 *   background_access_granted?: bool,
-	 *   background_access_details?: array,
-	 *   idp_profile?: array,
-	 *   error?: string
-	 * }
-	 *
-	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
-	 */
-	public function getUserSession(string $userId, string $token): array {
-		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->get(
-				$this->baseUrl . '/api/v1/users/' . urlencode($userId) . '/session',
-				$this->withUserAgent([
-					'headers' => ['Authorization' => 'Bearer ' . $token],
-				]),
-			),
-			"Failed to get session for user $userId",
-			['user_id' => $userId],
-		);
-	}
-
-	/**
-	 * Revoke user's background access (delete refresh token).
-	 *
-	 * Requires authentication via OAuth bearer token.
-	 *
-	 * @param string $userId The user ID whose access to revoke
-	 * @param string $token OAuth bearer token
-	 * @return array{success?: bool, message?: string, error?: string}
-	 *
-	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
-	 */
-	public function revokeUserAccess(string $userId, string $token): array {
-		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->post(
-				$this->baseUrl . '/api/v1/users/' . urlencode($userId) . '/revoke',
-				$this->withUserAgent([
-					'headers' => ['Authorization' => 'Bearer ' . $token],
-				]),
-			),
-			"Failed to revoke access for user $userId",
-			['user_id' => $userId],
-		);
-	}
 
 	/**
 	 * Get vector sync status (indexing metrics).
@@ -418,28 +365,14 @@ class McpServerClient {
 	 * @return string The public URL users/browsers see
 	 */
 	public function getPublicServerUrl(): string {
-		return $this->config->getSystemValue('mcp_server_public_url', $this->baseUrl);
+		// getSystemValue's default only applies when the key is *absent*; a key
+		// present with an empty-string value returns '', not $this->baseUrl. So
+		// fall back explicitly on empty, mirroring McpTokenMinter's resource
+		// resolution.
+		$publicUrl = (string)$this->config->getSystemValue('mcp_server_public_url', '');
+		return $publicUrl !== '' ? $publicUrl : $this->baseUrl;
 	}
 
-	/**
-	 * Get the OAuth client ID from system config.
-	 *
-	 * The Astrolabe app has its own OAuth client (separate from MCP server's client).
-	 * Client ID must be configured in config.php for OAuth functionality to work.
-	 *
-	 * @return string OAuth client ID or empty string if not configured
-	 */
-	public function getClientId(): string {
-		$clientId = $this->config->getSystemValue('astrolabe_client_id', '');
-
-		if (empty($clientId)) {
-			$this->logger->warning('astrolabe_client_id is not configured in config.php - OAuth functionality will not work');
-			return '';
-		}
-
-		$this->logger->debug('Using client ID from system config: ' . substr($clientId, 0, 8) . '...');
-		return $clientId;
-	}
 
 	/**
 	 * List all registered webhooks for a user.
@@ -560,12 +493,19 @@ class McpServerClient {
 				return ['success' => true];
 			}
 
+			/** @var mixed $data */
 			$data = json_decode($response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
 				throw new \RuntimeException('Invalid JSON response from server');
 			}
 
+			// A body of literal "null" decodes to null (valid JSON), so guard
+			// like sendAndDecode() does — callers index into the return array.
+			if (!is_array($data)) {
+				return [];
+			}
+			/** @var array{success?: bool, error?: string, provisioning_required?: true} $data */
 			return $data;
 		} catch (\Exception $e) {
 			$this->logger->error('Failed to delete webhook', [
