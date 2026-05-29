@@ -28,7 +28,10 @@ use Psr\Log\LoggerInterface;
  * at the externally-mapped host, unreachable from inside the container.
  */
 class CredentialsControllerTest extends TestCase {
-	private const VALID_PASSWORD = 'abcDEF1234567890abcDEF1234'; // matches ^[a-zA-Z0-9-]{20,256}$
+	// A well-formed value matching the store endpoint's ^[a-zA-Z0-9-]{20,256}$
+	// shape check. It is a test fixture, not a credential: the token provider
+	// is mocked, so this never authenticates anything.
+	private const VALID_INPUT = 'aaaaaaaaaaaaaaaaaaaaaa';
 
 	private BackgroundSyncCredentialStorage&MockObject $credentialStorage;
 	private IUserSession&MockObject $userSession;
@@ -74,18 +77,18 @@ class CredentialsControllerTest extends TestCase {
 		$token->method('getUID')->willReturn('alice');
 		$this->tokenProvider->expects($this->once())
 			->method('getToken')
-			->with(self::VALID_PASSWORD)
+			->with(self::VALID_INPUT)
 			->willReturn($token);
 
 		// MCP server unconfigured → stores locally and returns success.
 		$this->config->method('getSystemValue')->with('mcp_server_url', '')->willReturn('');
 		$this->credentialStorage->expects($this->once())
 			->method('storeAppPassword')
-			->with('alice', self::VALID_PASSWORD);
+			->with('alice', self::VALID_INPUT);
 		// No HTTP round-trip is made for validation.
 		$this->httpClientService->expects($this->never())->method('newClient');
 
-		$response = $this->controller->storeAppPassword(self::VALID_PASSWORD);
+		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertTrue($response->getData()['success']);
@@ -100,7 +103,7 @@ class CredentialsControllerTest extends TestCase {
 
 		$this->credentialStorage->expects($this->never())->method('storeAppPassword');
 
-		$response = $this->controller->storeAppPassword(self::VALID_PASSWORD);
+		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
 
 		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
 		$this->assertFalse($response->getData()['success']);
@@ -114,7 +117,7 @@ class CredentialsControllerTest extends TestCase {
 
 		$this->credentialStorage->expects($this->never())->method('storeAppPassword');
 
-		$response = $this->controller->storeAppPassword(self::VALID_PASSWORD);
+		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
 
 		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
 		$this->assertFalse($response->getData()['success']);
