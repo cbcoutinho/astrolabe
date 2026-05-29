@@ -111,7 +111,7 @@ class CredentialsController extends Controller {
 			$httpClient = $this->httpClientService->newClient();
 
 			// Send to MCP server with BasicAuth (user proves ownership of password)
-			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . urlencode($userId) . '/app-password';
+			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($userId) . '/app-password';
 
 			$this->logger->debug("Sending app password to MCP server: $mcpEndpoint");
 
@@ -175,10 +175,12 @@ class CredentialsController extends Controller {
 	 */
 	private function validateAppPassword(string $userId, string $appPassword): bool {
 		try {
-			// Use 127.0.0.1 for internal validation (we're running inside Nextcloud container)
-			// Using IP address instead of 'localhost' to avoid Nextcloud's overwrite.cli.url rewriting
-			// getAbsoluteURL() returns the external URL which isn't accessible from inside the container
-			$baseUrl = 'http://127.0.0.1';
+			// Validate against the server's own loopback so we don't depend on
+			// getAbsoluteURL() (which returns the rewritten external URL, not
+			// reachable from inside the container). Configurable via
+			// `overwrite.cli.url`, defaulting to the loopback address that works
+			// for a standard single-container deployment.
+			$baseUrl = (string)$this->config->getSystemValue('overwrite.cli.url', 'http://127.0.0.1');
 
 			// Make a test request to Nextcloud API with BasicAuth
 			// Using OCS API user endpoint as a lightweight test
@@ -327,7 +329,7 @@ class CredentialsController extends Controller {
 
 		try {
 			$httpClient = $this->httpClientService->newClient();
-			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . urlencode($userId) . '/app-password';
+			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($userId) . '/app-password';
 
 			$response = $httpClient->delete($mcpEndpoint, [
 				'auth' => [$userId, $appPassword],

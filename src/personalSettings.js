@@ -33,7 +33,36 @@ async function mintSessionAppPassword() {
 	if (!appPassword) {
 		throw new Error('getapppassword response missing apppassword')
 	}
+	// getapppassword names the new token after the request User-Agent (the
+	// browser). Give it a recognisable name in Security settings instead.
+	// Best-effort: the credential works regardless of its display name.
+	await renameNewestAppToken('Astrolabe Background Sync').catch(() => {})
 	return appPassword
+}
+
+// Rename the most recently created app token (the one core/getapppassword just
+// minted) via the Security-settings authtokens API. Best-effort.
+async function renameNewestAppToken(name) {
+	const base = OC.generateUrl('/settings/personal/authtokens')
+	const listResp = await fetch(base, {
+		headers: { requesttoken: OC.requestToken, Accept: 'application/json' },
+	})
+	if (!listResp.ok) {
+		return
+	}
+	const tokens = await listResp.json()
+	if (!Array.isArray(tokens) || tokens.length === 0) {
+		return
+	}
+	const newest = tokens.reduce((a, b) => (b.id > a.id ? b : a))
+	await fetch(base + '/' + newest.id, {
+		method: 'PUT',
+		headers: {
+			requesttoken: OC.requestToken,
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ name }),
+	})
 }
 
 document.addEventListener('DOMContentLoaded', function() {

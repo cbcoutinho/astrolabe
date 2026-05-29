@@ -15,15 +15,9 @@
     </InvalidArrayOffset>
     <MixedArgument>
       <code><![CDATA[!empty($eventConfig['filter']) ? $eventConfig['filter'] : null]]></code>
-      <code><![CDATA[$algorithm]]></code>
       <code><![CDATA[$eventConfig['event']]]></code>
-      <code><![CDATA[$fusion]]></code>
     </MixedArgument>
     <MixedArrayAccess>
-      <code><![CDATA[$data['algorithm']]]></code>
-      <code><![CDATA[$data['fusion']]]></code>
-      <code><![CDATA[$data['limit']]]></code>
-      <code><![CDATA[$data['scoreThreshold']]]></code>
       <code><![CDATA[$eventConfig['event']]]></code>
       <code><![CDATA[$eventConfig['event']]]></code>
       <code><![CDATA[$eventConfig['filter']]]></code>
@@ -33,10 +27,7 @@
       <code><![CDATA[$presetEvent['filter']]]></code>
     </MixedArrayAccess>
     <MixedAssignment>
-      <code><![CDATA[$algorithm]]></code>
-      <code><![CDATA[$data]]></code>
       <code><![CDATA[$eventConfig]]></code>
-      <code><![CDATA[$fusion]]></code>
       <code><![CDATA[$presetEvent]]></code>
       <code><![CDATA[$presetEvent]]></code>
       <code><![CDATA[$presetFilter]]></code>

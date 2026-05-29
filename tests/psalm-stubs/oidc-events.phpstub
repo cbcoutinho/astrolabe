@@ -19,11 +19,32 @@ class TokenGenerationRequestEvent extends Event {
 	public function __construct(
 		string $clientIdentifier,
 		string $userId,
-		string $scopes,
-		string $resource,
+		string $extraScopes = '',
+		string $resource = '',
 	) {
 	}
 
+	public function getClientIdentifier(): string {
+	}
+
+	public function getUserId(): string {
+	}
+
+	public function getExtraScopes(): string {
+	}
+
+	public function getResource(): ?string {
+	}
+
 	public function getAccessToken(): ?string {
+	}
+
+	public function setAccessToken(string $accessToken): void {
+	}
+
+	public function getExpiresIn(): ?int {
+	}
+
+	public function setExpiresIn(?int $expiresIn): void {
 	}
 }

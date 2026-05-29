@@ -34,7 +34,11 @@ class AstrolabeAdminSettings implements IDeclarativeSettingsForm {
 				[
 					'id' => 'mcp_server_url',
 					'title' => $this->l->t('MCP Server URL (internal)'),
-					'description' => $this->l->t('Base URL Astrolabe uses to reach the MCP server (e.g. http://localhost:8000).'),
+					'description' => $this->l->t(
+						'Base URL Astrolabe uses to reach the MCP server (e.g. http://localhost:8000). '
+						. 'Use https:// when background indexing is enabled — the user app password '
+						. 'is sent to this URL, so an http:// endpoint would transmit it unencrypted.'
+					),
 					'type' => DeclarativeSettingsTypes::URL,
 					'placeholder' => 'http://localhost:8000',
 					'default' => '',

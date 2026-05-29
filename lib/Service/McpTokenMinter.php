@@ -50,7 +50,9 @@ class McpTokenMinter {
 	 *                               token (e.g. client expired, client not found in `oidc`).
 	 */
 	public function mintForUser(string $userId, string $extraScopes = ''): string {
-		$cacheKey = $userId . '|' . $extraScopes;
+		// json_encode (not "uid|scopes") so a UID containing the separator
+		// cannot collide with a different (userId, scopes) pair.
+		$cacheKey = json_encode([$userId, $extraScopes], JSON_THROW_ON_ERROR);
 		if (isset($this->cache[$cacheKey])) {
 			return $this->cache[$cacheKey];
 		}
@@ -72,13 +74,8 @@ class McpTokenMinter {
 			$resource = (string)$this->config->getSystemValue('mcp_server_url', '');
 		}
 
-		if (!class_exists(TokenGenerationRequestEvent::class)) {
-			throw new McpTokenMintException(
-				"The Nextcloud 'oidc' app is not installed or not loaded; "
-				. 'Astrolabe needs it to mint MCP-server access tokens.'
-			);
-		}
-
+		// The `oidc` app is a hard dependency (appinfo/info.xml), so Nextcloud
+		// won't enable Astrolabe without it — no class_exists guard needed.
 		$event = new TokenGenerationRequestEvent(
 			$clientId,
 			$userId,

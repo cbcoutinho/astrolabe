@@ -211,36 +211,29 @@ class ApiController extends Controller {
 	/**
 	 * Save admin search settings. Admin-only.
 	 */
-	public function saveSearchSettings(): JSONResponse {
-		$input = file_get_contents('php://input');
-		$data = json_decode($input, true);
-
-		if ($data === null) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'Invalid JSON body',
-			], Http::STATUS_BAD_REQUEST);
-		}
-
+	public function saveSearchSettings(
+		string $algorithm = AdminSettings::DEFAULT_SEARCH_ALGORITHM,
+		string $fusion = AdminSettings::DEFAULT_SEARCH_FUSION,
+		int $scoreThreshold = AdminSettings::DEFAULT_SEARCH_SCORE_THRESHOLD,
+		int $limit = AdminSettings::DEFAULT_SEARCH_LIMIT,
+	): JSONResponse {
+		// Parameters are populated by the framework from the JSON request body
+		// (no need to read php://input directly).
 		$validAlgorithms = ['hybrid', 'semantic', 'bm25'];
-		$algorithm = $data['algorithm'] ?? AdminSettings::DEFAULT_SEARCH_ALGORITHM;
-		if (!in_array($algorithm, $validAlgorithms)) {
+		if (!in_array($algorithm, $validAlgorithms, true)) {
 			$algorithm = AdminSettings::DEFAULT_SEARCH_ALGORITHM;
 		}
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_ALGORITHM, $algorithm);
 
 		$validFusions = ['rrf', 'dbsf'];
-		$fusion = $data['fusion'] ?? AdminSettings::DEFAULT_SEARCH_FUSION;
-		if (!in_array($fusion, $validFusions)) {
+		if (!in_array($fusion, $validFusions, true)) {
 			$fusion = AdminSettings::DEFAULT_SEARCH_FUSION;
 		}
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_FUSION, $fusion);
 
-		$scoreThreshold = (int)($data['scoreThreshold'] ?? AdminSettings::DEFAULT_SEARCH_SCORE_THRESHOLD);
 		$scoreThreshold = max(0, min(100, $scoreThreshold));
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_SCORE_THRESHOLD, (string)$scoreThreshold);
 
-		$limit = (int)($data['limit'] ?? AdminSettings::DEFAULT_SEARCH_LIMIT);
 		$limit = max(5, min(100, $limit));
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_LIMIT, (string)$limit);
 
