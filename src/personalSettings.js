@@ -54,7 +54,7 @@ async function renameNewestAppToken(name) {
 	if (!Array.isArray(tokens) || tokens.length === 0) {
 		return
 	}
-	const newest = tokens.reduce((a, b) => (b.id > a.id ? b : a))
+	const newest = tokens.reduce((a, b) => (b.id > a.id ? b : a), tokens[0])
 	await fetch(base + '/' + newest.id, {
 		method: 'PUT',
 		headers: {
