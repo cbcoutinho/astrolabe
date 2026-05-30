@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.16.3 (2026-05-30)
+
+### Fix
+
+- **settings**: guide re-login when background indexing mint returns 403
+
 ## v0.16.2 (2026-05-30)
 
 ### Fix
