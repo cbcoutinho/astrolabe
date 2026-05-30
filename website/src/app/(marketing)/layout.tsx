@@ -7,13 +7,13 @@ import { portalSignInUrl } from "@/lib/portal";
 
 const nav = [{ label: "Pricing", href: "/pricing" }];
 
-export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+export default function MarketingLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteHeader
         nav={nav}
         right={
-          <LinkButton href={portalSignInUrl()} size="sm">
+          <LinkButton href={portalSignInUrl()} size="sm" external>
             Sign in
           </LinkButton>
         }

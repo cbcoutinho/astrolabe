@@ -6,22 +6,32 @@ import { Logo } from "./logo";
 
 type NavItem = { label: string; href: string };
 
+type HeaderVariant = "default" | "inverse" | "transparent";
+
+// Header wrapper styling per variant. Pulled out of the component as a flat
+// lookup so there's no nested ternary at the call site.
+function wrapClassFor(variant: HeaderVariant): string {
+  switch (variant) {
+    case "transparent":
+      return "bg-transparent";
+    case "inverse":
+      return "bg-ink-900 text-white";
+    default:
+      return "border-b border-slate-200 bg-white/80 backdrop-blur";
+  }
+}
+
 export function SiteHeader({
   nav = [],
   right,
   variant = "default",
-}: {
+}: Readonly<{
   nav?: NavItem[];
   right?: ReactNode;
-  variant?: "default" | "inverse" | "transparent";
-}) {
+  variant?: HeaderVariant;
+}>) {
   const isInverse = variant === "inverse";
-  const wrapClass =
-    variant === "transparent"
-      ? "bg-transparent"
-      : isInverse
-        ? "bg-ink-900 text-white"
-        : "border-b border-slate-200 bg-white/80 backdrop-blur";
+  const wrapClass = wrapClassFor(variant);
 
   const linkClass = isInverse
     ? "text-slate-300 hover:text-white"

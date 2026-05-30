@@ -3,13 +3,15 @@ import Link from "next/link";
 import { Container } from "./container";
 import { Logo } from "./logo";
 
-// The default year is computed at render time. For SSG marketing pages
-// (any route without `force-dynamic`) Next.js evaluates this at build,
-// so the rendered HTML carries the build year until the site is
-// rebuilt — visible as a stale copyright into early January. Callers
-// can pass `year` explicitly (e.g. from a deploy-time env var) to keep
-// it accurate without a rebuild.
-export function SiteFooter({ year = new Date().getFullYear() }: { year?: number }) {
+// The copyright year is baked at build time. The CI workflow exports
+// NEXT_PUBLIC_BUILD_YEAR (= the deploy date's year) which Next.js inlines into
+// the static HTML, so the footer tracks the last deploy rather than going stale
+// from an old build. Locally — where the env var is unset — it falls back to
+// the current year at render. Callers may still pass `year` explicitly to
+// override both.
+const BUILD_YEAR = Number(process.env.NEXT_PUBLIC_BUILD_YEAR) || new Date().getFullYear();
+
+export function SiteFooter({ year = BUILD_YEAR }: Readonly<{ year?: number }>) {
   return (
     <footer className="mt-24 border-t border-slate-200 bg-slate-50/60 py-10">
       <Container size="lg">

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { LinkButton } from "@/components/button";
 import { Container } from "@/components/container";
+import { CheckMark } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = {
@@ -50,22 +51,5 @@ export default function PricingPage() {
         </div>
       </div>
     </Container>
-  );
-}
-
-function CheckMark() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className="mt-0.5 h-4 w-4 shrink-0 text-brand-500"
-    >
-      <path d="m4 10 4 4 8-9" />
-    </svg>
   );
 }

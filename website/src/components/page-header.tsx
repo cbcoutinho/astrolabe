@@ -9,12 +9,12 @@ export function PageHeader({
   description,
   action,
   eyebrow,
-}: {
+}: Readonly<{
   title: string;
   description?: string | ReactElement;
   action?: ReactNode;
   eyebrow?: string | ReactElement;
-}) {
+}>) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>

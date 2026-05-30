@@ -12,11 +12,11 @@ export function Container({
   children,
   size = "md",
   className = "",
-}: {
+}: Readonly<{
   children: ReactNode;
   size?: Size;
   className?: string;
-}) {
+}>) {
   return (
     <div className={`mx-auto w-full ${sizeClass[size]} px-6 ${className}`}>
       {children}

@@ -14,11 +14,11 @@ export function Card({
   children,
   variant = "default",
   className = "",
-}: {
+}: Readonly<{
   children: ReactNode;
   variant?: Variant;
   className?: string;
-}) {
+}>) {
   return (
     <div
       className={`rounded-xl border p-6 transition-colors ${variantClass[variant]} ${className}`}
@@ -32,11 +32,11 @@ export function CardLink({
   href,
   children,
   className = "",
-}: {
+}: Readonly<{
   href: string;
   children: ReactNode;
   className?: string;
-}) {
+}>) {
   return (
     <Link
       href={href}

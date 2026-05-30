@@ -14,10 +14,9 @@ on:
       - '.github/workflows/landing-pages.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Permissions are scoped per job (below) rather than workflow-wide: the build
+# job only needs read access to check out the repo, while the deploy job needs
+# the pages/id-token write scopes. Least privilege keeps each job's token small.
 
 # Allow one concurrent deploy; don't cancel an in-progress run.
 concurrency:
@@ -27,6 +26,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: website
@@ -39,6 +40,15 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
 
+      # Restore Next.js' build cache so incremental builds reuse compiled
+      # output. Keyed on lockfile + source so it busts when either changes.
+      - uses: actions/cache@v4
+        with:
+          path: website/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('website/package-lock.json') }}-${{ hashFiles('website/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('website/package-lock.json') }}-
+
       - run: npm ci --no-audit --no-fund
 
       - name: Build static export
@@ -46,7 +56,12 @@ jobs:
           # Portal origin baked into the static build. Dev portal for now; flip
           # to https://app.astrolabecloud.com at production launch.
           NEXT_PUBLIC_PORTAL_URL: https://app.dev.astrolabecloud.com
-        run: npm run build
+        run: |
+          # Bake the build year into the static HTML so the footer copyright
+          # tracks the deploy date rather than whenever the source last
+          # changed. The site redeploys on every push, so it stays current.
+          export NEXT_PUBLIC_BUILD_YEAR="$(date -u +%Y)"
+          npm run build
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -55,6 +70,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

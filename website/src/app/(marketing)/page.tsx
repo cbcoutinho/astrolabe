@@ -3,6 +3,7 @@ import Image from "next/image";
 
 import { LinkButton } from "@/components/button";
 import { Container } from "@/components/container";
+import { CheckMark } from "@/components/icons";
 
 const APPSTORE_URL = "https://apps.nextcloud.com/apps/astrolabe";
 const GITHUB_URL = "https://github.com/cbcoutinho/astrolabe";
@@ -67,7 +68,7 @@ export default function HomePage() {
             <div>
               <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-300" />
-                For self-hosted Nextcloud
+                <span>For self-hosted Nextcloud</span>
               </p>
               <h1 className="mt-6 text-balance text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
                 Your Nextcloud knows more than its search bar lets on.
@@ -300,6 +301,11 @@ export default function HomePage() {
               width="100%"
               height={300}
               title="Astrolabe Cloud waitlist"
+              // Defence-in-depth around the third-party embed: allow-scripts
+              // drives Tally's dynamicHeight, allow-same-origin lets it reach
+              // its own origin for the form post, allow-forms permits submit,
+              // and allow-popups covers any post-submit redirect.
+              sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
             />
           </div>
         </Container>
@@ -324,23 +330,15 @@ function HeroDivider() {
 function SovereigntyPoint({
   title,
   children,
-}: {
+}: Readonly<{
   title: string;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <li className="rounded-xl border border-slate-200 bg-white p-5 shadow-card">
       <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{children}</p>
     </li>
-  );
-}
-
-function CheckMark() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-brand-500">
-      <path d="m4 10 4 4 8-9" />
-    </svg>
   );
 }
 

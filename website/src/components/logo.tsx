@@ -3,10 +3,10 @@ import Link from "next/link";
 export function Logo({
   variant = "default",
   href = "/",
-}: {
+}: Readonly<{
   variant?: "default" | "inverse";
   href?: string;
-}) {
+}>) {
   const dotColor = variant === "inverse" ? "text-brand-300" : "text-brand-500";
   const textColor = variant === "inverse" ? "text-white" : "text-slate-900";
   return (
@@ -19,7 +19,7 @@ export function Logo({
   );
 }
 
-function Compass({ className }: { className?: string }) {
+function Compass({ className }: Readonly<{ className?: string }>) {
   return (
     <svg
       viewBox="0 0 24 24"
