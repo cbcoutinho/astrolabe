@@ -26,7 +26,9 @@ async function mintSessionAppPassword() {
 		},
 	})
 	if (!resp.ok) {
-		throw new Error('getapppassword returned ' + resp.status)
+		const err = new Error('getapppassword returned ' + resp.status)
+		err.status = resp.status
+		throw err
 	}
 	const data = await resp.json()
 	const appPassword = data?.ocs?.data?.apppassword
@@ -63,6 +65,21 @@ async function renameNewestAppToken(name) {
 		},
 		body: JSON.stringify({ name }),
 	})
+}
+
+// A 403 from core/getapppassword means the current session holds no usable
+// login password to mint from — typically a session restored from a
+// "remember me" cookie (or otherwise aged out). Confirming the password
+// doesn't help: only a fresh interactive login repopulates the session
+// password, so offer a one-click logout to re-authenticate. Keeping the
+// getapppassword mint (rather than the passwordless authtokens endpoint)
+// preserves the resulting token's ability to decrypt files on instances
+// with server-side encryption enabled.
+function promptReLogin() {
+	const message = t('astrolabe', 'Your Nextcloud session needs to be refreshed before background indexing can be enabled. This usually happens when you are signed in via a "remember me" cookie. Log out and sign back in, then enable it again?')
+	if (confirm(message)) {
+		window.location.href = OC.generateUrl('/logout') + '?requesttoken=' + encodeURIComponent(OC.requestToken)
+	}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -112,7 +129,13 @@ document.addEventListener('DOMContentLoaded', function() {
 				}
 			} catch (error) {
 				console.error('Background indexing provisioning error:', error)
-				showError(t('astrolabe', 'Could not enable background indexing. Please try again.'))
+				if (error && error.status === 403) {
+					// Stale/remember-me session: guide the user to re-login
+					// instead of dead-ending on a generic error.
+					promptReLogin()
+				} else {
+					showError(t('astrolabe', 'Could not enable background indexing. Please try again.'))
+				}
 			} finally {
 				enableButton.disabled = false
 				enableButton.textContent = originalText
