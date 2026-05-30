@@ -71,10 +71,15 @@ class CredentialsController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		// Validate app password with Nextcloud
-		$isValid = $this->validateAppPassword($userId, $appPassword);
+		// Validate the app password and resolve the Nextcloud loginName it was
+		// minted under. The loginName — not the UID — is what Nextcloud expects
+		// for app-password BasicAuth, and the two differ for OIDC-provisioned
+		// users whose UID is their display name (e.g. UID "Chris Coutinho",
+		// loginName "chris@coutinho.io"). The MCP server needs the loginName to
+		// validate the password over HTTP.
+		$loginName = $this->validateAppPassword($userId, $appPassword);
 
-		if (!$isValid) {
+		if ($loginName === null) {
 			$this->logger->warning("App password validation failed for user: $userId");
 			return new JSONResponse([
 				'success' => false,
@@ -120,9 +125,13 @@ class CredentialsController extends Controller {
 
 			$this->logger->debug("Sending app password to MCP server: $mcpEndpoint");
 
+			// BasicAuth user and path segment stay the UID (the identity key the
+			// MCP server matches against the path). The body carries the
+			// loginName so the MCP server can BasicAuth-validate the password
+			// against Nextcloud, which keys app-password auth on the loginName.
 			$response = $httpClient->post($mcpEndpoint, [
 				'auth' => [$userId, $appPassword],
-				'body' => json_encode(['username' => $userId], JSON_THROW_ON_ERROR),
+				'body' => json_encode(['username' => $loginName], JSON_THROW_ON_ERROR),
 				'headers' => [
 					'Content-Type' => 'application/json',
 					'Accept' => 'application/json',
@@ -172,13 +181,18 @@ class CredentialsController extends Controller {
 	}
 
 	/**
-	 * Validate app password by making a test request to Nextcloud.
+	 * Validate an app password and resolve the loginName it was minted under.
+	 *
+	 * Validation is internal (token provider) — see the note below. The
+	 * loginName is returned because Nextcloud keys app-password BasicAuth on
+	 * the loginName, which can differ from the UID; the MCP server needs it to
+	 * validate the password over HTTP.
 	 *
 	 * @param string $userId User ID
 	 * @param string $appPassword App password to validate
-	 * @return bool True if valid, false otherwise
+	 * @return string|null The Nextcloud loginName when valid, null otherwise
 	 */
-	private function validateAppPassword(string $userId, string $appPassword): bool {
+	private function validateAppPassword(string $userId, string $appPassword): ?string {
 		// Validate the app password internally via Nextcloud's token provider —
 		// no HTTP round-trip. An outbound loopback call is fragile across
 		// deployments: `overwrite.cli.url` points at the *external* host (e.g.
@@ -192,16 +206,16 @@ class CredentialsController extends Controller {
 			// Covers expired and wiped tokens too — both extend
 			// InvalidTokenException — all of which are invalid for our purposes.
 			$this->logger->warning("App password not recognised for user: $userId");
-			return false;
+			return null;
 		}
 
 		if ($token->getUID() !== $userId) {
 			$this->logger->warning("App password belongs to a different user than: $userId");
-			return false;
+			return null;
 		}
 
 		$this->logger->debug("App password validation successful for user: $userId");
-		return true;
+		return $token->getLoginName();
 	}
 
 	/**

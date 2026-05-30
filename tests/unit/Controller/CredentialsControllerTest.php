@@ -78,6 +78,7 @@ class CredentialsControllerTest extends TestCase {
 
 		$token = $this->createMock(IToken::class);
 		$token->method('getUID')->willReturn('alice');
+		$token->method('getLoginName')->willReturn('alice');
 		$this->tokenProvider->expects($this->once())
 			->method('getToken')
 			->with(self::VALID_INPUT)
@@ -144,6 +145,7 @@ class CredentialsControllerTest extends TestCase {
 
 		$token = $this->createMock(IToken::class);
 		$token->method('getUID')->willReturn('alice');
+		$token->method('getLoginName')->willReturn('alice');
 		$this->tokenProvider->method('getToken')->with(self::VALID_INPUT)->willReturn($token);
 
 		$this->config->method('getSystemValue')
@@ -163,6 +165,52 @@ class CredentialsControllerTest extends TestCase {
 		$data = $this->controller->storeAppPassword(self::VALID_INPUT)->getData();
 
 		$this->assertTrue($data['success']);
+		$this->assertTrue($data['mcp_sync']);
+	}
+
+	/**
+	 * For OIDC-provisioned users the UID (display name) differs from the
+	 * loginName. Nextcloud keys app-password BasicAuth on the loginName, so the
+	 * MCP server must receive the loginName in the body — while the BasicAuth
+	 * user and URL path stay the UID (the identity key). Regression guard for
+	 * the "App password validation failed: HTTP 401" provisioning failure.
+	 */
+	public function testStoreSendsLoginNameNotUidToMcpServer(): void {
+		$this->authenticate('Chris Coutinho');
+
+		$token = $this->createMock(IToken::class);
+		$token->method('getUID')->willReturn('Chris Coutinho');
+		$token->method('getLoginName')->willReturn('chris@coutinho.io');
+		$this->tokenProvider->method('getToken')->with(self::VALID_INPUT)->willReturn($token);
+
+		$this->config->method('getSystemValue')
+			->with('mcp_server_url', '')
+			->willReturn('https://mcp.example:8000');
+
+		$resp = $this->createMock(IResponse::class);
+		$resp->method('getStatusCode')->willReturn(200);
+		$resp->method('getBody')->willReturn(json_encode(['success' => true]));
+		$client = $this->createMock(IClient::class);
+		$client->expects($this->once())
+			->method('post')
+			->with(
+				// Path segment is the URL-encoded UID, not the loginName.
+				$this->stringContains('/api/v1/users/Chris%20Coutinho/app-password'),
+				$this->callback(function (array $opts): bool {
+					// BasicAuth user is the UID; body username is the loginName.
+					$this->assertSame(['Chris Coutinho', self::VALID_INPUT], $opts['auth']);
+					$this->assertSame(
+						['username' => 'chris@coutinho.io'],
+						json_decode($opts['body'], true),
+					);
+					return true;
+				}),
+			)
+			->willReturn($resp);
+		$this->httpClientService->method('newClient')->willReturn($client);
+
+		$data = $this->controller->storeAppPassword(self::VALID_INPUT)->getData();
+
 		$this->assertTrue($data['mcp_sync']);
 	}
 
