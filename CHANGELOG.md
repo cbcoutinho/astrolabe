@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.16.2 (2026-05-30)
+
+### Fix
+
+- send loginName (not UID) when provisioning app password to MCP
+
 ## v0.16.1 (2026-05-29)
 
 ### Fix
