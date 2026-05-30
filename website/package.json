@@ -15,6 +15,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@nextcloud/browserslist-config": "3.1.2",
     "@types/node": "24.12.4",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
@@ -27,10 +28,6 @@
     "postcss": "8.5.15"
   },
   "browserslist": [
-    "chrome 64",
-    "edge 79",
-    "firefox 67",
-    "opera 51",
-    "safari 12"
+    "extends @nextcloud/browserslist-config"
   ]
 }
