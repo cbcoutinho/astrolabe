@@ -1,0 +1,63 @@
+name: Deploy marketing site to GitHub Pages
+
+# Builds the static Astrolabe Cloud marketing site in website/ and publishes it
+# to GitHub Pages at astrolabecloud.com. Scoped to website/** so it never runs
+# on Nextcloud-app changes. Repo Settings -> Pages -> Source must be
+# "GitHub Actions"; the custom domain (astrolabecloud.com) comes from
+# website/public/CNAME.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/landing-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deploy; don't cancel an in-progress run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build static export
+        env:
+          # Portal origin baked into the static build. Dev portal for now; flip
+          # to https://app.astrolabecloud.com at production launch.
+          NEXT_PUBLIC_PORTAL_URL: https://app.dev.astrolabecloud.com
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
