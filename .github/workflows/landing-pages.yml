@@ -26,13 +26,25 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # `pages: write` lets the configure-pages step below enable GitHub Pages via
+    # the API (enablement: true) so the deploy job's first run can't 404 on a
+    # repo where Pages was never turned on in Settings.
     permissions:
       contents: read
+      pages: write
     defaults:
       run:
         working-directory: website
     steps:
       - uses: actions/checkout@v4
+
+      # Enable GitHub Pages (build_type: workflow) if it isn't already, so
+      # actions/deploy-pages has a Pages site to publish to. Idempotent: a
+      # no-op once Pages is enabled.
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/setup-node@v4
         with:
