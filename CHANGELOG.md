@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.16.6 (2026-05-30)
+
+### Fix
+
+- **website**: use shared browserslist config and self-enable Pages
+
 ## v0.16.5 (2026-05-30)
 
 ### Fix
