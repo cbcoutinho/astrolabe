@@ -1,0 +1,9 @@
+# Next.js marketing site (self-contained; separate from the repo-root app)
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env
+.env.local
+.env*.local

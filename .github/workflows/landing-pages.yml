@@ -1,0 +1,81 @@
+name: Deploy marketing site to GitHub Pages
+
+# Builds the static Astrolabe Cloud marketing site in website/ and publishes it
+# to GitHub Pages at astrolabecloud.com. Scoped to website/** so it never runs
+# on Nextcloud-app changes. Repo Settings -> Pages -> Source must be
+# "GitHub Actions"; the custom domain (astrolabecloud.com) comes from
+# website/public/CNAME.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/landing-pages.yml'
+  workflow_dispatch:
+
+# Permissions are scoped per job (below) rather than workflow-wide: the build
+# job only needs read access to check out the repo, while the deploy job needs
+# the pages/id-token write scopes. Least privilege keeps each job's token small.
+
+# Allow one concurrent deploy; don't cancel an in-progress run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      # Restore Next.js' build cache so incremental builds reuse compiled
+      # output. Keyed on lockfile + source so it busts when either changes.
+      - uses: actions/cache@v4
+        with:
+          path: website/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('website/package-lock.json') }}-${{ hashFiles('website/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('website/package-lock.json') }}-
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build static export
+        env:
+          # Portal origin baked into the static build. Dev portal for now; flip
+          # to https://app.astrolabecloud.com at production launch.
+          NEXT_PUBLIC_PORTAL_URL: https://app.dev.astrolabecloud.com
+        run: |
+          # Bake the build year into the static HTML so the footer copyright
+          # tracks the deploy date rather than whenever the source last
+          # changed. The site redeploys on every push, so it stays current.
+          export NEXT_PUBLIC_BUILD_YEAR="$(date -u +%Y)"
+          npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
