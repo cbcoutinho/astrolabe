@@ -83,26 +83,37 @@ jobs:
         timeout-minutes: 8
         run: npx playwright install-deps chromium
 
-      # Download the Chromium binary. The Playwright CDN download intermittently
-      # stalls right after reaching 100% (the process hangs during extraction /
-      # final socket close, with no internal timeout) — this is what was causing
-      # the job to run to its overall timeout. Bound each attempt with `timeout`
-      # and retry. On a cache hit the binary is already present, so this is a
-      # fast no-op (and, once one run populates the cache, downloads are skipped).
-      - name: Install Playwright browser (with retry)
-        timeout-minutes: 15
+      # Provision Chromium WITHOUT the Playwright CDN. The cdn.playwright.dev
+      # download deterministically stalls at "100%" on GitHub's runners (it never
+      # finalizes — confirmed over multiple runs), so instead we copy the browsers
+      # out of the official Playwright container image, which is served from
+      # mcr.microsoft.com (a container registry, unaffected by the CDN issue).
+      # Runs only on a cache miss; on a hit the cached browsers under
+      # ~/.cache/ms-playwright are reused. The image tag matches the installed
+      # @playwright/test version, so the Chromium build is guaranteed to match.
+      - name: Provision Playwright browsers from official image
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
         run: |
-          for attempt in 1 2 3; do
-            echo "Playwright browser install attempt ${attempt}/3"
-            if timeout 300 npx playwright install chromium; then
-              echo "Playwright browser install succeeded on attempt ${attempt}"
-              exit 0
-            fi
-            echo "::warning::Playwright browser install attempt ${attempt} failed or timed out; retrying in 10s"
-            sleep 10
-          done
-          echo "::error::Playwright browser install failed after 3 attempts"
-          exit 1
+          image="mcr.microsoft.com/playwright:v${{ steps.playwright.outputs.version }}-noble"
+          echo "Pulling ${image}"
+          docker pull "${image}"
+          mkdir -p ~/.cache/ms-playwright
+          cid=$(docker create "${image}")
+          # The official image stores browsers at /ms-playwright; copy them into
+          # the default cache location Playwright looks in on the host runner.
+          docker cp "${cid}:/ms-playwright/." ~/.cache/ms-playwright/
+          docker rm "${cid}"
+
+      - name: Verify Chromium is present (no CDN download)
+        run: |
+          if ! ls -d ~/.cache/ms-playwright/chromium-* >/dev/null 2>&1; then
+            echo "::error::Chromium was not provisioned into ~/.cache/ms-playwright"
+            ls -la ~/.cache/ms-playwright 2>/dev/null || true
+            exit 1
+          fi
+          echo "Chromium present:"
+          ls -d ~/.cache/ms-playwright/chromium-*
 
       - name: Run E2E tests
         timeout-minutes: 30
