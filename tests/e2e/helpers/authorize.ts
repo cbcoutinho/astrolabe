@@ -31,8 +31,10 @@ async function isAlreadyProvisioned(page: Page): Promise<boolean> {
 }
 
 /**
- * Provision background indexing by minting an app password via the OCS
- * Users API, then submitting it through Astrolabe's app-password form.
+ * Provision background indexing via the one-click "Enable background indexing"
+ * button on Astrolabe's personal-settings page. The page's own JS mints an app
+ * password from the active Nextcloud session and submits it, then reloads into
+ * the provisioned state (the revoke form replaces the enable button).
  *
  * Kept compatible with the old `completeAuthorization` name so the
  * search.spec.ts call site does not need to change.
@@ -44,25 +46,8 @@ export async function completeAuthorization(page: Page): Promise<void> {
 		return
 	}
 
-	// Mint an app password via OCS so the test does not have to scrape one
-	// from the Security settings UI. The endpoint requires the user's
-	// session, which Playwright already has.
-	const ocsResponse = await page.request.get(
-		'/ocs/v2.php/core/getapppassword?format=json',
-		{ headers: { 'OCS-APIRequest': 'true', 'Accept': 'application/json' } },
-	)
-	if (!ocsResponse.ok()) {
-		throw new Error(`Failed to mint OCS app password: HTTP ${ocsResponse.status()}`)
-	}
-	const ocsBody = await ocsResponse.json()
-	const appPassword = ocsBody?.ocs?.data?.apppassword
-	if (typeof appPassword !== 'string' || appPassword === '') {
-		throw new Error('OCS getapppassword returned no apppassword field')
-	}
-
-	// Submit to Astrolabe's provisioning endpoint (the same form the user
-	// would fill in via the UI).
-	await page.locator('#mcp-app-password-input').fill(appPassword)
-	await page.locator('#mcp-save-app-password-button').click()
-	await page.waitForURL(/settings\/user\/astrolabe/, { timeout: 30000 })
+	// One click mints the app password from the current session and submits it;
+	// on success the page reloads and shows the revoke form.
+	await page.locator('#mcp-enable-background-button').click()
+	await page.locator('#mcp-revoke-background-form').waitFor({ timeout: 30000 })
 }
