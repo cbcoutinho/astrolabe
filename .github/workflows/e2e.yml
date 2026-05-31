@@ -22,7 +22,7 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     name: e2e
 
     steps:
@@ -76,18 +76,33 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
 
-      # On a cache hit the browser binaries are already present, so we only
-      # (re)install the OS-level deps. On a miss we do the full install. A
-      # per-step timeout ensures a hung download fails fast (~10 min) instead
-      # of stalling the whole job until the 50 min job timeout.
-      - name: Install Playwright (browser + OS deps)
-        timeout-minutes: 10
+      # Install the OS-level libraries Playwright's browsers need. These are
+      # not part of the cached ~/.cache/ms-playwright dir, so this runs on
+      # every job; apt is reliable, so no retry is needed here.
+      - name: Install Playwright OS dependencies
+        timeout-minutes: 8
+        run: npx playwright install-deps chromium
+
+      # Download the Chromium binary. The Playwright CDN download intermittently
+      # stalls right after reaching 100% (the process hangs during extraction /
+      # final socket close, with no internal timeout) — this is what was causing
+      # the job to run to its overall timeout. Bound each attempt with `timeout`
+      # and retry. On a cache hit the binary is already present, so this is a
+      # fast no-op (and, once one run populates the cache, downloads are skipped).
+      - name: Install Playwright browser (with retry)
+        timeout-minutes: 15
         run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            npx playwright install-deps chromium
-          else
-            npx playwright install chromium --with-deps
-          fi
+          for attempt in 1 2 3; do
+            echo "Playwright browser install attempt ${attempt}/3"
+            if timeout 300 npx playwright install chromium; then
+              echo "Playwright browser install succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            echo "::warning::Playwright browser install attempt ${attempt} failed or timed out; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::Playwright browser install failed after 3 attempts"
+          exit 1
 
       - name: Run E2E tests
         timeout-minutes: 30
