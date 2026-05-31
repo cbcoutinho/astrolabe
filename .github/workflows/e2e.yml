@@ -22,7 +22,7 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     name: e2e
 
     steps:
@@ -65,14 +65,36 @@ jobs:
           npm ci
           npm run build
 
-      - name: Install Playwright
-        run: npx playwright install chromium --with-deps
+      - name: Get installed Playwright version
+        id: playwright
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+
+      # On a cache hit the browser binaries are already present, so we only
+      # (re)install the OS-level deps. On a miss we do the full install. A
+      # per-step timeout ensures a hung download fails fast (~10 min) instead
+      # of stalling the whole job until the 50 min job timeout.
+      - name: Install Playwright (browser + OS deps)
+        timeout-minutes: 10
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install chromium --with-deps
+          fi
 
       - name: Run E2E tests
+        timeout-minutes: 30
         run: npx playwright test
 
-      - name: Collect service logs on failure
-        if: failure()
+      - name: Collect service logs
+        if: always()
         run: |
           docker compose -f tests/e2e/docker-compose.yml logs --tail=500 > /tmp/docker-compose-logs.txt 2>&1 || true
 
@@ -83,7 +105,7 @@ jobs:
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
+        if: always()
         with:
           name: e2e-report
           path: |

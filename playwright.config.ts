@@ -54,7 +54,9 @@ export default defineConfig({
 		reuseExistingServer: !process.env.CI,
 		stderr: 'pipe',
 		stdout: 'pipe',
-		// Allow up to 5 minutes for containers to start
-		timeout: 5 * 60 * 1000,
+		// Allow up to 15 minutes for containers to start. Nextcloud's first-run
+		// install plus the MCP server startup can take well over 5 minutes on a
+		// cold CI runner (the MCP server only starts once Nextcloud is healthy).
+		timeout: 15 * 60 * 1000,
 	},
 })
