@@ -23,8 +23,9 @@ test.describe('Astrolabe search', () => {
 		// Search input
 		await expect(page.getByRole('textbox', { name: 'Search query' })).toBeVisible({ timeout: 15000 })
 
-		// Algorithm selector (combobox)
-		await expect(page.getByRole('combobox', { name: 'Search for option' })).toBeVisible()
+		// Algorithm selector (NcSelect renders a combobox with no accessible
+		// name, so match its wrapper class instead of a role+name)
+		await expect(page.locator('.mcp-algorithm-select')).toBeVisible()
 
 		// Search button
 		await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible()
