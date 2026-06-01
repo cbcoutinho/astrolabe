@@ -74,6 +74,9 @@ services:
       NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
       # 0.91.x dropped ENABLE_LOGIN_FLOW; deployment mode now selects the auth flow (ADR-022)
       MCP_DEPLOYMENT_MODE: login_flow
+      # 0.91.x gates the management/vector-viz API on a client_id allowlist;
+      # must match the OIDC client_id registered in app-hooks/25-configure-mcp-server.sh
+      ALLOWED_MGMT_CLIENT: astrolabeE2eTestOidcClientId00001
       # TEST-ONLY key — do not use in production. Generate your own with:
       # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       TOKEN_ENCRYPTION_KEY: "W6NuJUhEl2eWBvWsVAa5XRZMMvpQ7Aubr3yI55F7oKw="
