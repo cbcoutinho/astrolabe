@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.16.8 (2026-06-01)
+
+### Fix
+
+- **e2e**: set ALLOWED_MGMT_CLIENT for mcp-server 0.91.x search auth
+- **e2e**: set MCP_DEPLOYMENT_MODE=login_flow for mcp-server 0.91.x
+- **e2e**: provision Playwright browsers from official image, not the CDN
+- **e2e**: retry Playwright browser download to survive CDN stalls
+- **e2e**: prevent CI hang in Playwright install and capture diagnostics
+
 ## v0.16.7 (2026-05-31)
 
 ### Fix
