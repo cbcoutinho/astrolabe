@@ -56,7 +56,8 @@ services:
       retries: 30
 
   mcp:
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.68.1
+    # renovate: datasource=docker depName=ghcr.io/cbcoutinho/nextcloud-mcp-server
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.91.2
     restart: "no"
     command: ["--transport", "streamable-http", "--oauth"]
     depends_on:
