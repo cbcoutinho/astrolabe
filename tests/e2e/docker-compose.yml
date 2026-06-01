@@ -72,7 +72,8 @@ services:
       NEXTCLOUD_HOST: http://app:80
       NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
       NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
-      ENABLE_LOGIN_FLOW: "true"
+      # 0.91.x dropped ENABLE_LOGIN_FLOW; deployment mode now selects the auth flow (ADR-022)
+      MCP_DEPLOYMENT_MODE: login_flow
       # TEST-ONLY key — do not use in production. Generate your own with:
       # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       TOKEN_ENCRYPTION_KEY: "W6NuJUhEl2eWBvWsVAa5XRZMMvpQ7Aubr3yI55F7oKw="
