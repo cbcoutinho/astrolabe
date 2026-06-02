@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* `prose` classes for Markdown/MDX docs content (Tailwind v4 registers plugins
+   in CSS rather than a JS config). Used by the docs route's layout wrapper. */
+@plugin "@tailwindcss/typography";
 
 /* Custom theme (ported from the former tailwind.config.ts on the v4 upgrade). */
 @theme {
