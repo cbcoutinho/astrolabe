@@ -120,7 +120,60 @@
 									step="5"
 									class="mcp-score-slider">
 							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-modified-after">{{ t('astrolabe', 'Modified after') }}</label>
+								<input
+									id="mcp-modified-after"
+									v-model="modifiedAfter"
+									type="datetime-local"
+									class="mcp-date-input">
+							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-modified-before">{{ t('astrolabe', 'Modified before') }}</label>
+								<input
+									id="mcp-modified-before"
+									v-model="modifiedBefore"
+									type="datetime-local"
+									class="mcp-date-input">
+							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-path-prefix">{{ t('astrolabe', 'Path (files)') }}</label>
+								<input
+									id="mcp-path-prefix"
+									v-model="pathPrefix"
+									type="text"
+									class="mcp-path-input"
+									:disabled="!pathFilterApplicable"
+									:placeholder="t('astrolabe', 'e.g. /Projects/Reports')">
+								<span v-if="!pathFilterApplicable" class="mcp-path-hint">
+									{{ t('astrolabe', 'Select the Files type to filter by path') }}
+								</span>
+							</div>
 						</div>
+
+						<NcNoteCard v-if="dateRangeError" type="warning" class="mcp-date-error">
+							<div>{{ dateRangeError }}</div>
+						</NcNoteCard>
+					</div>
+
+					<!-- Active filter chips (ADR-027) -->
+					<div v-if="activeFilters.length > 0" class="mcp-active-filters">
+						<span
+							v-for="chip in activeFilters"
+							:key="chip.key"
+							class="mcp-filter-chip">
+							{{ chip.label }}
+							<button
+								type="button"
+								class="mcp-filter-chip-close"
+								:aria-label="t('astrolabe', 'Remove filter')"
+								@click="removeFilter(chip)">
+								<Close :size="16" />
+							</button>
+						</span>
 					</div>
 				</div>
 
@@ -433,6 +486,15 @@ export default {
 			algorithm: 'hybrid',
 			showAdvanced: false,
 			selectedDocTypes: [],
+			// ADR-027 modified-date range filter. Bound to native
+			// <input type="datetime-local"> (local wall-clock); serialized to
+			// RFC 3339 (UTC) before sending. Empty string ⇒ open bound.
+			modifiedAfter: '',
+			modifiedBefore: '',
+			dateRangeError: null,
+			// ADR-027 Phase 2 path filter. Applies to file results only; sent as
+			// path_prefix to the MCP server (MatchText on file_path).
+			pathPrefix: '',
 			limit: 20,
 			scoreThreshold: 0,
 			loading: false,
@@ -487,6 +549,51 @@ export default {
 		},
 		selectedAlgorithmOption() {
 			return this.algorithmOptions.find(opt => opt.id === this.algorithm) || this.algorithmOptions[0]
+		},
+		// The path filter only makes sense for file results: file_path is only
+		// indexed for files, so applying it while searching non-file types would
+		// silently return nothing. Applicable when Files is selected or when no
+		// doc-type filter is set (cross-app search includes files).
+		pathFilterApplicable() {
+			return this.selectedDocTypes.length === 0 || this.selectedDocTypes.includes('file')
+		},
+		// ADR-027: active structured filters rendered as closable chips, so the
+		// user always sees what is narrowing their results even with the
+		// advanced panel collapsed.
+		activeFilters() {
+			const chips = []
+			for (const id of this.selectedDocTypes) {
+				const opt = this.docTypeOptions.find(o => o.id === id)
+				chips.push({
+					key: 'doc:' + id,
+					label: opt ? opt.label : id,
+					kind: 'doc',
+					value: id,
+				})
+			}
+			if (this.modifiedAfter) {
+				chips.push({
+					key: 'after',
+					label: this.t('astrolabe', 'After {date}', { date: this.formatFilterDate(this.modifiedAfter) }),
+					kind: 'after',
+				})
+			}
+			if (this.modifiedBefore) {
+				chips.push({
+					key: 'before',
+					label: this.t('astrolabe', 'Before {date}', { date: this.formatFilterDate(this.modifiedBefore) }),
+					kind: 'before',
+				})
+			}
+			// Only surface the path chip when it will actually apply (files in scope).
+			if (this.pathPrefix.trim() && this.pathFilterApplicable) {
+				chips.push({
+					key: 'path',
+					label: this.t('astrolabe', 'Path: {path}', { path: this.pathPrefix.trim() }),
+					kind: 'path',
+				})
+			}
+			return chips
 		},
 		scoreThresholdRatio() {
 			return this.scoreThreshold / 100
@@ -612,11 +719,60 @@ export default {
 			}
 		},
 
+		// Convert a native datetime-local value ("2026-01-01T00:00", local
+		// wall-clock) to an RFC 3339 / ISO 8601 UTC string ("2026-01-01T…Z").
+		// Returns '' for empty/invalid input so callers can omit the bound.
+		toRfc3339(localValue) {
+			if (!localValue) {
+				return ''
+			}
+			const date = new Date(localValue)
+			if (Number.isNaN(date.getTime())) {
+				return ''
+			}
+			return date.toISOString()
+		},
+
+		// Short, locale-aware label for a filter chip from a datetime-local value.
+		formatFilterDate(localValue) {
+			const date = new Date(localValue)
+			if (Number.isNaN(date.getTime())) {
+				return localValue
+			}
+			return date.toLocaleString()
+		},
+
+		// Remove a single active filter when its chip's close button is clicked.
+		removeFilter(chip) {
+			if (chip.kind === 'doc') {
+				this.toggleDocType(chip.value, false)
+			} else if (chip.kind === 'after') {
+				this.modifiedAfter = ''
+			} else if (chip.kind === 'before') {
+				this.modifiedBefore = ''
+			} else if (chip.kind === 'path') {
+				this.pathPrefix = ''
+			}
+			this.dateRangeError = null
+		},
+
 		async performSearch() {
 			const queryText = this.query.trim()
 			if (!queryText) {
 				return
 			}
+
+			// ADR-027: validate the modified-date range client-side so an
+			// inverted range is caught in the browser, not after a round-trip.
+			// The server-side guard remains the authoritative backstop.
+			const modifiedAfter = this.toRfc3339(this.modifiedAfter)
+			const modifiedBefore = this.toRfc3339(this.modifiedBefore)
+			if (modifiedAfter && modifiedBefore
+				&& new Date(modifiedAfter) > new Date(modifiedBefore)) {
+				this.dateRangeError = this.t('astrolabe', '"Modified after" must be on or before "Modified before".')
+				return
+			}
+			this.dateRangeError = null
 
 			this.loading = true
 			this.error = null
@@ -636,6 +792,21 @@ export default {
 
 				if (this.selectedDocTypes.length > 0) {
 					params.doc_types = this.selectedDocTypes.join(',')
+				}
+
+				// RFC 3339 date bounds (UTC); omit open bounds entirely.
+				if (modifiedAfter) {
+					params.modified_after = modifiedAfter
+				}
+				if (modifiedBefore) {
+					params.modified_before = modifiedBefore
+				}
+
+				// Path filter (files only) — only send when files are in scope so
+				// it can't zero out a non-file search.
+				const pathPrefix = this.pathPrefix.trim()
+				if (pathPrefix && this.pathFilterApplicable) {
+					params.path_prefix = pathPrefix
 				}
 
 				const response = await axios.get(url, { params })
@@ -1106,6 +1277,76 @@ export default {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	gap: 8px;
+}
+
+// ADR-027 modified-date range inputs + path input + active-filter chips
+.mcp-date-input,
+.mcp-path-input {
+	width: 100%;
+	padding: 6px 8px;
+	border: 2px solid var(--color-border-maxcontrast);
+	border-radius: var(--border-radius-large, 8px);
+	background-color: var(--color-main-background);
+	color: var(--color-main-text);
+
+	&:focus,
+	&:hover {
+		border-color: var(--color-primary-element);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+}
+
+.mcp-path-hint {
+	display: block;
+	margin-top: 4px;
+	font-size: 0.8em;
+	color: var(--color-text-maxcontrast);
+}
+
+.mcp-date-error {
+	margin-top: 12px;
+}
+
+.mcp-active-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.mcp-filter-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 4px 2px 12px;
+	border-radius: 16px;
+	background-color: var(--color-primary-element-light);
+	color: var(--color-primary-element-light-text);
+	font-size: 0.85em;
+}
+
+.mcp-filter-chip-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background-color: transparent;
+	color: inherit;
+	cursor: pointer;
+
+	&:hover,
+	&:focus-visible {
+		background-color: var(--color-primary-element);
+		color: var(--color-primary-element-text);
+	}
 }
 
 // Loading and error states
