@@ -88,6 +88,7 @@ class ApiController extends Controller {
 		string $include_pca = 'true',
 		string $modified_after = '',
 		string $modified_before = '',
+		string $path_prefix = '',
 	): JSONResponse {
 		if (empty($query)) {
 			return new JSONResponse([
@@ -160,6 +161,7 @@ class ApiController extends Controller {
 			$accessToken,
 			$modified_after !== '' ? $modified_after : null,
 			$modified_before !== '' ? $modified_before : null,
+			trim($path_prefix) !== '' ? trim($path_prefix) : null,
 		);
 
 		if (isset($result['error'])) {

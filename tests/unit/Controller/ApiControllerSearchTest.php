@@ -61,6 +61,28 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame('2026-06-01T00:00:00Z', $captured[7]);
 	}
 
+	public function testForwardsPathPrefixToClient(): void {
+		$this->authenticateUserWithToken();
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = $args;
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$response = $this->controller->search(
+			query: 'spec',
+			path_prefix: '  /Projects/Reports  ',
+		);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		// search(query, algorithm, limit, includePca, docTypes, token,
+		//        modifiedAfter, modifiedBefore, pathPrefix) — trimmed.
+		$this->assertSame('/Projects/Reports', $captured[8]);
+	}
+
 	public function testPassesNullBoundsWhenDatesOmitted(): void {
 		$this->authenticateUserWithToken();
 
@@ -74,8 +96,9 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 
 		$this->controller->search(query: 'meeting notes');
 
-		// Open bounds are passed as null, not empty string.
+		// Open bounds + absent path are passed as null, not empty string.
 		$this->assertNull($captured[6]);
 		$this->assertNull($captured[7]);
+		$this->assertNull($captured[8]);
 	}
 }

@@ -138,6 +138,20 @@
 									type="datetime-local"
 									class="mcp-date-input">
 							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-path-prefix">{{ t('astrolabe', 'Path (files)') }}</label>
+								<input
+									id="mcp-path-prefix"
+									v-model="pathPrefix"
+									type="text"
+									class="mcp-path-input"
+									:disabled="!pathFilterApplicable"
+									:placeholder="t('astrolabe', 'e.g. /Projects/Reports')">
+								<span v-if="!pathFilterApplicable" class="mcp-path-hint">
+									{{ t('astrolabe', 'Select the Files type to filter by path') }}
+								</span>
+							</div>
 						</div>
 
 						<NcNoteCard v-if="dateRangeError" type="warning" class="mcp-date-error">
@@ -478,6 +492,9 @@ export default {
 			modifiedAfter: '',
 			modifiedBefore: '',
 			dateRangeError: null,
+			// ADR-027 Phase 2 path filter. Applies to file results only; sent as
+			// path_prefix to the MCP server (MatchText on file_path).
+			pathPrefix: '',
 			limit: 20,
 			scoreThreshold: 0,
 			loading: false,
@@ -533,6 +550,13 @@ export default {
 		selectedAlgorithmOption() {
 			return this.algorithmOptions.find(opt => opt.id === this.algorithm) || this.algorithmOptions[0]
 		},
+		// The path filter only makes sense for file results: file_path is only
+		// indexed for files, so applying it while searching non-file types would
+		// silently return nothing. Applicable when Files is selected or when no
+		// doc-type filter is set (cross-app search includes files).
+		pathFilterApplicable() {
+			return this.selectedDocTypes.length === 0 || this.selectedDocTypes.includes('file')
+		},
 		// ADR-027: active structured filters rendered as closable chips, so the
 		// user always sees what is narrowing their results even with the
 		// advanced panel collapsed.
@@ -559,6 +583,14 @@ export default {
 					key: 'before',
 					label: this.t('astrolabe', 'Before {date}', { date: this.formatFilterDate(this.modifiedBefore) }),
 					kind: 'before',
+				})
+			}
+			// Only surface the path chip when it will actually apply (files in scope).
+			if (this.pathPrefix.trim() && this.pathFilterApplicable) {
+				chips.push({
+					key: 'path',
+					label: this.t('astrolabe', 'Path: {path}', { path: this.pathPrefix.trim() }),
+					kind: 'path',
 				})
 			}
 			return chips
@@ -718,6 +750,8 @@ export default {
 				this.modifiedAfter = ''
 			} else if (chip.kind === 'before') {
 				this.modifiedBefore = ''
+			} else if (chip.kind === 'path') {
+				this.pathPrefix = ''
 			}
 			this.dateRangeError = null
 		},
@@ -766,6 +800,13 @@ export default {
 				}
 				if (modifiedBefore) {
 					params.modified_before = modifiedBefore
+				}
+
+				// Path filter (files only) — only send when files are in scope so
+				// it can't zero out a non-file search.
+				const pathPrefix = this.pathPrefix.trim()
+				if (pathPrefix && this.pathFilterApplicable) {
+					params.path_prefix = pathPrefix
 				}
 
 				const response = await axios.get(url, { params })
@@ -1238,8 +1279,9 @@ export default {
 	gap: 8px;
 }
 
-// ADR-027 modified-date range inputs + active-filter chips
-.mcp-date-input {
+// ADR-027 modified-date range inputs + path input + active-filter chips
+.mcp-date-input,
+.mcp-path-input {
 	width: 100%;
 	padding: 6px 8px;
 	border: 2px solid var(--color-border-maxcontrast);
@@ -1251,6 +1293,18 @@ export default {
 	&:hover {
 		border-color: var(--color-primary-element);
 	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+}
+
+.mcp-path-hint {
+	display: block;
+	margin-top: 4px;
+	font-size: 0.8em;
+	color: var(--color-text-maxcontrast);
 }
 
 .mcp-date-error {

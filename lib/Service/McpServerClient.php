@@ -243,6 +243,7 @@ class McpServerClient {
 		?string $token = null,
 		?string $modifiedAfter = null,
 		?string $modifiedBefore = null,
+		?string $pathPrefix = null,
 	): array {
 		$requestBody = [
 			'query' => $query,
@@ -264,6 +265,12 @@ class McpServerClient {
 		}
 		if ($modifiedBefore !== null && $modifiedBefore !== '') {
 			$requestBody['modified_before'] = $modifiedBefore;
+		}
+
+		// ADR-027 Phase 2 path filter (files only). The MCP server matches it
+		// against the file_path payload (MatchText).
+		if ($pathPrefix !== null && $pathPrefix !== '') {
+			$requestBody['path_prefix'] = $pathPrefix;
 		}
 
 		$options = ['json' => $requestBody];
