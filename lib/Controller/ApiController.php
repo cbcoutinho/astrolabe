@@ -86,11 +86,38 @@ class ApiController extends Controller {
 		int $limit = 10,
 		string $doc_types = '',
 		string $include_pca = 'true',
+		string $modified_after = '',
+		string $modified_before = '',
 	): JSONResponse {
 		if (empty($query)) {
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'Missing required parameter: query',
+			], Http::STATUS_BAD_REQUEST);
+		}
+
+		// ADR-027 modified-date range filter. Validate the RFC 3339 / ISO 8601
+		// bounds here so malformed input or an inverted range surfaces as a 400
+		// rather than a 500 from the MCP server. Empty string ⇒ open bound.
+		$afterTs = null;
+		$beforeTs = null;
+		try {
+			if ($modified_after !== '') {
+				$afterTs = (new \DateTimeImmutable($modified_after))->getTimestamp();
+			}
+			if ($modified_before !== '') {
+				$beforeTs = (new \DateTimeImmutable($modified_before))->getTimestamp();
+			}
+		} catch (\Exception $e) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'modified_after/modified_before must be RFC 3339 datetimes',
+			], Http::STATUS_BAD_REQUEST);
+		}
+		if ($afterTs !== null && $beforeTs !== null && $afterTs > $beforeTs) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'modified_after must be on or before modified_before',
 			], Http::STATUS_BAD_REQUEST);
 		}
 
@@ -124,7 +151,16 @@ class ApiController extends Controller {
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
-		$result = $this->client->search($query, $algorithm, $limit, $includePcaBool, $docTypesArray, $accessToken);
+		$result = $this->client->search(
+			$query,
+			$algorithm,
+			$limit,
+			$includePcaBool,
+			$docTypesArray,
+			$accessToken,
+			$modified_after !== '' ? $modified_after : null,
+			$modified_before !== '' ? $modified_before : null,
+		);
 
 		if (isset($result['error'])) {
 			return new JSONResponse([

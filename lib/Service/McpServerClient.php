@@ -241,6 +241,8 @@ class McpServerClient {
 		bool $includePca = true,
 		?array $docTypes = null,
 		?string $token = null,
+		?string $modifiedAfter = null,
+		?string $modifiedBefore = null,
 	): array {
 		$requestBody = [
 			'query' => $query,
@@ -252,6 +254,16 @@ class McpServerClient {
 		// Add doc_types filter if specified
 		if ($docTypes !== null && count($docTypes) > 0) {
 			$requestBody['doc_types'] = $docTypes;
+		}
+
+		// ADR-027 modified-date range filter. Sent as RFC 3339 / ISO 8601
+		// strings; the MCP server normalizes them to int Unix seconds for the
+		// numeric Range filter. Omitted bounds stay open-ended.
+		if ($modifiedAfter !== null && $modifiedAfter !== '') {
+			$requestBody['modified_after'] = $modifiedAfter;
+		}
+		if ($modifiedBefore !== null && $modifiedBefore !== '') {
+			$requestBody['modified_before'] = $modifiedBefore;
 		}
 
 		$options = ['json' => $requestBody];
