@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.17.0 (2026-06-02)
+
+### Feat
+
+- **search**: ADR-027 Phase 2 — file path filter UI
+- **search**: ADR-027 Phase 1 — modified-date range filter UI
+
 ## v0.16.8 (2026-06-01)
 
 ### Fix
