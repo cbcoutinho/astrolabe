@@ -274,7 +274,7 @@ class McpServerClient {
 		// server ORs the folders, matching each against the file_path payload
 		// (MatchText). Omitted/empty ⇒ no path filter.
 		if ($pathPrefixes !== null && count($pathPrefixes) > 0) {
-			$requestBody['path_prefixes'] = array_values($pathPrefixes);
+			$requestBody['path_prefixes'] = $pathPrefixes;
 		}
 
 		$options = ['json' => $requestBody];
