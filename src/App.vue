@@ -140,16 +140,36 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label for="mcp-path-prefix">{{ t('astrolabe', 'Path (files)') }}</label>
-								<input
-									id="mcp-path-prefix"
-									v-model="pathPrefix"
-									type="text"
-									class="mcp-path-input"
+								<label>{{ t('astrolabe', 'Folders (files)') }}</label>
+								<NcButton
+									variant="secondary"
+									class="mcp-folder-pick-btn"
 									:disabled="!pathFilterApplicable"
-									:placeholder="t('astrolabe', 'e.g. /Projects/Reports')">
+									@click="pickFolders">
+									<template #icon>
+										<FolderSearch :size="20" />
+									</template>
+									{{ pathPrefixes.length
+										? t('astrolabe', 'Add folders…')
+										: t('astrolabe', 'Choose folders…') }}
+								</NcButton>
+								<div v-if="pathPrefixes.length" class="mcp-folder-list">
+									<span
+										v-for="folder in pathPrefixes"
+										:key="folder"
+										class="mcp-filter-chip">
+										{{ folder }}
+										<button
+											type="button"
+											class="mcp-filter-chip-close"
+											:aria-label="t('astrolabe', 'Remove folder')"
+											@click="removeFolder(folder)">
+											<Close :size="16" />
+										</button>
+									</span>
+								</div>
 								<span v-if="!pathFilterApplicable" class="mcp-path-hint">
-									{{ t('astrolabe', 'Select the Files type to filter by path') }}
+									{{ t('astrolabe', 'Select the Files type to filter by folder') }}
 								</span>
 							</div>
 						</div>
@@ -442,11 +462,13 @@ import Refresh from 'vue-material-design-icons/Refresh.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import Eye from 'vue-material-design-icons/Eye.vue'
 import Close from 'vue-material-design-icons/Close.vue'
+import FolderSearch from 'vue-material-design-icons/FolderSearch.vue'
 
 import PDFViewer from './components/PDFViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
 
 import axios from '@nextcloud/axios'
+import { FilePickerType, getFilePickerBuilder } from '@nextcloud/dialogs'
 import { generateUrl } from '@nextcloud/router'
 import Plotly from 'plotly.js-dist-min'
 
@@ -477,6 +499,7 @@ export default {
 		OpenInNew,
 		Eye,
 		Close,
+		FolderSearch,
 	},
 	data() {
 		return {
@@ -493,8 +516,11 @@ export default {
 			modifiedBefore: '',
 			dateRangeError: null,
 			// ADR-027 Phase 2 path filter. Applies to file results only; sent as
-			// path_prefix to the MCP server (MatchText on file_path).
-			pathPrefix: '',
+			// a comma-separated path_prefixes list to the MCP server (OR-ed
+			// MatchText on file_path). Folders are picked from the user's
+			// Nextcloud files via the native folder picker, so the values are
+			// always valid server paths.
+			pathPrefixes: [],
 			limit: 20,
 			scoreThreshold: 0,
 			loading: false,
@@ -585,13 +611,17 @@ export default {
 					kind: 'before',
 				})
 			}
-			// Only surface the path chip when it will actually apply (files in scope).
-			if (this.pathPrefix.trim() && this.pathFilterApplicable) {
-				chips.push({
-					key: 'path',
-					label: this.t('astrolabe', 'Path: {path}', { path: this.pathPrefix.trim() }),
-					kind: 'path',
-				})
+			// One chip per selected folder; only surface them when they will
+			// actually apply (files in scope).
+			if (this.pathFilterApplicable) {
+				for (const folder of this.pathPrefixes) {
+					chips.push({
+						key: `path:${folder}`,
+						label: this.t('astrolabe', 'Folder: {path}', { path: folder }),
+						kind: 'path',
+						value: folder,
+					})
+				}
 			}
 			return chips
 		},
@@ -751,9 +781,39 @@ export default {
 			} else if (chip.kind === 'before') {
 				this.modifiedBefore = ''
 			} else if (chip.kind === 'path') {
-				this.pathPrefix = ''
+				this.removeFolder(chip.value)
 			}
 			this.dateRangeError = null
+		},
+
+		// Remove a single selected folder from the path filter.
+		removeFolder(folder) {
+			this.pathPrefixes = this.pathPrefixes.filter(p => p !== folder)
+		},
+
+		// Open the native Nextcloud folder picker and merge the chosen
+		// directories into the path filter. Picking from the user's own Files
+		// tree means every value is a valid, server-side path, so the filter
+		// can't silently match nothing because of a typo.
+		async pickFolders() {
+			const picker = getFilePickerBuilder(this.t('astrolabe', 'Select folders to search'))
+				.setMultiSelect(true)
+				.setMimeTypeFilter(['httpd/unix-directory'])
+				.setType(FilePickerType.Choose)
+				.allowDirectories(true)
+				.build()
+
+			// pick() rejects on cancel (normal — map to null, leaving the
+			// selection untouched). NOTE: confirm the multi-select return shape
+			// against the installed @nextcloud/dialogs v7 — pick() resolves to a
+			// path string (single) or an array (multi); both are handled below,
+			// and "Add folders…" can be clicked repeatedly regardless.
+			const picked = await picker.pick().catch(() => null)
+			const paths = Array.isArray(picked) ? picked : [picked]
+			const cleaned = paths
+				.map(p => (p || '').trim())
+				.filter(Boolean)
+			this.pathPrefixes = [...new Set([...this.pathPrefixes, ...cleaned])]
 		},
 
 		async performSearch() {
@@ -803,10 +863,10 @@ export default {
 				}
 
 				// Path filter (files only) — only send when files are in scope so
-				// it can't zero out a non-file search.
-				const pathPrefix = this.pathPrefix.trim()
-				if (pathPrefix && this.pathFilterApplicable) {
-					params.path_prefix = pathPrefix
+				// it can't zero out a non-file search. Sent as a comma-separated
+				// list; the backend ORs the folders together.
+				if (this.pathFilterApplicable && this.pathPrefixes.length) {
+					params.path_prefixes = this.pathPrefixes.join(',')
 				}
 
 				const response = await axios.get(url, { params })
@@ -1279,9 +1339,8 @@ export default {
 	gap: 8px;
 }
 
-// ADR-027 modified-date range inputs + path input + active-filter chips
-.mcp-date-input,
-.mcp-path-input {
+// ADR-027 modified-date range inputs + folder picker + active-filter chips
+.mcp-date-input {
 	width: 100%;
 	padding: 6px 8px;
 	border: 2px solid var(--color-border-maxcontrast);
@@ -1298,6 +1357,14 @@ export default {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
+}
+
+// ADR-027 Phase 2 folder picker: button + selected-folder chip list.
+.mcp-folder-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
 }
 
 .mcp-path-hint {

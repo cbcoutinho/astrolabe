@@ -89,6 +89,7 @@ class ApiController extends Controller {
 		string $modified_after = '',
 		string $modified_before = '',
 		string $path_prefix = '',
+		string $path_prefixes = '',
 	): JSONResponse {
 		if (empty($query)) {
 			return new JSONResponse([
@@ -152,6 +153,17 @@ class ApiController extends Controller {
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
+		// ADR-027 Phase 2 path filter. Accept a comma-separated path_prefixes
+		// list (multi-folder) alongside the legacy single path_prefix; trim,
+		// drop blanks, and dedupe so the folders OR cleanly on the MCP server.
+		$pathPrefixesArray = [];
+		foreach (array_merge([$path_prefix], explode(',', $path_prefixes)) as $folder) {
+			$folder = trim($folder);
+			if ($folder !== '' && !in_array($folder, $pathPrefixesArray, true)) {
+				$pathPrefixesArray[] = $folder;
+			}
+		}
+
 		$result = $this->client->search(
 			$query,
 			$algorithm,
@@ -161,7 +173,7 @@ class ApiController extends Controller {
 			$accessToken,
 			$modified_after !== '' ? $modified_after : null,
 			$modified_before !== '' ? $modified_before : null,
-			trim($path_prefix) !== '' ? trim($path_prefix) : null,
+			$pathPrefixesArray !== [] ? $pathPrefixesArray : null,
 		);
 
 		if (isset($result['error'])) {

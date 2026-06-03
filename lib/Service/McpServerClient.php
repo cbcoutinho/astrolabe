@@ -224,6 +224,9 @@ class McpServerClient {
 	 * @param bool $includePca Whether to include PCA coordinates for 2D plot
 	 * @param array|null $docTypes Document types to filter (e.g., ['note', 'file'])
 	 * @param string|null $token OAuth bearer token for authentication
+	 * @param string|null $modifiedAfter RFC 3339 lower bound on last-modified (open if null)
+	 * @param string|null $modifiedBefore RFC 3339 upper bound on last-modified (open if null)
+	 * @param list<string>|null $pathPrefixes Folder filters (files only), OR-ed; no filter if null/empty
 	 * @return array{
 	 *   results?: array,
 	 *   pca_coordinates?: array,
@@ -243,7 +246,7 @@ class McpServerClient {
 		?string $token = null,
 		?string $modifiedAfter = null,
 		?string $modifiedBefore = null,
-		?string $pathPrefix = null,
+		?array $pathPrefixes = null,
 	): array {
 		$requestBody = [
 			'query' => $query,
@@ -267,10 +270,11 @@ class McpServerClient {
 			$requestBody['modified_before'] = $modifiedBefore;
 		}
 
-		// ADR-027 Phase 2 path filter (files only). The MCP server matches it
-		// against the file_path payload (MatchText).
-		if ($pathPrefix !== null && $pathPrefix !== '') {
-			$requestBody['path_prefix'] = $pathPrefix;
+		// ADR-027 Phase 2 path filter (files only). Sent as a list; the MCP
+		// server ORs the folders, matching each against the file_path payload
+		// (MatchText). Omitted/empty ⇒ no path filter.
+		if ($pathPrefixes !== null && count($pathPrefixes) > 0) {
+			$requestBody['path_prefixes'] = array_values($pathPrefixes);
 		}
 
 		$options = ['json' => $requestBody];

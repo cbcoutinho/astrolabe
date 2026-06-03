@@ -79,8 +79,50 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		// search(query, algorithm, limit, includePca, docTypes, token,
-		//        modifiedAfter, modifiedBefore, pathPrefix) — trimmed.
-		$this->assertSame('/Projects/Reports', $captured[8]);
+		//        modifiedAfter, modifiedBefore, pathPrefixes) — trimmed list.
+		// The legacy single path_prefix is folded into the path_prefixes list.
+		$this->assertSame(['/Projects/Reports'], $captured[8]);
+	}
+
+	public function testForwardsMultiplePathPrefixesToClient(): void {
+		$this->authenticateUserWithToken();
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = $args;
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$response = $this->controller->search(
+			query: 'spec',
+			path_prefix: '/Projects/Reports',
+			path_prefixes: ' /Archive , /Projects/Reports ,  ',
+		);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		// Legacy single + CSV list merge, trim, drop blanks, and dedupe
+		// (order-preserving) into one path_prefixes array.
+		$this->assertSame(['/Projects/Reports', '/Archive'], $captured[8]);
+	}
+
+	public function testPassesNullPathWhenNoFoldersGiven(): void {
+		$this->authenticateUserWithToken();
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = $args;
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$this->controller->search(query: 'spec', path_prefixes: ' , ,  ');
+
+		// Blank-only input ⇒ null, not an empty array, so the MCP server adds
+		// no path condition.
+		$this->assertNull($captured[8]);
 	}
 
 	public function testPassesNullBoundsWhenDatesOmitted(): void {
