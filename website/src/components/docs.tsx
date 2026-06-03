@@ -14,9 +14,13 @@ export function Callout({
 }: Readonly<{ title: string; children: ReactNode }>) {
   return (
     <div className="my-8 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
-      <p className="not-prose mb-1.5 text-sm font-semibold text-slate-900">
+      <div
+        role="heading"
+        aria-level={2}
+        className="not-prose mb-1.5 text-sm font-semibold text-slate-900"
+      >
         {title}
-      </p>
+      </div>
       {/* Children are Markdown; prose styles the text and links. Trim the
           paragraph margins so the box stays tight. */}
       <div className="text-sm [&>p]:my-0">{children}</div>
@@ -25,9 +29,12 @@ export function Callout({
 }
 
 export function Steps({ children }: Readonly<{ children: ReactNode }>) {
-  // Plain wrapper (not an <ol>) — each Step renders its own number, and prose
-  // leaves <div> elements alone, so no list styling leaks in.
-  return <div className="mt-6 space-y-5">{children}</div>;
+  // An ordered list so assistive tech announces the sequence and count. Each
+  // Step renders its own visible number, so `not-prose` (+ list-none) strips
+  // prose's default list styling while keeping the semantic <ol>/<li>.
+  return (
+    <ol className="not-prose mt-6 list-none space-y-5 pl-0">{children}</ol>
+  );
 }
 
 export function Step({
@@ -36,13 +43,13 @@ export function Step({
   children,
 }: Readonly<{ n: string; title: string; children: ReactNode }>) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-card">
+    <li className="rounded-xl border border-slate-200 bg-white p-6 shadow-card">
       <div className="not-prose flex items-baseline gap-4">
         <span className="font-mono text-sm font-medium text-brand-600">{n}</span>
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
       </div>
       <div className="mt-2 [&>p:first-child]:mt-0">{children}</div>
-    </div>
+    </li>
   );
 }
 

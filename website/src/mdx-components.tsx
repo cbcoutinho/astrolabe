@@ -8,6 +8,8 @@ import type { MDXComponents } from "mdx/types";
 // needs styling that `prose` can't express.
 const components: MDXComponents = {};
 
-export function useMDXComponents(): MDXComponents {
-  return components;
+export function useMDXComponents(
+  otherComponents: MDXComponents,
+): MDXComponents {
+  return { ...otherComponents, ...components };
 }

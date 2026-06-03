@@ -10,6 +10,11 @@
       "description": "@playwright/test is pinned to match the Chromium browser revision installed in CI and local dev. Updating requires verifying that the new version's expected browser revision is available. See: ~/.cache/ms-playwright/ for installed revisions.",
       "matchPackageNames": ["@playwright/test"],
       "allowedVersions": "1.56.1"
+    },
+    {
+      "description": "Keep next and @next/mdx (and other @next/* packages) on the same version — they are released in lockstep and must stay aligned.",
+      "matchPackageNames": ["next", "@next/**"],
+      "groupName": "next monorepo"
     }
   ]
 }

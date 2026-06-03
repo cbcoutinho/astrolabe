@@ -7,19 +7,24 @@ import Image from "next/image";
 // PNG into website/public/, then pass `src` plus its intrinsic `width`/`height`
 // (required by next/image under the static export). The placeholder's `label`
 // becomes the image `alt`, so describe what the screenshot shows.
+// `src` requires `width`/`height` together (next/image needs intrinsic
+// dimensions under the static export); omitting `src` renders the placeholder
+// and forbids stray dimensions. The discriminated union enforces this at build
+// time so a real screenshot can't be wired up without its dimensions.
+type ScreenshotProps = Readonly<
+  { label: string; caption?: string } & (
+    | { src: string; width: number; height: number }
+    | { src?: never; width?: never; height?: never }
+  )
+>;
+
 export function Screenshot({
   label,
   src,
   width,
   height,
   caption,
-}: Readonly<{
-  label: string;
-  src?: string;
-  width?: number;
-  height?: number;
-  caption?: string;
-}>) {
+}: ScreenshotProps) {
   return (
     <figure className="not-prose mt-5">
       {src && width && height ? (
