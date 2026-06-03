@@ -89,6 +89,7 @@ class ApiController extends Controller {
 		string $modified_after = '',
 		string $modified_before = '',
 		string $path_prefix = '',
+		string $path_prefixes = '',
 	): JSONResponse {
 		if (empty($query)) {
 			return new JSONResponse([
@@ -152,6 +153,30 @@ class ApiController extends Controller {
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
+		// ADR-027 Phase 2 path filter. Accept a newline-separated path_prefixes
+		// list (multi-folder) alongside the legacy single path_prefix; trim,
+		// drop blanks, and dedupe so the folders OR cleanly on the MCP server.
+		// Newline is the delimiter because, unlike a comma, it can't appear in a
+		// POSIX path, so folder names are never split mid-value.
+		//
+		// Trust boundary: these values are user-controlled but are only used as
+		// MatchText *filters* on the indexed file_path payload, never to access
+		// the filesystem. The MCP server always AND-s them under an ACL owner
+		// filter, so a hostile value (e.g. "/../etc/passwd") can only ever
+		// narrow a user's own results — it cannot widen scope or traverse paths.
+		// No path-shape validation is applied here precisely so that legitimate,
+		// unusual folder names are never silently dropped.
+		$pathPrefixesArray = [];
+		foreach (array_merge([$path_prefix], explode("\n", $path_prefixes)) as $folder) {
+			$folder = trim($folder);
+			if ($folder !== '' && !in_array($folder, $pathPrefixesArray, true)) {
+				$pathPrefixesArray[] = $folder;
+			}
+		}
+		// Cap the OR-filter width so a malformed/hostile client can't build an
+		// unbounded should-clause on the MCP server.
+		$pathPrefixesArray = array_slice($pathPrefixesArray, 0, 20);
+
 		$result = $this->client->search(
 			$query,
 			$algorithm,
@@ -161,7 +186,7 @@ class ApiController extends Controller {
 			$accessToken,
 			$modified_after !== '' ? $modified_after : null,
 			$modified_before !== '' ? $modified_before : null,
-			trim($path_prefix) !== '' ? trim($path_prefix) : null,
+			$pathPrefixesArray !== [] ? $pathPrefixesArray : null,
 		);
 
 		if (isset($result['error'])) {
