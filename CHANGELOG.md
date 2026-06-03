@@ -25,6 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.19.0 (2026-06-03)
+
+### Feat
+
+- **admin**: admin-managed app-password provisioning
+
+### Fix
+
+- **admin**: widen $capped type so Psalm sees the by-ref closure mutation
+- **admin**: use callForAllUsers (not deprecated search) + PSR-3 logging
+- **admin**: harden adminProvisionUser failure paths
+- **admin**: address review feedback on provisioning PR
+
+### Refactor
+
+- **settings**: native stacked layout for admin & personal pages
+
 ## v0.18.0 (2026-06-03)
 
 ### Feat
