@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
 use OCP\IUserSession;
 use OCP\Settings\ISettings;
@@ -27,6 +28,7 @@ class Personal implements ISettings {
 		private IUserSession $userSession,
 		private BackgroundSyncCredentialStorage $credentialStorage,
 		private IAppConfig $appConfig,
+		private IInitialState $initialState,
 	) {
 	}
 
@@ -60,7 +62,7 @@ class Personal implements ISettings {
 			Admin::DEFAULT_ALLOW_USER_SELF_PROVISION,
 		);
 
-		$parameters = [
+		$this->initialState->provideInitialState('personal-config', [
 			'userId' => $userId,
 			'serverUrl' => $this->client->getPublicServerUrl(),
 			'serverStatus' => $serverStatus,
@@ -68,13 +70,12 @@ class Personal implements ISettings {
 			'hasBackgroundAccess' => $this->credentialStorage->hasAccess($userId),
 			'backgroundSyncProvisionedAt' => $this->credentialStorage->getProvisionedAt($userId),
 			'allowUserSelfProvision' => $allowUserSelfProvision,
-			'requesttoken' => \OCP\Util::callRegister(),
-		];
+		]);
 
 		return new TemplateResponse(
 			Application::APP_ID,
 			'settings/personal',
-			$parameters,
+			[],
 			TemplateResponse::RENDER_AS_BLANK,
 		);
 	}

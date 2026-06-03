@@ -122,8 +122,12 @@ class Admin implements ISettings {
 
 	/**
 	 * @return int Priority (lower = higher up)
+	 *
+	 * Rendered after the declarative "MCP Server Configuration" form
+	 * (priority 10) so that the connection config is the first section on the
+	 * page and the Vue status/webhooks/search/provisioning sections follow.
 	 */
 	public function getPriority(): int {
-		return 10;
+		return 50;
 	}
 }
