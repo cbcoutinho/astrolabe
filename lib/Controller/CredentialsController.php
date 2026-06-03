@@ -298,6 +298,10 @@ class CredentialsController extends Controller {
 	 */
 	public function adminListProvisioning(): JSONResponse {
 		$users = [];
+		// Widened to bool because the flag is mutated by reference inside the
+		// closure below; Psalm can't see that mutation and would otherwise infer
+		// the literal `false` and flag `if ($capped)` as dead code.
+		/** @var bool $capped */
 		$capped = false;
 		$count = 0;
 		$limit = self::ADMIN_USER_LIST_LIMIT;
