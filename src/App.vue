@@ -504,8 +504,9 @@ export default {
 			modifiedBefore: '',
 			dateRangeError: null,
 			// ADR-027 Phase 2 path filter. Applies to file results only; sent as
-			// a comma-separated path_prefixes list to the MCP server (OR-ed
-			// MatchText on file_path). Folders are picked from the user's
+			// a newline-separated path_prefixes list to the backend (OR-ed
+			// MatchText on file_path). Newline is used because, unlike a comma,
+			// it can't appear in a POSIX path. Folders are picked from the user's
 			// Nextcloud files via the native folder picker, so the values are
 			// always valid server paths.
 			pathPrefixes: [],
