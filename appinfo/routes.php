@@ -37,6 +37,29 @@ return [
 			'verb' => 'GET',
 		],
 
+		// Admin provisioning (admin-only via SecurityMiddleware — these methods
+		// carry no #[NoAdminRequired] attribute)
+		[
+			'name' => 'credentials#adminListProvisioning',
+			'url' => '/api/v1/background-sync/admin/users',
+			'verb' => 'GET',
+		],
+		[
+			'name' => 'credentials#adminProvisionUser',
+			'url' => '/api/v1/background-sync/admin/users/{userId}',
+			'verb' => 'POST',
+		],
+		[
+			'name' => 'credentials#adminDeprovisionUser',
+			'url' => '/api/v1/background-sync/admin/users/{userId}',
+			'verb' => 'DELETE',
+		],
+		[
+			'name' => 'credentials#adminSetSelfProvision',
+			'url' => '/api/v1/background-sync/admin/self-provision',
+			'verb' => 'POST',
+		],
+
 		// Vector search API
 		[
 			'name' => 'api#search',

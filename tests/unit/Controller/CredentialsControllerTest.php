@@ -5,30 +5,31 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
 use OCA\Astrolabe\Controller\CredentialsController;
+use OCA\Astrolabe\Service\AppPasswordProvisioningService;
 use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
 use OCP\AppFramework\Http;
 use OCP\Authentication\Exceptions\InvalidTokenException;
 use OCP\Authentication\Token\IProvider;
 use OCP\Authentication\Token\IToken;
-use OCP\Http\Client\IClient;
-use OCP\Http\Client\IClientService;
-use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IRequest;
 use OCP\IUser;
+use OCP\IUserManager;
 use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 /**
- * Tests for {@see CredentialsController}: the app-password validation path of
- * storeAppPassword (internal token-provider validation, no HTTP round-trip),
- * its MCP HTTP-sync path, plus getStatus / getCredentials / deleteCredentials.
+ * Tests for {@see CredentialsController}.
  *
- * Validation is performed internally via the token provider: a loopback call
- * was fragile because `overwrite.cli.url` points at the externally-mapped host,
- * unreachable from inside the container.
+ * The controller owns request/session handling and the self-provisioning
+ * gate; minting and the MCP HTTP wire contract live in
+ * {@see AppPasswordProvisioningService} (covered by its own test), which is
+ * mocked here. App-password validation is performed internally via the public
+ * token provider (no HTTP round-trip): a loopback call was fragile because
+ * `overwrite.cli.url` points at the externally-mapped host, unreachable from
+ * inside the container.
  */
 class CredentialsControllerTest extends TestCase {
 	// A well-formed value matching the store endpoint's ^[a-zA-Z0-9-]{20,256}$
@@ -39,9 +40,10 @@ class CredentialsControllerTest extends TestCase {
 	private BackgroundSyncCredentialStorage&MockObject $credentialStorage;
 	private IUserSession&MockObject $userSession;
 	private LoggerInterface&MockObject $logger;
-	private IConfig&MockObject $config;
-	private IClientService&MockObject $httpClientService;
+	private IAppConfig&MockObject $appConfig;
 	private IProvider&MockObject $tokenProvider;
+	private AppPasswordProvisioningService&MockObject $provisioning;
+	private IUserManager&MockObject $userManager;
 	private CredentialsController $controller;
 
 	protected function setUp(): void {
@@ -51,9 +53,10 @@ class CredentialsControllerTest extends TestCase {
 		$this->credentialStorage = $this->createMock(BackgroundSyncCredentialStorage::class);
 		$this->userSession = $this->createMock(IUserSession::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
-		$this->config = $this->createMock(IConfig::class);
-		$this->httpClientService = $this->createMock(IClientService::class);
+		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->tokenProvider = $this->createMock(IProvider::class);
+		$this->provisioning = $this->createMock(AppPasswordProvisioningService::class);
+		$this->userManager = $this->createMock(IUserManager::class);
 
 		$this->controller = new CredentialsController(
 			'astrolabe',
@@ -61,9 +64,10 @@ class CredentialsControllerTest extends TestCase {
 			$this->credentialStorage,
 			$this->userSession,
 			$this->logger,
-			$this->config,
-			$this->httpClientService,
+			$this->appConfig,
 			$this->tokenProvider,
+			$this->provisioning,
+			$this->userManager,
 		);
 	}
 
@@ -73,8 +77,16 @@ class CredentialsControllerTest extends TestCase {
 		$this->userSession->method('getUser')->willReturn($user);
 	}
 
-	public function testStoreSucceedsWhenTokenBelongsToUser(): void {
+	/** Allow (default) or block self-service provisioning via the app config. */
+	private function allowSelfProvision(bool $allowed = true): void {
+		$this->appConfig->method('getValueBool')
+			->with('astrolabe', 'allow_user_self_provision', true)
+			->willReturn($allowed);
+	}
+
+	public function testStoreSucceedsAndDelegatesMcpSync(): void {
 		$this->authenticate('alice');
+		$this->allowSelfProvision();
 
 		$token = $this->createMock(IToken::class);
 		$token->method('getUID')->willReturn('alice');
@@ -84,28 +96,70 @@ class CredentialsControllerTest extends TestCase {
 			->with(self::VALID_INPUT)
 			->willReturn($token);
 
-		// MCP server unconfigured → stores locally and returns success.
-		$this->config->method('getSystemValue')->with('mcp_server_url', '')->willReturn('');
 		$this->credentialStorage->expects($this->once())
 			->method('storeAppPassword')
 			->with('alice', self::VALID_INPUT);
-		// No HTTP round-trip is made for validation.
-		$this->httpClientService->expects($this->never())->method('newClient');
+
+		// The MCP wire contract is the service's concern; the controller only
+		// delegates and merges the structured result.
+		$this->provisioning->expects($this->once())
+			->method('syncToMcp')
+			->with('alice', 'alice', self::VALID_INPUT)
+			->willReturn(['mcp_sync' => true, 'partial_success' => false, 'message' => 'ok']);
 
 		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertTrue($response->getData()['success']);
+		$this->assertTrue($response->getData()['mcp_sync']);
+	}
+
+	public function testStorePassesValidatedLoginNameToService(): void {
+		// OIDC user: UID (display name) differs from loginName. The loginName
+		// resolved during validation must reach the service unchanged.
+		$this->authenticate('Chris Coutinho');
+		$this->allowSelfProvision();
+
+		$token = $this->createMock(IToken::class);
+		$token->method('getUID')->willReturn('Chris Coutinho');
+		$token->method('getLoginName')->willReturn('chris@coutinho.io');
+		$this->tokenProvider->method('getToken')->with(self::VALID_INPUT)->willReturn($token);
+
+		$this->provisioning->expects($this->once())
+			->method('syncToMcp')
+			->with('Chris Coutinho', 'chris@coutinho.io', self::VALID_INPUT)
+			->willReturn(['mcp_sync' => true, 'partial_success' => false, 'message' => 'ok']);
+
+		$data = $this->controller->storeAppPassword(self::VALID_INPUT)->getData();
+
+		$this->assertTrue($data['success']);
+	}
+
+	public function testStoreBlockedWhenSelfProvisionDisabled(): void {
+		$this->authenticate('alice');
+		$this->allowSelfProvision(false);
+
+		// Neither validation nor storage nor MCP sync may run when disabled.
+		$this->tokenProvider->expects($this->never())->method('getToken');
+		$this->credentialStorage->expects($this->never())->method('storeAppPassword');
+		$this->provisioning->expects($this->never())->method('syncToMcp');
+
+		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertFalse($response->getData()['success']);
 	}
 
 	public function testStoreRejectsTokenOwnedByDifferentUser(): void {
 		$this->authenticate('alice');
+		$this->allowSelfProvision();
 
 		$token = $this->createMock(IToken::class);
 		$token->method('getUID')->willReturn('mallory');
 		$this->tokenProvider->method('getToken')->willReturn($token);
 
 		$this->credentialStorage->expects($this->never())->method('storeAppPassword');
+		$this->provisioning->expects($this->never())->method('syncToMcp');
 
 		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
 
@@ -115,6 +169,7 @@ class CredentialsControllerTest extends TestCase {
 
 	public function testStoreRejectsUnrecognisedToken(): void {
 		$this->authenticate('alice');
+		$this->allowSelfProvision();
 
 		$this->tokenProvider->method('getToken')
 			->willThrowException(new InvalidTokenException('nope'));
@@ -129,6 +184,7 @@ class CredentialsControllerTest extends TestCase {
 
 	public function testStoreRejectsMalformedPasswordWithoutTokenLookup(): void {
 		$this->authenticate('alice');
+		$this->allowSelfProvision();
 
 		// Validation must never be attempted for an obviously malformed token.
 		$this->tokenProvider->expects($this->never())->method('getToken');
@@ -140,78 +196,11 @@ class CredentialsControllerTest extends TestCase {
 		$this->assertFalse($response->getData()['success']);
 	}
 
-	public function testStoreSyncsToConfiguredMcpServerOverHttps(): void {
-		$this->authenticate('alice');
+	public function testStoreRejectsUnauthenticated(): void {
+		$response = $this->controller->storeAppPassword(self::VALID_INPUT);
 
-		$token = $this->createMock(IToken::class);
-		$token->method('getUID')->willReturn('alice');
-		$token->method('getLoginName')->willReturn('alice');
-		$this->tokenProvider->method('getToken')->with(self::VALID_INPUT)->willReturn($token);
-
-		$this->config->method('getSystemValue')
-			->with('mcp_server_url', '')
-			->willReturn('https://mcp.example:8000');
-		$this->credentialStorage->expects($this->once())
-			->method('storeAppPassword')
-			->with('alice', self::VALID_INPUT);
-
-		$resp = $this->createMock(IResponse::class);
-		$resp->method('getStatusCode')->willReturn(200);
-		$resp->method('getBody')->willReturn(json_encode(['success' => true]));
-		$client = $this->createMock(IClient::class);
-		$client->expects($this->once())->method('post')->willReturn($resp);
-		$this->httpClientService->method('newClient')->willReturn($client);
-
-		$data = $this->controller->storeAppPassword(self::VALID_INPUT)->getData();
-
-		$this->assertTrue($data['success']);
-		$this->assertTrue($data['mcp_sync']);
-	}
-
-	/**
-	 * For OIDC-provisioned users the UID (display name) differs from the
-	 * loginName. Nextcloud keys app-password BasicAuth on the loginName, so the
-	 * MCP server must receive the loginName in the body — while the BasicAuth
-	 * user and URL path stay the UID (the identity key). Regression guard for
-	 * the "App password validation failed: HTTP 401" provisioning failure.
-	 */
-	public function testStoreSendsLoginNameNotUidToMcpServer(): void {
-		$this->authenticate('Chris Coutinho');
-
-		$token = $this->createMock(IToken::class);
-		$token->method('getUID')->willReturn('Chris Coutinho');
-		$token->method('getLoginName')->willReturn('chris@coutinho.io');
-		$this->tokenProvider->method('getToken')->with(self::VALID_INPUT)->willReturn($token);
-
-		$this->config->method('getSystemValue')
-			->with('mcp_server_url', '')
-			->willReturn('https://mcp.example:8000');
-
-		$resp = $this->createMock(IResponse::class);
-		$resp->method('getStatusCode')->willReturn(200);
-		$resp->method('getBody')->willReturn(json_encode(['success' => true]));
-		$client = $this->createMock(IClient::class);
-		$client->expects($this->once())
-			->method('post')
-			->with(
-				// Path segment is the URL-encoded UID, not the loginName.
-				$this->stringContains('/api/v1/users/Chris%20Coutinho/app-password'),
-				$this->callback(function (array $opts): bool {
-					// BasicAuth user is the UID; body username is the loginName.
-					$this->assertSame(['Chris Coutinho', self::VALID_INPUT], $opts['auth']);
-					$this->assertSame(
-						['username' => 'chris@coutinho.io'],
-						json_decode($opts['body'], true),
-					);
-					return true;
-				}),
-			)
-			->willReturn($resp);
-		$this->httpClientService->method('newClient')->willReturn($client);
-
-		$data = $this->controller->storeAppPassword(self::VALID_INPUT)->getData();
-
-		$this->assertTrue($data['mcp_sync']);
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+		$this->assertFalse($response->getData()['success']);
 	}
 
 	public function testGetStatusReportsUnprovisioned(): void {
@@ -260,10 +249,13 @@ class CredentialsControllerTest extends TestCase {
 		$this->assertSame('app_password', $data['sync_type']);
 	}
 
-	public function testDeleteCredentialsHappyPathWhenMcpUnconfigured(): void {
+	public function testDeleteCredentialsRevokesFromMcpThenClearsLocal(): void {
 		$this->authenticate('alice');
-		// MCP unconfigured → revokeFromMcpServer is a no-op before touching storage.
-		$this->config->method('getSystemValue')->with('mcp_server_url', '')->willReturn('');
+		$this->credentialStorage->method('getAppPassword')->with('alice')->willReturn('sometoken');
+		// Self-service delete revokes the MCP copy but does NOT invalidate the
+		// Nextcloud token (the user owns it) — only an admin deprovision does.
+		$this->provisioning->expects($this->once())->method('revokeFromMcp')->with('alice', 'sometoken');
+		$this->provisioning->expects($this->never())->method('revokeToken');
 		$this->credentialStorage->expects($this->once())->method('deleteAppPassword')->with('alice');
 
 		$response = $this->controller->deleteCredentials();
@@ -272,19 +264,10 @@ class CredentialsControllerTest extends TestCase {
 		$this->assertTrue($response->getData()['success']);
 	}
 
-	public function testDeleteCredentialsProceedsWhenMcpRevokeFails(): void {
+	public function testDeleteCredentialsSkipsMcpWhenNoStoredPassword(): void {
 		$this->authenticate('alice');
-		$this->config->method('getSystemValue')
-			->with('mcp_server_url', '')
-			->willReturn('https://mcp.example:8000');
-		// Best-effort revoke must read the stored password *before* the local
-		// delete removes it — assert that ordering invariant by requiring the
-		// read, then a failing DELETE, then the local delete still running.
-		$this->credentialStorage->expects($this->once())
-			->method('getAppPassword')->with('alice')->willReturn('sometoken');
-		$client = $this->createMock(IClient::class);
-		$client->method('delete')->willThrowException(new \RuntimeException('mcp down'));
-		$this->httpClientService->method('newClient')->willReturn($client);
+		$this->credentialStorage->method('getAppPassword')->with('alice')->willReturn(null);
+		$this->provisioning->expects($this->never())->method('revokeFromMcp');
 		$this->credentialStorage->expects($this->once())->method('deleteAppPassword')->with('alice');
 
 		$response = $this->controller->deleteCredentials();
@@ -298,5 +281,97 @@ class CredentialsControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
 		$this->assertFalse($response->getData()['success']);
+	}
+
+	// -----------------------------------------------------------------
+	// Admin provisioning
+	// -----------------------------------------------------------------
+
+	public function testAdminListProvisioningReturnsAllUsers(): void {
+		$alice = $this->createMock(IUser::class);
+		$alice->method('getUID')->willReturn('alice');
+		$alice->method('getDisplayName')->willReturn('Alice');
+		$bob = $this->createMock(IUser::class);
+		$bob->method('getUID')->willReturn('bob');
+		$bob->method('getDisplayName')->willReturn('Bob');
+
+		$this->userManager->method('search')->willReturn([$alice, $bob]);
+		$this->credentialStorage->method('hasAccess')->willReturnMap([
+			['alice', true],
+			['bob', false],
+		]);
+		$this->credentialStorage->method('getProvisionedAt')->willReturnMap([
+			['alice', 1717000000],
+			['bob', null],
+		]);
+		$this->appConfig->method('getValueBool')
+			->with('astrolabe', 'allow_user_self_provision', true)
+			->willReturn(false);
+
+		$data = $this->controller->adminListProvisioning()->getData();
+
+		$this->assertTrue($data['success']);
+		$this->assertFalse($data['capped']);
+		$this->assertFalse($data['self_provision_allowed']);
+		$this->assertCount(2, $data['users']);
+		$this->assertSame('alice', $data['users'][0]['uid']);
+		$this->assertTrue($data['users'][0]['has_background_access']);
+		$this->assertFalse($data['users'][1]['has_background_access']);
+	}
+
+	public function testAdminProvisionUserMintsStoresAndSyncs(): void {
+		$user = $this->createMock(IUser::class);
+		$this->userManager->method('get')->with('bob')->willReturn($user);
+
+		$this->provisioning->expects($this->once())
+			->method('mintAppPasswordForUser')
+			->with('bob', 'bob', AppPasswordProvisioningService::ADMIN_TOKEN_NAME)
+			->willReturn('minted-token');
+		$this->credentialStorage->expects($this->once())
+			->method('storeAppPassword')
+			->with('bob', 'minted-token');
+		$this->provisioning->expects($this->once())
+			->method('syncToMcp')
+			->with('bob', 'bob', 'minted-token')
+			->willReturn(['mcp_sync' => true, 'partial_success' => false, 'message' => 'ok']);
+
+		$data = $this->controller->adminProvisionUser('bob')->getData();
+
+		$this->assertTrue($data['success']);
+		$this->assertSame('bob', $data['user_id']);
+		$this->assertTrue($data['mcp_sync']);
+	}
+
+	public function testAdminProvisionUserRejectsUnknownUser(): void {
+		$this->userManager->method('get')->with('ghost')->willReturn(null);
+		$this->provisioning->expects($this->never())->method('mintAppPasswordForUser');
+
+		$response = $this->controller->adminProvisionUser('ghost');
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+		$this->assertFalse($response->getData()['success']);
+	}
+
+	public function testAdminDeprovisionUserRevokesEverything(): void {
+		$this->credentialStorage->method('getAppPassword')->with('bob')->willReturn('tok');
+		$this->provisioning->expects($this->once())->method('revokeFromMcp')->with('bob', 'tok');
+		$this->provisioning->expects($this->once())->method('revokeToken')->with('tok');
+		$this->credentialStorage->expects($this->once())->method('deleteAppPassword')->with('bob');
+
+		$data = $this->controller->adminDeprovisionUser('bob')->getData();
+
+		$this->assertTrue($data['success']);
+		$this->assertSame('bob', $data['user_id']);
+	}
+
+	public function testAdminSetSelfProvisionPersistsFlag(): void {
+		$this->appConfig->expects($this->once())
+			->method('setValueBool')
+			->with('astrolabe', 'allow_user_self_provision', false);
+
+		$data = $this->controller->adminSetSelfProvision(false)->getData();
+
+		$this->assertTrue($data['success']);
+		$this->assertFalse($data['self_provision_allowed']);
 	}
 }

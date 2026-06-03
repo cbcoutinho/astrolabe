@@ -9,6 +9,7 @@
  * @var bool $_['hasBackgroundAccess'] Whether this user has provisioned an app password
  * @var int|null $_['backgroundSyncProvisionedAt'] Unix ts of last provisioning, or null
  * @var string $_['serverUrl'] Public MCP server URL (for display)
+ * @var bool $_['allowUserSelfProvision'] Whether users may self-provision (admin toggle)
  * @var string $_['requesttoken'] CSRF token
  */
 
@@ -71,6 +72,12 @@ style('astrolabe', 'astrolabe-main');
 					</p>
 				</form>
 			</div>
+		</div>
+	<?php elseif (empty($_['allowUserSelfProvision'])): ?>
+		<div class="mcp-grant-section">
+			<p class="mcp-help-text">
+				<?php p($l->t('Background indexing is managed by your administrator. Contact them to have it enabled for your account.')); ?>
+			</p>
 		</div>
 	<?php else: ?>
 		<div class="mcp-grant-section">

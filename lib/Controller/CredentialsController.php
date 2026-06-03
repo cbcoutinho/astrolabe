@@ -4,43 +4,72 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
+use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Service\AppPasswordProvisioningService;
 use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
+use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Authentication\Exceptions\InvalidTokenException;
 use OCP\Authentication\Token\IProvider;
-use OCP\Http\Client\IClientService;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IRequest;
+use OCP\IUserManager;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
  * Controller for managing background sync credentials (app passwords).
  *
- * Handles storing and validating app passwords for multi-user BasicAuth mode.
+ * Two provisioning paths share {@see AppPasswordProvisioningService}:
+ *   - self-service ({@see storeAppPassword}): the user mints a token via
+ *     core/getapppassword and hands it to us; we validate, store and sync it.
+ *   - admin ({@see adminProvisionUser}): an admin mints a token on a user's
+ *     behalf. Admin-only methods carry no #[NoAdminRequired] attribute, so
+ *     Nextcloud's SecurityMiddleware restricts them to admins.
  */
 class CredentialsController extends Controller {
+	/**
+	 * Cap the admin user listing so a huge instance can't build an unbounded
+	 * response. Hitting the cap is logged and surfaced via `capped` so the UI
+	 * can tell the admin the list is truncated.
+	 */
+	private const ADMIN_USER_LIST_LIMIT = 500;
+
 	public function __construct(
 		string $appName,
 		IRequest $request,
 		private BackgroundSyncCredentialStorage $credentialStorage,
 		private IUserSession $userSession,
 		private LoggerInterface $logger,
-		private IConfig $config,
-		private IClientService $httpClientService,
+		private IAppConfig $appConfig,
 		private IProvider $tokenProvider,
+		private AppPasswordProvisioningService $provisioning,
+		private IUserManager $userManager,
 	) {
 		parent::__construct($appName, $request);
 	}
 
 	/**
+	 * Whether users may self-provision background indexing. When an admin
+	 * disables this, self-service provisioning is blocked (existing passwords
+	 * keep working until an admin deprovisions them).
+	 */
+	private function selfProvisionAllowed(): bool {
+		return $this->appConfig->getValueBool(
+			Application::APP_ID,
+			AdminSettings::SETTING_ALLOW_USER_SELF_PROVISION,
+			AdminSettings::DEFAULT_ALLOW_USER_SELF_PROVISION,
+		);
+	}
+
+	/**
 	 * Store app password for background sync.
 	 *
-	 * Validates the app password by making a test request to Nextcloud,
-	 * then stores it encrypted if valid.
+	 * Validates the app password against Nextcloud's token provider, then
+	 * stores it encrypted and syncs it to the MCP server if valid.
 	 *
 	 * @param string $appPassword Nextcloud app password
 	 * @return JSONResponse
@@ -57,6 +86,16 @@ class CredentialsController extends Controller {
 		}
 
 		$userId = $user->getUID();
+
+		// Defense-in-depth backstop behind the hidden personal "Enable" button:
+		// reject self-service provisioning when an admin has disabled it.
+		if (!$this->selfProvisionAllowed()) {
+			$this->logger->warning('Self-provisioning blocked (admin-disabled) for user: %s', [$userId]);
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'User self-provisioning is disabled by your administrator'
+			], Http::STATUS_FORBIDDEN);
+		}
 
 		// Sanity-check the shape only — the authoritative validation is
 		// validateAppPassword() below (a real auth against Nextcloud). Accept
@@ -101,83 +140,15 @@ class CredentialsController extends Controller {
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 
-		// Send app password to MCP server for background sync
-		// Get MCP server URL from system config (set in config.php)
-		$mcpServerUrl = $this->config->getSystemValue('mcp_server_url', '');
-		if (empty($mcpServerUrl)) {
-			$this->logger->warning('MCP server URL not configured, app password stored locally only');
-			return new JSONResponse([
-				'success' => true,
-				'partial_success' => true,
-				'local_storage' => true,
-				'mcp_sync' => false,
-				'message' => 'App password saved locally (MCP server not configured)'
-			], Http::STATUS_OK);
-		}
+		// Sync to the MCP server (proves ownership via BasicAuth). The local
+		// copy is already saved, so any MCP failure is reported as a partial
+		// success rather than failing the whole request.
+		$mcpResult = $this->provisioning->syncToMcp($userId, $loginName, $appPassword);
 
-		$this->warnIfCleartextTransport($mcpServerUrl, $userId);
-
-		try {
-			$httpClient = $this->httpClientService->newClient();
-
-			// Send to MCP server with BasicAuth (user proves ownership of password)
-			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($userId) . '/app-password';
-
-			$this->logger->debug("Sending app password to MCP server: $mcpEndpoint");
-
-			// BasicAuth user and path segment stay the UID (the identity key the
-			// MCP server matches against the path). The body carries the
-			// loginName so the MCP server can BasicAuth-validate the password
-			// against Nextcloud, which keys app-password auth on the loginName.
-			$response = $httpClient->post($mcpEndpoint, [
-				'auth' => [$userId, $appPassword],
-				'body' => json_encode(['username' => $loginName], JSON_THROW_ON_ERROR),
-				'headers' => [
-					'Content-Type' => 'application/json',
-					'Accept' => 'application/json',
-				],
-				'timeout' => 10,
-			]);
-
-			$statusCode = $response->getStatusCode();
-			$body = json_decode($response->getBody(), true);
-
-			if ($statusCode === 200 && ($body['success'] ?? false)) {
-				$this->logger->info("Successfully provisioned app password to MCP server for user: $userId");
-				return new JSONResponse([
-					'success' => true,
-					'partial_success' => false,
-					'local_storage' => true,
-					'mcp_sync' => true,
-					'message' => 'App password saved successfully'
-				], Http::STATUS_OK);
-			} else {
-				$error = $body['error'] ?? 'Unknown error';
-				$this->logger->error("MCP server rejected app password for user $userId: $error");
-				// Return partial success since it was stored locally but MCP sync failed
-				return new JSONResponse([
-					'success' => true,
-					'partial_success' => true,
-					'local_storage' => true,
-					'mcp_sync' => false,
-					'message' => 'App password saved locally (MCP server sync failed)',
-					'mcp_error' => $error
-				], Http::STATUS_OK);
-			}
-		} catch (\Exception $e) {
-			$this->logger->error("Failed to send app password to MCP server for user $userId", [
-				'error' => $e->getMessage()
-			]);
-			// Return partial success since it was stored locally but MCP was unreachable
-			return new JSONResponse([
-				'success' => true,
-				'partial_success' => true,
-				'local_storage' => true,
-				'mcp_sync' => false,
-				'message' => 'App password saved locally (MCP server unreachable)',
-				'mcp_error' => $e->getMessage()
-			], Http::STATUS_OK);
-		}
+		return new JSONResponse(
+			array_merge(['success' => true, 'local_storage' => true], $mcpResult),
+			Http::STATUS_OK,
+		);
 	}
 
 	/**
@@ -243,6 +214,7 @@ class CredentialsController extends Controller {
 			'has_background_access' => $hasAccess,
 			'sync_type' => $hasAccess ? 'app_password' : null,
 			'provisioned_at' => $provisionedAt,
+			'self_provision_allowed' => $this->selfProvisionAllowed(),
 		], Http::STATUS_OK);
 	}
 
@@ -287,8 +259,13 @@ class CredentialsController extends Controller {
 		try {
 			// Tell the MCP server to drop its copy first, while we still hold
 			// the app password it needs to authenticate the request. Best-effort:
-			// a failure here must not block clearing the local credential.
-			$this->revokeFromMcpServer($userId);
+			// a failure here must not block clearing the local credential. We do
+			// not invalidate the Nextcloud token itself — the user owns it and
+			// may use it elsewhere; only an admin deprovision revokes the token.
+			$appPassword = $this->credentialStorage->getAppPassword($userId);
+			if ($appPassword !== null && $appPassword !== '') {
+				$this->provisioning->revokeFromMcp($userId, $appPassword);
+			}
 
 			$this->credentialStorage->deleteAppPassword($userId);
 			$this->logger->info("Deleted background sync credentials for user: $userId");
@@ -308,74 +285,160 @@ class CredentialsController extends Controller {
 		}
 	}
 
+	// ---------------------------------------------------------------------
+	// Admin provisioning (admin-only: no #[NoAdminRequired])
+	// ---------------------------------------------------------------------
+
 	/**
-	 * Best-effort: tell the MCP server to delete its stored app password for
-	 * this user, so revoking background indexing actually drops the server's
-	 * WebDAV access (it otherwise retains the credential). Authenticated with
-	 * the app password itself (BasicAuth), mirroring storeAppPassword. Any
-	 * failure is logged and swallowed — the local credential is still removed.
-	 */
-	/**
-	 * Warn (without blocking) when about to send BasicAuth credentials to a
-	 * non-loopback plaintext-HTTP endpoint.
+	 * List every user's background-sync provisioning status, plus whether
+	 * user self-provisioning is currently allowed. Admin-only.
 	 *
-	 * The app password is transmitted with BasicAuth; over TLS or to a loopback
-	 * host this is fine, but plaintext to any other host puts it on the wire in
-	 * the clear. We only warn — internal deployments legitimately reach the MCP
-	 * server over plain HTTP on a private network (e.g. an in-cluster service
-	 * name like mcp:8000), and hard-refusing there would break background-sync
-	 * provisioning. The pattern uses an `https?` regex rather than a plaintext
-	 * scheme literal so it is not itself flagged as insecure-protocol usage.
+	 * @return JSONResponse
 	 */
-	private function warnIfCleartextTransport(string $url, string $userId): void {
-		if (preg_match('#^https?://#i', $url) === 1
-			&& preg_match('#^https://#i', $url) !== 1
-			&& preg_match('#^https?://(localhost|127\.0\.0\.1|\[?::1\]?)([:/]|$)#i', $url) !== 1) {
+	public function adminListProvisioning(): JSONResponse {
+		$users = [];
+		$capped = false;
+		$count = 0;
+
+		foreach ($this->userManager->search('', self::ADMIN_USER_LIST_LIMIT + 1) as $user) {
+			if ($count >= self::ADMIN_USER_LIST_LIMIT) {
+				$capped = true;
+				break;
+			}
+			$count++;
+			$uid = $user->getUID();
+			$users[] = [
+				'uid' => $uid,
+				'display_name' => $user->getDisplayName(),
+				'has_background_access' => $this->credentialStorage->hasAccess($uid),
+				'provisioned_at' => $this->credentialStorage->getProvisionedAt($uid),
+			];
+		}
+
+		if ($capped) {
 			$this->logger->warning(
-				"MCP server URL uses plaintext http for user $userId; "
-				. 'use https:// for non-loopback hosts to avoid transmitting the app password in cleartext'
+				'Admin provisioning list truncated at %d users; not all users are shown',
+				[self::ADMIN_USER_LIST_LIMIT],
 			);
+		}
+
+		return new JSONResponse([
+			'success' => true,
+			'users' => $users,
+			'capped' => $capped,
+			'self_provision_allowed' => $this->selfProvisionAllowed(),
+		], Http::STATUS_OK);
+	}
+
+	/**
+	 * Provision a background-sync app password for an arbitrary user. Admin-only.
+	 *
+	 * Nextcloud has no public API for an admin to create an app password for
+	 * another user, so we mint one via the server-internal token provider
+	 * (see {@see AppPasswordProvisioningService}). The loginName is set to the
+	 * UID; this works for standard users. For OIDC-provisioned users whose
+	 * external login differs from the UID, BasicAuth against the MCP server may
+	 * need the real loginName — surfaced as an MCP sync failure (the local
+	 * credential is still stored).
+	 *
+	 * @param string $userId Target user ID
+	 * @return JSONResponse
+	 */
+	public function adminProvisionUser(string $userId): JSONResponse {
+		$user = $this->userManager->get($userId);
+		if ($user === null) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'Unknown user'
+			], Http::STATUS_NOT_FOUND);
+		}
+
+		$loginName = $userId;
+
+		try {
+			$appPassword = $this->provisioning->mintAppPasswordForUser(
+				$userId,
+				$loginName,
+				AppPasswordProvisioningService::ADMIN_TOKEN_NAME,
+			);
+		} catch (\Throwable $e) {
+			$this->logger->error('Failed to mint app password for user %s', [$userId, $e->getMessage()]);
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'Failed to mint app password'
+			], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+
+		try {
+			$this->credentialStorage->storeAppPassword($userId, $appPassword);
+		} catch (\Exception $e) {
+			$this->logger->error('Failed to store admin-provisioned app password for user %s', [$userId, $e->getMessage()]);
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'Failed to save app password'
+			], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+
+		$mcpResult = $this->provisioning->syncToMcp($userId, $loginName, $appPassword);
+		$this->logger->info('Admin provisioned background sync for user: %s', [$userId]);
+
+		return new JSONResponse(
+			array_merge(['success' => true, 'user_id' => $userId, 'local_storage' => true], $mcpResult),
+			Http::STATUS_OK,
+		);
+	}
+
+	/**
+	 * Deprovision a user: revoke the Nextcloud token, drop the MCP copy and
+	 * clear the local credential. Admin-only.
+	 *
+	 * @param string $userId Target user ID
+	 * @return JSONResponse
+	 */
+	public function adminDeprovisionUser(string $userId): JSONResponse {
+		try {
+			$appPassword = $this->credentialStorage->getAppPassword($userId);
+			if ($appPassword !== null && $appPassword !== '') {
+				// Best-effort remote cleanup before invalidating the token /
+				// dropping the local copy; failures must not block deprovision.
+				$this->provisioning->revokeFromMcp($userId, $appPassword);
+				$this->provisioning->revokeToken($appPassword);
+			}
+
+			$this->credentialStorage->deleteAppPassword($userId);
+			$this->logger->info('Admin deprovisioned background sync for user: %s', [$userId]);
+
+			return new JSONResponse([
+				'success' => true,
+				'user_id' => $userId,
+				'message' => 'User deprovisioned successfully'
+			], Http::STATUS_OK);
+		} catch (\Exception $e) {
+			$this->logger->error('Failed to deprovision user %s', [$userId, $e->getMessage()]);
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'Failed to deprovision user'
+			], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 	}
 
-	private function revokeFromMcpServer(string $userId): void {
-		$mcpServerUrl = (string)$this->config->getSystemValue('mcp_server_url', '');
-		if ($mcpServerUrl === '') {
-			return;
-		}
+	/**
+	 * Enable or disable user-level self-provisioning instance-wide. Admin-only.
+	 *
+	 * @param bool $enabled Whether users may self-provision
+	 * @return JSONResponse
+	 */
+	public function adminSetSelfProvision(bool $enabled): JSONResponse {
+		$this->appConfig->setValueBool(
+			Application::APP_ID,
+			AdminSettings::SETTING_ALLOW_USER_SELF_PROVISION,
+			$enabled,
+		);
+		$this->logger->info('Admin set user self-provisioning to %s', [$enabled ? 'enabled' : 'disabled']);
 
-		$appPassword = $this->credentialStorage->getAppPassword($userId);
-		if ($appPassword === null || $appPassword === '') {
-			$this->logger->debug("No stored app password to revoke from MCP for user: $userId");
-			return;
-		}
-
-		$this->warnIfCleartextTransport($mcpServerUrl, $userId);
-
-		try {
-			$httpClient = $this->httpClientService->newClient();
-			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($userId) . '/app-password';
-
-			$response = $httpClient->delete($mcpEndpoint, [
-				'auth' => [$userId, $appPassword],
-				'headers' => [
-					'Accept' => 'application/json',
-				],
-				'timeout' => 10,
-			]);
-
-			$statusCode = $response->getStatusCode();
-			// MCP returns 204 No Content on a successful delete; accept any 2xx.
-			if ($statusCode >= 200 && $statusCode < 300) {
-				$this->logger->info("Revoked app password from MCP server for user: $userId");
-			} else {
-				$this->logger->warning("MCP server returned HTTP $statusCode revoking app password for user: $userId");
-			}
-		} catch (\Exception $e) {
-			// MCP unreachable / already gone — local revoke still proceeds.
-			$this->logger->warning("Failed to revoke app password from MCP server for user $userId", [
-				'error' => $e->getMessage(),
-			]);
-		}
+		return new JSONResponse([
+			'success' => true,
+			'self_provision_allowed' => $enabled,
+		], Http::STATUS_OK);
 	}
 }

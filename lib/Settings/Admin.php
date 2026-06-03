@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\Settings\ISettings;
 
@@ -29,17 +30,26 @@ class Admin implements ISettings {
 	public const DEFAULT_SEARCH_SCORE_THRESHOLD = 0;
 	public const DEFAULT_SEARCH_LIMIT = 20;
 
+	// Whether users may self-provision background indexing. When disabled, only
+	// admins can provision app passwords (existing user-provisioned passwords
+	// keep working). Stored as a bool app-config value via IAppConfig.
+	public const SETTING_ALLOW_USER_SELF_PROVISION = 'allow_user_self_provision';
+	public const DEFAULT_ALLOW_USER_SELF_PROVISION = true;
+
 	private $client;
 	private $config;
+	private $appConfig;
 	private $initialState;
 
 	public function __construct(
 		McpServerClient $client,
 		IConfig $config,
+		IAppConfig $appConfig,
 		IInitialState $initialState,
 	) {
 		$this->client = $client;
 		$this->config = $config;
+		$this->appConfig = $appConfig;
 		$this->initialState = $initialState;
 	}
 
@@ -76,6 +86,12 @@ class Admin implements ISettings {
 			),
 		];
 
+		$allowUserSelfProvision = $this->appConfig->getValueBool(
+			Application::APP_ID,
+			self::SETTING_ALLOW_USER_SELF_PROVISION,
+			self::DEFAULT_ALLOW_USER_SELF_PROVISION,
+		);
+
 		// Provide initial state for Vue.js frontend
 		// MCP server data will be fetched asynchronously by Vue component
 		$this->initialState->provideInitialState('admin-config', [
@@ -84,6 +100,7 @@ class Admin implements ISettings {
 				'clientIdConfigured' => $clientIdConfigured,
 			],
 			'searchSettings' => $searchSettings,
+			'allowUserSelfProvision' => $allowUserSelfProvision,
 		]);
 
 		$parameters = [];
