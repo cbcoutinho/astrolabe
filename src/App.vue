@@ -153,21 +153,9 @@
 										? t('astrolabe', 'Add folders…')
 										: t('astrolabe', 'Choose folders…') }}
 								</NcButton>
-								<div v-if="pathPrefixes.length" class="mcp-folder-list">
-									<span
-										v-for="folder in pathPrefixes"
-										:key="folder"
-										class="mcp-filter-chip">
-										{{ folder }}
-										<button
-											type="button"
-											class="mcp-filter-chip-close"
-											:aria-label="t('astrolabe', 'Remove folder')"
-											@click="removeFolder(folder)">
-											<Close :size="16" />
-										</button>
-									</span>
-								</div>
+								<!-- Selected folders are surfaced as removable chips in the
+									 shared active-filters bar below (same pattern as the date
+									 range), so they're not duplicated inline here. -->
 								<span v-if="!pathFilterApplicable" class="mcp-path-hint">
 									{{ t('astrolabe', 'Select the Files type to filter by folder') }}
 								</span>
@@ -804,10 +792,9 @@ export default {
 				.build()
 
 			// pick() rejects on cancel (normal — map to null, leaving the
-			// selection untouched). NOTE: confirm the multi-select return shape
-			// against the installed @nextcloud/dialogs v7 — pick() resolves to a
-			// path string (single) or an array (multi); both are handled below,
-			// and "Add folders…" can be clicked repeatedly regardless.
+			// selection untouched). It resolves to the selected path(s): an array
+			// under multi-select, a single string otherwise; the guard below
+			// normalizes both into an array.
 			const picked = await picker.pick().catch(() => null)
 			const paths = Array.isArray(picked) ? picked : [picked]
 			const cleaned = paths
@@ -863,10 +850,11 @@ export default {
 				}
 
 				// Path filter (files only) — only send when files are in scope so
-				// it can't zero out a non-file search. Sent as a comma-separated
-				// list; the backend ORs the folders together.
+				// it can't zero out a non-file search. Folders are joined with a
+				// newline (which can't appear in a POSIX path, unlike a comma) and
+				// the backend ORs them together.
 				if (this.pathFilterApplicable && this.pathPrefixes.length) {
-					params.path_prefixes = this.pathPrefixes.join(',')
+					params.path_prefixes = this.pathPrefixes.join('\n')
 				}
 
 				const response = await axios.get(url, { params })
@@ -1357,14 +1345,6 @@ export default {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
-}
-
-// ADR-027 Phase 2 folder picker: button + selected-folder chip list.
-.mcp-folder-list {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	margin-top: 8px;
 }
 
 .mcp-path-hint {

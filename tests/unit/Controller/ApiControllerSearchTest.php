@@ -98,13 +98,62 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$response = $this->controller->search(
 			query: 'spec',
 			path_prefix: '/Projects/Reports',
-			path_prefixes: ' /Archive , /Projects/Reports ,  ',
+			path_prefixes: " /Archive \n /Projects/Reports \n  ",
 		);
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		// Legacy single + CSV list merge, trim, drop blanks, and dedupe
+		// Legacy single + newline list merge, trim, drop blanks, and dedupe
 		// (order-preserving) into one path_prefixes array.
 		$this->assertSame(['/Projects/Reports', '/Archive'], $captured[8]);
+	}
+
+	public function testForwardsPrefixesOnlyToClient(): void {
+		// The normal frontend flow: path_prefix left empty, folders supplied as
+		// a newline-joined path_prefixes list from the folder picker.
+		$this->authenticateUserWithToken();
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = $args;
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$response = $this->controller->search(
+			query: 'spec',
+			path_prefixes: "/foo\n/bar",
+		);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['/foo', '/bar'], $captured[8]);
+	}
+
+	public function testCapsPathPrefixesAtTwenty(): void {
+		// A hostile/malformed client can't build an unbounded OR-filter: the
+		// list is sliced to 20 entries before it reaches the MCP server.
+		$this->authenticateUserWithToken();
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = $args;
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$folders = [];
+		for ($i = 0; $i < 50; $i++) {
+			$folders[] = "/dir{$i}";
+		}
+		$this->controller->search(
+			query: 'spec',
+			path_prefixes: implode("\n", $folders),
+		);
+
+		$this->assertCount(20, $captured[8]);
+		$this->assertSame('/dir0', $captured[8][0]);
+		$this->assertSame('/dir19', $captured[8][19]);
 	}
 
 	public function testPassesNullPathWhenNoFoldersGiven(): void {
@@ -118,7 +167,7 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 				return ['results' => [], 'algorithm_used' => 'hybrid'];
 			});
 
-		$this->controller->search(query: 'spec', path_prefixes: ' , ,  ');
+		$this->controller->search(query: 'spec', path_prefixes: " \n \n  ");
 
 		// Blank-only input ⇒ null, not an empty array, so the MCP server adds
 		// no path condition.

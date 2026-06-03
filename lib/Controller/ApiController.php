@@ -153,16 +153,21 @@ class ApiController extends Controller {
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
-		// ADR-027 Phase 2 path filter. Accept a comma-separated path_prefixes
+		// ADR-027 Phase 2 path filter. Accept a newline-separated path_prefixes
 		// list (multi-folder) alongside the legacy single path_prefix; trim,
 		// drop blanks, and dedupe so the folders OR cleanly on the MCP server.
+		// Newline is the delimiter because, unlike a comma, it can't appear in a
+		// POSIX path, so folder names are never split mid-value.
 		$pathPrefixesArray = [];
-		foreach (array_merge([$path_prefix], explode(',', $path_prefixes)) as $folder) {
+		foreach (array_merge([$path_prefix], explode("\n", $path_prefixes)) as $folder) {
 			$folder = trim($folder);
 			if ($folder !== '' && !in_array($folder, $pathPrefixesArray, true)) {
 				$pathPrefixesArray[] = $folder;
 			}
 		}
+		// Cap the OR-filter width so a malformed/hostile client can't build an
+		// unbounded should-clause on the MCP server.
+		$pathPrefixesArray = array_slice($pathPrefixesArray, 0, 20);
 
 		$result = $this->client->search(
 			$query,
