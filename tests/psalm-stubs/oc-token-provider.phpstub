@@ -1,0 +1,37 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Psalm stub for the Nextcloud server's INTERNAL token provider.
+ *
+ * Nextcloud's public `OCP\Authentication\Token\IProvider` exposes only
+ * getToken()/invalidateTokensOfUser(), which is insufficient for admin-side
+ * provisioning: there is no public API for creating an app password on behalf
+ * of another user. The internal `\OC\Authentication\Token\IProvider` provides
+ * generateToken()/invalidateToken(); it is a registered DI alias
+ * (see server lib/private/Server.php) and is injected by constructor in the
+ * bundled `settings`, `oauth2` and `webhook_listeners` apps, so depending on it
+ * is established practice. This stub only declares the subset Astrolabe uses,
+ * since the server's private namespace is not a Composer/static-analysis
+ * dependency.
+ */
+
+namespace OC\Authentication\Token;
+
+use OCP\Authentication\Token\IToken as OCPIToken;
+
+interface IProvider {
+	public function generateToken(
+		string $token,
+		string $uid,
+		string $loginName,
+		?string $password,
+		string $name,
+		int $type = OCPIToken::TEMPORARY_TOKEN,
+		int $remember = OCPIToken::DO_NOT_REMEMBER,
+		?array $scope = null,
+	): OCPIToken;
+
+	public function invalidateToken(string $token): void;
+}

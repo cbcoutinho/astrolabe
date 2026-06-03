@@ -11,7 +11,13 @@ declare(strict_types=1);
 
 namespace OC\Authentication\Token {
 	if (!interface_exists(IProvider::class)) {
+		// Subset of the server-internal token provider Astrolabe uses for
+		// admin provisioning (mint + invalidate). Loose signatures mirror the
+		// real interface so PHPUnit can mock these methods.
 		interface IProvider {
+			public function generateToken(string $token, string $uid, string $loginName, ?string $password, string $name, int $type = 1, int $remember = 0, ?array $scope = null);
+
+			public function invalidateToken(string $token);
 		}
 	}
 	if (!interface_exists(IToken::class)) {

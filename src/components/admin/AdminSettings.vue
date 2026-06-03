@@ -1,23 +1,26 @@
 <template>
-	<div class="admin-settings">
-		<NcLoadingIcon v-if="loading" :size="64" class="loading-icon" />
+	<div class="astrolabe-admin">
+		<NcSettingsSection v-if="loading" :name="t('astrolabe', 'Astrolabe')">
+			<NcLoadingIcon :size="44" class="loading-icon" />
+		</NcSettingsSection>
 
-		<NcNoteCard v-else-if="error" type="error">
-			<p><strong>{{ t('astrolabe', 'Cannot connect to MCP server') }}</strong></p>
-			<p>{{ error }}</p>
-			<p class="help-text">{{ t('astrolabe', 'Ensure MCP server is running and accessible. Check config.php for correct mcp_server_url.') }}</p>
-			<NcButton variant="primary" @click="retryConnection">
-				<template #icon>
-					<Refresh :size="20" />
-				</template>
-				{{ t('astrolabe', 'Retry Connection') }}
-			</NcButton>
-		</NcNoteCard>
+		<NcSettingsSection v-else-if="error" :name="t('astrolabe', 'Astrolabe')">
+			<NcNoteCard type="error">
+				<p><strong>{{ t('astrolabe', 'Cannot connect to MCP server') }}</strong></p>
+				<p>{{ error }}</p>
+				<p class="help-text">{{ t('astrolabe', 'Ensure MCP server is running and accessible. Check config.php for correct mcp_server_url.') }}</p>
+				<NcButton variant="primary" @click="retryConnection">
+					<template #icon>
+						<Refresh :size="20" />
+					</template>
+					{{ t('astrolabe', 'Retry Connection') }}
+				</NcButton>
+			</NcNoteCard>
+		</NcSettingsSection>
 
 		<template v-else>
-			<!-- Service Status -->
-			<div class="admin-section">
-				<h3>{{ t('astrolabe', 'Service Status') }}</h3>
+			<!-- Service status -->
+			<NcSettingsSection :name="t('astrolabe', 'Service status')">
 				<div class="status-card">
 					<p><strong>{{ t('astrolabe', 'Version') }}:</strong> {{ serverStatus?.version || 'Unknown' }}</p>
 					<p v-if="serverStatus?.uptime_seconds">
@@ -36,22 +39,20 @@
 						</span>
 					</p>
 				</div>
-			</div>
 
-			<!-- Warning: Vector sync disabled -->
-			<NcNoteCard v-if="!vectorSyncEnabled" type="warning">
-				<p><strong>{{ t('astrolabe', 'Semantic Search Not Configured') }}</strong></p>
-				<p>{{ t('astrolabe', 'The MCP server does not have vector sync enabled. Astrolabe requires vector sync for semantic search, visualization, and webhooks.') }}</p>
-				<p>
-					<a href="https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/docs/configuration.md" target="_blank">
-						{{ t('astrolabe', 'See the Configuration Guide for details.') }}
-					</a>
-				</p>
-			</NcNoteCard>
+				<NcNoteCard v-if="!vectorSyncEnabled" type="warning">
+					<p><strong>{{ t('astrolabe', 'Semantic Search Not Configured') }}</strong></p>
+					<p>{{ t('astrolabe', 'The MCP server does not have vector sync enabled. Astrolabe requires vector sync for semantic search, visualization, and webhooks.') }}</p>
+					<p>
+						<a href="https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/docs/configuration.md" target="_blank">
+							{{ t('astrolabe', 'See the Configuration Guide for details.') }}
+						</a>
+					</p>
+				</NcNoteCard>
+			</NcSettingsSection>
 
-			<!-- Indexing Metrics -->
-			<div v-if="vectorSyncEnabled && vectorSyncStatus" class="admin-section">
-				<h3>{{ t('astrolabe', 'Indexing Metrics') }}</h3>
+			<!-- Indexing metrics -->
+			<NcSettingsSection v-if="vectorSyncEnabled && vectorSyncStatus" :name="t('astrolabe', 'Indexing metrics')">
 				<div class="metrics-grid">
 					<div class="metric-card">
 						<div class="metric-label">{{ t('astrolabe', 'Status') }}</div>
@@ -78,15 +79,13 @@
 					</template>
 					{{ t('astrolabe', 'Refresh Status') }}
 				</NcButton>
-			</div>
+			</NcSettingsSection>
 
-			<!-- Webhook Management -->
-			<div v-if="vectorSyncEnabled" class="admin-section">
-				<h3>{{ t('astrolabe', 'Webhook Management') }}</h3>
-				<p class="section-description">
-					{{ t('astrolabe', 'Configure real-time synchronization for Nextcloud apps using webhooks. Webhooks provide instant updates to the MCP server when content changes.') }}
-				</p>
-
+			<!-- Webhook management -->
+			<NcSettingsSection
+				v-if="vectorSyncEnabled"
+				:name="t('astrolabe', 'Webhook management')"
+				:description="t('astrolabe', 'Configure real-time synchronization for Nextcloud apps using webhooks. Webhooks provide instant updates to the MCP server when content changes.')">
 				<div v-if="webhooksLoading" class="loading-indicator">
 					<NcLoadingIcon :size="32" />
 					<p>{{ t('astrolabe', 'Loading webhook presets...') }}</p>
@@ -159,15 +158,13 @@
 						</ul>
 					</NcNoteCard>
 				</template>
-			</div>
+			</NcSettingsSection>
 
-			<!-- Search Settings -->
-			<div v-if="vectorSyncEnabled" class="admin-section">
-				<h3>{{ t('astrolabe', 'AI Search Provider Settings') }}</h3>
-				<p class="section-description">
-					{{ t('astrolabe', 'Configure the default search parameters for the AI Search provider in Nextcloud unified search.') }}
-				</p>
-
+			<!-- AI search provider settings -->
+			<NcSettingsSection
+				v-if="vectorSyncEnabled"
+				:name="t('astrolabe', 'AI search provider settings')"
+				:description="t('astrolabe', 'Configure the default search parameters for the AI Search provider in Nextcloud unified search.')">
 				<div class="settings-form">
 					<NcSelect
 						:model-value="selectedAlgorithmOption"
@@ -221,11 +218,15 @@
 						</NcButton>
 					</div>
 				</div>
-			</div>
+			</NcSettingsSection>
+
+			<!-- User provisioning -->
+			<NcSettingsSection :name="t('astrolabe', 'User provisioning')">
+				<UserProvisioning :initial-allow-self-provision="allowUserSelfProvision" />
+			</NcSettingsSection>
 
 			<!-- Documentation -->
-			<div class="admin-section">
-				<h3>{{ t('astrolabe', 'Documentation') }}</h3>
+			<NcSettingsSection :name="t('astrolabe', 'Documentation')">
 				<ul class="doc-links">
 					<li>
 						<a href="https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/docs/configuration.md" target="_blank">
@@ -238,7 +239,7 @@
 						</a>
 					</li>
 				</ul>
-			</div>
+			</NcSettingsSection>
 		</template>
 	</div>
 </template>
@@ -252,6 +253,7 @@ import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 
 import {
+	NcSettingsSection,
 	NcLoadingIcon,
 	NcNoteCard,
 	NcButton,
@@ -260,6 +262,8 @@ import {
 } from '@nextcloud/vue'
 
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+
+import UserProvisioning from './UserProvisioning.vue'
 
 // Reactive state
 const loading = ref(true)
@@ -286,6 +290,7 @@ const settings = ref(initialData.searchSettings || {
 	scoreThreshold: 0,
 	limit: 20,
 })
+const allowUserSelfProvision = ref(initialData.allowUserSelfProvision ?? true)
 
 // Computed properties
 const algorithmOptions = computed(() => [
@@ -474,63 +479,25 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.admin-settings {
-	padding: 20px;
-	max-width: 900px;
+// Fix NcNoteCard icon sizing issues in Vue 3/@nextcloud/vue 9
+.astrolabe-admin :deep(.notecard) {
+	max-width: 100%;
+	margin-bottom: 16px;
 
-	// Fix NcNoteCard icon sizing issues in Vue 3/@nextcloud/vue 9
-	:deep(.notecard) {
-		max-width: 100%;
-		margin-bottom: 16px;
+	.notecard__icon {
+		flex-shrink: 0;
+		width: 24px;
+		height: 24px;
 
-		.notecard__icon {
-			flex-shrink: 0;
+		svg {
 			width: 24px;
 			height: 24px;
-
-			svg {
-				width: 24px;
-				height: 24px;
-			}
 		}
 	}
 }
 
 .loading-icon {
-	margin: 40px auto;
-	display: block;
-}
-
-.diagnostic-result {
-	margin-top: 16px;
-
-	pre {
-		font-family: monospace;
-		font-size: 12px;
-		background: var(--color-background-dark);
-		padding: 12px;
-		border-radius: var(--border-radius);
-		overflow-x: auto;
-		max-height: 320px;
-		margin: 8px 0 0 0;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-}
-
-.admin-section {
-	margin-bottom: 32px;
-
-	h3 {
-		margin: 0 0 16px 0;
-		font-size: 18px;
-		font-weight: 600;
-	}
-}
-
-.section-description {
-	color: var(--color-text-maxcontrast);
-	margin-bottom: 16px;
+	margin: 20px 0;
 }
 
 .help-text {
@@ -543,6 +510,7 @@ onMounted(async () => {
 	border: 1px solid var(--color-border);
 	border-radius: var(--border-radius-large);
 	padding: 20px;
+	max-width: 480px;
 
 	p {
 		margin: 8px 0;
@@ -560,13 +528,13 @@ onMounted(async () => {
 .status-badge {
 	display: inline-block;
 	padding: 4px 10px;
-	border-radius: 12px;
+	border-radius: var(--border-radius-pill, 100px);
 	font-size: 13px;
 	font-weight: 600;
 
 	&.status-enabled {
 		background: var(--color-success);
-		color: white;
+		color: var(--color-primary-element-text, #fff);
 	}
 
 	&.status-disabled {
@@ -614,13 +582,14 @@ onMounted(async () => {
 }
 
 .settings-form {
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large);
-	padding: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-width: 480px;
 }
 
 .form-field {
-	margin-bottom: 20px;
+	margin-bottom: 12px;
 
 	label {
 		display: block;
@@ -639,12 +608,13 @@ onMounted(async () => {
 	display: flex;
 	align-items: center;
 	gap: 16px;
-	margin-top: 24px;
+	margin-top: 12px;
 }
 
 .doc-links {
 	list-style: none;
 	padding: 0;
+	margin: 0;
 
 	li {
 		margin-bottom: 8px;
@@ -703,13 +673,13 @@ onMounted(async () => {
 	.preset-status {
 		display: inline-block;
 		padding: 4px 10px;
-		border-radius: 12px;
+		border-radius: var(--border-radius-pill, 100px);
 		font-size: 12px;
 		font-weight: 600;
 
 		&.preset-status-enabled {
 			background: var(--color-success);
-			color: white;
+			color: var(--color-primary-element-text, #fff);
 		}
 
 		&.preset-status-disabled {

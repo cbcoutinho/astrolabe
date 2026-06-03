@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\Settings\ISettings;
 
@@ -29,17 +30,26 @@ class Admin implements ISettings {
 	public const DEFAULT_SEARCH_SCORE_THRESHOLD = 0;
 	public const DEFAULT_SEARCH_LIMIT = 20;
 
+	// Whether users may self-provision background indexing. When disabled, only
+	// admins can provision app passwords (existing user-provisioned passwords
+	// keep working). Stored as a bool app-config value via IAppConfig.
+	public const SETTING_ALLOW_USER_SELF_PROVISION = 'allow_user_self_provision';
+	public const DEFAULT_ALLOW_USER_SELF_PROVISION = true;
+
 	private $client;
 	private $config;
+	private $appConfig;
 	private $initialState;
 
 	public function __construct(
 		McpServerClient $client,
 		IConfig $config,
+		IAppConfig $appConfig,
 		IInitialState $initialState,
 	) {
 		$this->client = $client;
 		$this->config = $config;
+		$this->appConfig = $appConfig;
 		$this->initialState = $initialState;
 	}
 
@@ -54,27 +64,33 @@ class Admin implements ISettings {
 
 		// Load search settings from app config
 		$searchSettings = [
-			'algorithm' => $this->config->getAppValue(
+			'algorithm' => $this->appConfig->getValueString(
 				Application::APP_ID,
 				self::SETTING_SEARCH_ALGORITHM,
 				self::DEFAULT_SEARCH_ALGORITHM
 			),
-			'fusion' => $this->config->getAppValue(
+			'fusion' => $this->appConfig->getValueString(
 				Application::APP_ID,
 				self::SETTING_SEARCH_FUSION,
 				self::DEFAULT_SEARCH_FUSION
 			),
-			'scoreThreshold' => (int)$this->config->getAppValue(
+			'scoreThreshold' => $this->appConfig->getValueInt(
 				Application::APP_ID,
 				self::SETTING_SEARCH_SCORE_THRESHOLD,
-				(string)self::DEFAULT_SEARCH_SCORE_THRESHOLD
+				self::DEFAULT_SEARCH_SCORE_THRESHOLD
 			),
-			'limit' => (int)$this->config->getAppValue(
+			'limit' => $this->appConfig->getValueInt(
 				Application::APP_ID,
 				self::SETTING_SEARCH_LIMIT,
-				(string)self::DEFAULT_SEARCH_LIMIT
+				self::DEFAULT_SEARCH_LIMIT
 			),
 		];
+
+		$allowUserSelfProvision = $this->appConfig->getValueBool(
+			Application::APP_ID,
+			self::SETTING_ALLOW_USER_SELF_PROVISION,
+			self::DEFAULT_ALLOW_USER_SELF_PROVISION,
+		);
 
 		// Provide initial state for Vue.js frontend
 		// MCP server data will be fetched asynchronously by Vue component
@@ -84,6 +100,7 @@ class Admin implements ISettings {
 				'clientIdConfigured' => $clientIdConfigured,
 			],
 			'searchSettings' => $searchSettings,
+			'allowUserSelfProvision' => $allowUserSelfProvision,
 		]);
 
 		$parameters = [];
@@ -105,8 +122,12 @@ class Admin implements ISettings {
 
 	/**
 	 * @return int Priority (lower = higher up)
+	 *
+	 * Rendered after the declarative "MCP Server Configuration" form
+	 * (priority 10) so that the connection config is the first section on the
+	 * page and the Vue status/webhooks/search/provisioning sections follow.
 	 */
 	public function getPriority(): int {
-		return 10;
+		return 50;
 	}
 }

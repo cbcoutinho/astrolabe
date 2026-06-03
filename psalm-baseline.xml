@@ -55,24 +55,6 @@
     </UnusedClass>
   </file>
   <file src="lib/Controller/CredentialsController.php">
-    <MixedArgument>
-      <code><![CDATA[$mcpServerUrl]]></code>
-    </MixedArgument>
-    <MixedArrayAccess>
-      <code><![CDATA[$body['error']]]></code>
-      <code><![CDATA[$body['success']]]></code>
-    </MixedArrayAccess>
-    <MixedAssignment>
-      <code><![CDATA[$body]]></code>
-      <code><![CDATA[$error]]></code>
-      <code><![CDATA[$mcpServerUrl]]></code>
-    </MixedAssignment>
-    <PossiblyInvalidArgument>
-      <code><![CDATA[$response->getBody()]]></code>
-    </PossiblyInvalidArgument>
-    <RiskyTruthyFalsyComparison>
-      <code><![CDATA[$body['success'] ?? false]]></code>
-    </RiskyTruthyFalsyComparison>
     <UnusedClass>
       <code><![CDATA[CredentialsController]]></code>
     </UnusedClass>
@@ -166,12 +148,6 @@
     </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/Admin.php">
-    <DeprecatedMethod>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-    </DeprecatedMethod>
     <MixedAssignment>
       <code><![CDATA[$clientId]]></code>
       <code><![CDATA[$serverUrl]]></code>
