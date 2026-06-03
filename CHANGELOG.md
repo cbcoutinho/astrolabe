@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.18.0 (2026-06-03)
+
+### Feat
+
+- **search**: pick search folders from a native Nextcloud folder browser
+
+### Fix
+
+- **search**: document path-filter trust boundary; add CRLF test
+- **search**: address review feedback on the folder-picker path filter
+- **search**: drop redundant array_values on path_prefixes list
+
 ## v0.17.0 (2026-06-02)
 
 ### Feat
