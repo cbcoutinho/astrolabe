@@ -64,25 +64,25 @@ class Admin implements ISettings {
 
 		// Load search settings from app config
 		$searchSettings = [
-			'algorithm' => $this->config->getAppValue(
+			'algorithm' => $this->appConfig->getValueString(
 				Application::APP_ID,
 				self::SETTING_SEARCH_ALGORITHM,
 				self::DEFAULT_SEARCH_ALGORITHM
 			),
-			'fusion' => $this->config->getAppValue(
+			'fusion' => $this->appConfig->getValueString(
 				Application::APP_ID,
 				self::SETTING_SEARCH_FUSION,
 				self::DEFAULT_SEARCH_FUSION
 			),
-			'scoreThreshold' => (int)$this->config->getAppValue(
+			'scoreThreshold' => $this->appConfig->getValueInt(
 				Application::APP_ID,
 				self::SETTING_SEARCH_SCORE_THRESHOLD,
-				(string)self::DEFAULT_SEARCH_SCORE_THRESHOLD
+				self::DEFAULT_SEARCH_SCORE_THRESHOLD
 			),
-			'limit' => (int)$this->config->getAppValue(
+			'limit' => $this->appConfig->getValueInt(
 				Application::APP_ID,
 				self::SETTING_SEARCH_LIMIT,
-				(string)self::DEFAULT_SEARCH_LIMIT
+				self::DEFAULT_SEARCH_LIMIT
 			),
 		];
 

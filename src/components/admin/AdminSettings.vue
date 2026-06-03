@@ -262,7 +262,10 @@
 				</div>
 			</div>
 
-			<!-- User Provisioning tab -->
+			<!-- User Provisioning tab. v-if (not v-show like the other tabs) is
+			deliberate: it remounts UserProvisioning each time the tab is opened,
+			so the per-user provisioning state is re-fetched fresh rather than
+			shown stale from an earlier visit. -->
 			<div v-if="activeTab === 'provisioning'" class="tab-panel" role="tabpanel">
 				<div class="admin-section">
 					<h3>{{ t('astrolabe', 'User Provisioning') }}</h3>

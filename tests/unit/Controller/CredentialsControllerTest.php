@@ -296,10 +296,8 @@ class CredentialsControllerTest extends TestCase {
 		$bob->method('getDisplayName')->willReturn('Bob');
 
 		$this->userManager->method('search')->willReturn([$alice, $bob]);
-		$this->credentialStorage->method('hasAccess')->willReturnMap([
-			['alice', true],
-			['bob', false],
-		]);
+		// Presence is derived from the provisioned-at timestamp (no hasAccess /
+		// decryption per user).
 		$this->credentialStorage->method('getProvisionedAt')->willReturnMap([
 			['alice', 1717000000],
 			['bob', null],
@@ -340,6 +338,28 @@ class CredentialsControllerTest extends TestCase {
 		$this->assertTrue($data['success']);
 		$this->assertSame('bob', $data['user_id']);
 		$this->assertTrue($data['mcp_sync']);
+	}
+
+	public function testAdminProvisionUserRevokesExistingBeforeMinting(): void {
+		// Re-provisioning an already-provisioned user must revoke the previous
+		// credential first, so the old Nextcloud token is not left orphaned.
+		$user = $this->createMock(IUser::class);
+		$this->userManager->method('get')->with('bob')->willReturn($user);
+		$this->credentialStorage->method('getAppPassword')->with('bob')->willReturn('old-token');
+
+		$this->provisioning->expects($this->once())->method('revokeFromMcp')->with('bob', 'old-token');
+		$this->provisioning->expects($this->once())->method('revokeToken')->with('old-token');
+		$this->provisioning->expects($this->once())
+			->method('mintAppPasswordForUser')
+			->with('bob', 'bob', AppPasswordProvisioningService::ADMIN_TOKEN_NAME)
+			->willReturn('new-token');
+		$this->credentialStorage->expects($this->once())->method('storeAppPassword')->with('bob', 'new-token');
+		$this->provisioning->method('syncToMcp')
+			->willReturn(['mcp_sync' => true, 'partial_success' => false, 'message' => 'ok']);
+
+		$data = $this->controller->adminProvisionUser('bob')->getData();
+
+		$this->assertTrue($data['success']);
 	}
 
 	public function testAdminProvisionUserRejectsUnknownUser(): void {

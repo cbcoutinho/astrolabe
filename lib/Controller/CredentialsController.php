@@ -90,7 +90,7 @@ class CredentialsController extends Controller {
 		// Defense-in-depth backstop behind the hidden personal "Enable" button:
 		// reject self-service provisioning when an admin has disabled it.
 		if (!$this->selfProvisionAllowed()) {
-			$this->logger->warning('Self-provisioning blocked (admin-disabled) for user: %s', [$userId]);
+			$this->logger->warning('Self-provisioning blocked (admin-disabled) for user: {uid}', ['uid' => $userId]);
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'User self-provisioning is disabled by your administrator'
@@ -307,18 +307,23 @@ class CredentialsController extends Controller {
 			}
 			$count++;
 			$uid = $user->getUID();
+			// Derive presence from the provisioned-at timestamp (written/cleared
+			// atomically with the password) rather than calling hasAccess(),
+			// which would decrypt every user's app password just to list them —
+			// one read per user, no needless decryption.
+			$provisionedAt = $this->credentialStorage->getProvisionedAt($uid);
 			$users[] = [
 				'uid' => $uid,
 				'display_name' => $user->getDisplayName(),
-				'has_background_access' => $this->credentialStorage->hasAccess($uid),
-				'provisioned_at' => $this->credentialStorage->getProvisionedAt($uid),
+				'has_background_access' => $provisionedAt !== null,
+				'provisioned_at' => $provisionedAt,
 			];
 		}
 
 		if ($capped) {
 			$this->logger->warning(
-				'Admin provisioning list truncated at %d users; not all users are shown',
-				[self::ADMIN_USER_LIST_LIMIT],
+				'Admin provisioning list truncated at {limit} users; not all users are shown',
+				['limit' => self::ADMIN_USER_LIST_LIMIT],
 			);
 		}
 
@@ -355,6 +360,16 @@ class CredentialsController extends Controller {
 
 		$loginName = $userId;
 
+		// Revoke any credential already provisioned for this user before minting
+		// a fresh one, so re-provisioning doesn't orphan the previous Nextcloud
+		// token (it would otherwise remain valid and visible in the user's
+		// Security settings). Best-effort, mirroring adminDeprovisionUser.
+		$existing = $this->credentialStorage->getAppPassword($userId);
+		if ($existing !== null && $existing !== '') {
+			$this->provisioning->revokeFromMcp($userId, $existing);
+			$this->provisioning->revokeToken($existing);
+		}
+
 		try {
 			$appPassword = $this->provisioning->mintAppPasswordForUser(
 				$userId,
@@ -362,7 +377,7 @@ class CredentialsController extends Controller {
 				AppPasswordProvisioningService::ADMIN_TOKEN_NAME,
 			);
 		} catch (\Throwable $e) {
-			$this->logger->error('Failed to mint app password for user %s', [$userId, $e->getMessage()]);
+			$this->logger->error('Failed to mint app password for user {uid}: {error}', ['uid' => $userId, 'error' => $e->getMessage()]);
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'Failed to mint app password'
@@ -372,7 +387,7 @@ class CredentialsController extends Controller {
 		try {
 			$this->credentialStorage->storeAppPassword($userId, $appPassword);
 		} catch (\Exception $e) {
-			$this->logger->error('Failed to store admin-provisioned app password for user %s', [$userId, $e->getMessage()]);
+			$this->logger->error('Failed to store admin-provisioned app password for user {uid}: {error}', ['uid' => $userId, 'error' => $e->getMessage()]);
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'Failed to save app password'
@@ -380,7 +395,7 @@ class CredentialsController extends Controller {
 		}
 
 		$mcpResult = $this->provisioning->syncToMcp($userId, $loginName, $appPassword);
-		$this->logger->info('Admin provisioned background sync for user: %s', [$userId]);
+		$this->logger->info('Admin provisioned background sync for user: {uid}', ['uid' => $userId]);
 
 		return new JSONResponse(
 			array_merge(['success' => true, 'user_id' => $userId, 'local_storage' => true], $mcpResult),
@@ -406,7 +421,7 @@ class CredentialsController extends Controller {
 			}
 
 			$this->credentialStorage->deleteAppPassword($userId);
-			$this->logger->info('Admin deprovisioned background sync for user: %s', [$userId]);
+			$this->logger->info('Admin deprovisioned background sync for user: {uid}', ['uid' => $userId]);
 
 			return new JSONResponse([
 				'success' => true,
@@ -414,7 +429,7 @@ class CredentialsController extends Controller {
 				'message' => 'User deprovisioned successfully'
 			], Http::STATUS_OK);
 		} catch (\Exception $e) {
-			$this->logger->error('Failed to deprovision user %s', [$userId, $e->getMessage()]);
+			$this->logger->error('Failed to deprovision user {uid}: {error}', ['uid' => $userId, 'error' => $e->getMessage()]);
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'Failed to deprovision user'
@@ -434,7 +449,7 @@ class CredentialsController extends Controller {
 			AdminSettings::SETTING_ALLOW_USER_SELF_PROVISION,
 			$enabled,
 		);
-		$this->logger->info('Admin set user self-provisioning to %s', [$enabled ? 'enabled' : 'disabled']);
+		$this->logger->info('Admin set user self-provisioning to {state}', ['state' => $enabled ? 'enabled' : 'disabled']);
 
 		return new JSONResponse([
 			'success' => true,

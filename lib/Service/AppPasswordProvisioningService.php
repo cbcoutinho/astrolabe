@@ -67,7 +67,7 @@ class AppPasswordProvisioningService {
 			IToken::PERMANENT_TOKEN,
 			IToken::DO_NOT_REMEMBER,
 		);
-		$this->logger->info('Minted admin-provisioned app password for user %s', [$uid]);
+		$this->logger->info('Minted admin-provisioned app password for user {uid}', ['uid' => $uid]);
 		return $appPassword;
 	}
 
@@ -133,7 +133,7 @@ class AppPasswordProvisioningService {
 			$body = is_array($decoded) ? $decoded : [];
 
 			if ($statusCode === 200 && ($body['success'] ?? null) === true) {
-				$this->logger->info('Successfully provisioned app password to MCP server for user: %s', [$uid]);
+				$this->logger->info('Successfully provisioned app password to MCP server for user: {uid}', ['uid' => $uid]);
 				return [
 					'mcp_sync' => true,
 					'partial_success' => false,
@@ -142,7 +142,7 @@ class AppPasswordProvisioningService {
 			}
 
 			$error = (isset($body['error']) && is_string($body['error'])) ? $body['error'] : 'Unknown error';
-			$this->logger->error('MCP server rejected app password for user %s: %s', [$uid, $error]);
+			$this->logger->error('MCP server rejected app password for user {uid}: {error}', ['uid' => $uid, 'error' => $error]);
 			return [
 				'mcp_sync' => false,
 				'partial_success' => true,
@@ -150,7 +150,7 @@ class AppPasswordProvisioningService {
 				'mcp_error' => $error,
 			];
 		} catch (\Exception $e) {
-			$this->logger->error('Failed to send app password to MCP server for user %s', [$uid, $e->getMessage()]);
+			$this->logger->error('Failed to send app password to MCP server for user {uid}: {error}', ['uid' => $uid, 'error' => $e->getMessage()]);
 			return [
 				'mcp_sync' => false,
 				'partial_success' => true,

@@ -148,12 +148,6 @@
     </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/Admin.php">
-    <DeprecatedMethod>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-    </DeprecatedMethod>
     <MixedAssignment>
       <code><![CDATA[$clientId]]></code>
       <code><![CDATA[$serverUrl]]></code>
