@@ -28,12 +28,14 @@ export function Screenshot({
   return (
     <figure className="not-prose mt-5">
       {src && width && height ? (
+        // No `sizes` prop: next.config sets `images: { unoptimized: true }`
+        // for the static export, so Next emits no responsive srcset and a
+        // `sizes` hint would be silently ignored.
         <Image
           src={src}
           alt={label}
           width={width}
           height={height}
-          sizes="(min-width: 1024px) 640px, 90vw"
           className="rounded-lg border border-slate-200 shadow-card"
         />
       ) : (

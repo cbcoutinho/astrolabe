@@ -14,13 +14,12 @@ export function Callout({
 }: Readonly<{ title: string; children: ReactNode }>) {
   return (
     <div className="my-8 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
-      <div
-        role="heading"
-        aria-level={2}
-        className="not-prose mb-1.5 text-sm font-semibold text-slate-900"
-      >
+      {/* A strong label, not a heading: it names the box's purpose and should
+          stay out of the document's heading outline (which the `##` section
+          headings own). `block` makes the inline <strong> carry the margin. */}
+      <strong className="not-prose mb-1.5 block text-sm font-semibold text-slate-900">
         {title}
-      </div>
+      </strong>
       {/* Children are Markdown; prose styles the text and links. Trim the
           paragraph margins so the box stays tight. */}
       <div className="text-sm [&>p]:my-0">{children}</div>
@@ -31,9 +30,12 @@ export function Callout({
 export function Steps({ children }: Readonly<{ children: ReactNode }>) {
   // An ordered list so assistive tech announces the sequence and count. Each
   // Step renders its own visible number, so `not-prose` (+ list-none) strips
-  // prose's default list styling while keeping the semantic <ol>/<li>.
+  // prose's default list styling. The explicit role="list" restores list
+  // semantics that Safari/VoiceOver drop when `list-style: none` is set.
   return (
-    <ol className="not-prose mt-6 list-none space-y-5 pl-0">{children}</ol>
+    <ol role="list" className="not-prose mt-6 list-none space-y-5 pl-0">
+      {children}
+    </ol>
   );
 }
 
