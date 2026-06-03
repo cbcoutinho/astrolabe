@@ -16,6 +16,7 @@ use OCP\Authentication\Exceptions\InvalidTokenException;
 use OCP\Authentication\Token\IProvider;
 use OCP\IAppConfig;
 use OCP\IRequest;
+use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
@@ -299,26 +300,32 @@ class CredentialsController extends Controller {
 		$users = [];
 		$capped = false;
 		$count = 0;
+		$limit = self::ADMIN_USER_LIST_LIMIT;
 
-		foreach ($this->userManager->search('', self::ADMIN_USER_LIST_LIMIT + 1) as $user) {
-			if ($count >= self::ADMIN_USER_LIST_LIMIT) {
-				$capped = true;
-				break;
+		// callForAllUsers (not the deprecated search()) enumerates every backend
+		// user. The callback is void so we can't break early; once past the cap
+		// we stop appending and flag `capped`.
+		$this->userManager->callForAllUsers(
+			function (IUser $user) use (&$users, &$count, &$capped, $limit): void {
+				if ($count >= $limit) {
+					$capped = true;
+					return;
+				}
+				$count++;
+				$uid = $user->getUID();
+				// Derive presence from the provisioned-at timestamp (written/cleared
+				// atomically with the password) rather than calling hasAccess(),
+				// which would decrypt every user's app password just to list them —
+				// one read per user, no needless decryption.
+				$provisionedAt = $this->credentialStorage->getProvisionedAt($uid);
+				$users[] = [
+					'uid' => $uid,
+					'display_name' => $user->getDisplayName(),
+					'has_background_access' => $provisionedAt !== null,
+					'provisioned_at' => $provisionedAt,
+				];
 			}
-			$count++;
-			$uid = $user->getUID();
-			// Derive presence from the provisioned-at timestamp (written/cleared
-			// atomically with the password) rather than calling hasAccess(),
-			// which would decrypt every user's app password just to list them —
-			// one read per user, no needless decryption.
-			$provisionedAt = $this->credentialStorage->getProvisionedAt($uid);
-			$users[] = [
-				'uid' => $uid,
-				'display_name' => $user->getDisplayName(),
-				'has_background_access' => $provisionedAt !== null,
-				'provisioned_at' => $provisionedAt,
-			];
-		}
+		);
 
 		if ($capped) {
 			$this->logger->warning(

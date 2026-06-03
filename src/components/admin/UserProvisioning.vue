@@ -163,6 +163,12 @@ async function provision(user) {
 }
 
 async function deprovision(user) {
+	// Confirm this destructive action — it revokes the user's app password and
+	// the MCP server loses access to index their files.
+	const name = user.display_name || user.uid
+	if (!confirm(t('astrolabe', 'Deprovision background indexing for {user}? Their app password will be revoked.', { user: name }))) {
+		return
+	}
 	user.busy = true
 	try {
 		const response = await axios.delete(generateUrl(`${baseUrl}/users/${encodeURIComponent(user.uid)}`))

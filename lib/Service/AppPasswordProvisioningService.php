@@ -115,7 +115,7 @@ class AppPasswordProvisioningService {
 			$httpClient = $this->httpClientService->newClient();
 			$mcpEndpoint = rtrim($mcpServerUrl, '/') . '/api/v1/users/' . rawurlencode($uid) . '/app-password';
 
-			$this->logger->debug("Sending app password to MCP server: $mcpEndpoint");
+			$this->logger->debug('Sending app password to MCP server: {endpoint}', ['endpoint' => $mcpEndpoint]);
 
 			$response = $httpClient->post($mcpEndpoint, [
 				'auth' => [$uid, $appPassword],
@@ -222,8 +222,9 @@ class AppPasswordProvisioningService {
 			&& preg_match('#^https://#i', $url) !== 1
 			&& preg_match('#^https?://(localhost|127\.0\.0\.1|\[?::1\]?)([:/]|$)#i', $url) !== 1) {
 			$this->logger->warning(
-				"MCP server URL uses plaintext http for user $uid; "
-				. 'use https:// for non-loopback hosts to avoid transmitting the app password in cleartext'
+				'MCP server URL uses plaintext http for user {uid}; '
+				. 'use https:// for non-loopback hosts to avoid transmitting the app password in cleartext',
+				['uid' => $uid],
 			);
 		}
 	}

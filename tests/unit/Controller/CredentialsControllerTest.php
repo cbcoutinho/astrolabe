@@ -295,7 +295,12 @@ class CredentialsControllerTest extends TestCase {
 		$bob->method('getUID')->willReturn('bob');
 		$bob->method('getDisplayName')->willReturn('Bob');
 
-		$this->userManager->method('search')->willReturn([$alice, $bob]);
+		// callForAllUsers invokes the callback once per user.
+		$this->userManager->method('callForAllUsers')
+			->willReturnCallback(function (\Closure $cb) use ($alice, $bob): void {
+				$cb($alice);
+				$cb($bob);
+			});
 		// Presence is derived from the provisioned-at timestamp (no hasAccess /
 		// decryption per user).
 		$this->credentialStorage->method('getProvisionedAt')->willReturnMap([
