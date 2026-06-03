@@ -171,7 +171,7 @@ class AppPasswordProvisioningService {
 			return;
 		}
 		if ($appPassword === '') {
-			$this->logger->debug("No stored app password to revoke from MCP for user: $uid");
+			$this->logger->debug('No stored app password to revoke from MCP for user: {uid}', ['uid' => $uid]);
 			return;
 		}
 
@@ -192,13 +192,14 @@ class AppPasswordProvisioningService {
 			$statusCode = $response->getStatusCode();
 			// MCP returns 204 No Content on a successful delete; accept any 2xx.
 			if ($statusCode >= 200 && $statusCode < 300) {
-				$this->logger->info("Revoked app password from MCP server for user: $uid");
+				$this->logger->info('Revoked app password from MCP server for user: {uid}', ['uid' => $uid]);
 			} else {
-				$this->logger->warning("MCP server returned HTTP $statusCode revoking app password for user: $uid");
+				$this->logger->warning('MCP server returned HTTP {status} revoking app password for user: {uid}', ['status' => $statusCode, 'uid' => $uid]);
 			}
 		} catch (\Exception $e) {
 			// MCP unreachable / already gone — local revoke still proceeds.
-			$this->logger->warning("Failed to revoke app password from MCP server for user $uid", [
+			$this->logger->warning('Failed to revoke app password from MCP server for user {uid}: {error}', [
+				'uid' => $uid,
 				'error' => $e->getMessage(),
 			]);
 		}

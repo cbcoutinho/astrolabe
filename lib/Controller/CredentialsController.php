@@ -363,11 +363,15 @@ class CredentialsController extends Controller {
 		// Revoke any credential already provisioned for this user before minting
 		// a fresh one, so re-provisioning doesn't orphan the previous Nextcloud
 		// token (it would otherwise remain valid and visible in the user's
-		// Security settings). Best-effort, mirroring adminDeprovisionUser.
+		// Security settings). Best-effort, mirroring adminDeprovisionUser. The
+		// local record is cleared too, so a mint failure below leaves the user
+		// cleanly unprovisioned rather than "looks provisioned, credential
+		// revoked".
 		$existing = $this->credentialStorage->getAppPassword($userId);
 		if ($existing !== null && $existing !== '') {
 			$this->provisioning->revokeFromMcp($userId, $existing);
 			$this->provisioning->revokeToken($existing);
+			$this->credentialStorage->deleteAppPassword($userId);
 		}
 
 		try {
@@ -388,6 +392,9 @@ class CredentialsController extends Controller {
 			$this->credentialStorage->storeAppPassword($userId, $appPassword);
 		} catch (\Exception $e) {
 			$this->logger->error('Failed to store admin-provisioned app password for user {uid}: {error}', ['uid' => $userId, 'error' => $e->getMessage()]);
+			// The token was minted in Nextcloud but never recorded locally;
+			// revoke it so it isn't orphaned (invisible to the admin UI).
+			$this->provisioning->revokeToken($appPassword);
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'Failed to save app password'

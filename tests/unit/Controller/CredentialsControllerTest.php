@@ -320,6 +320,10 @@ class CredentialsControllerTest extends TestCase {
 	public function testAdminProvisionUserMintsStoresAndSyncs(): void {
 		$user = $this->createMock(IUser::class);
 		$this->userManager->method('get')->with('bob')->willReturn($user);
+		// Fresh provision (no existing credential) → no pre-revoke / clear.
+		$this->credentialStorage->method('getAppPassword')->with('bob')->willReturn(null);
+		$this->provisioning->expects($this->never())->method('revokeFromMcp');
+		$this->provisioning->expects($this->never())->method('revokeToken');
 
 		$this->provisioning->expects($this->once())
 			->method('mintAppPasswordForUser')
@@ -349,6 +353,8 @@ class CredentialsControllerTest extends TestCase {
 
 		$this->provisioning->expects($this->once())->method('revokeFromMcp')->with('bob', 'old-token');
 		$this->provisioning->expects($this->once())->method('revokeToken')->with('old-token');
+		// The stale local record is cleared in the pre-revoke step.
+		$this->credentialStorage->expects($this->once())->method('deleteAppPassword')->with('bob');
 		$this->provisioning->expects($this->once())
 			->method('mintAppPasswordForUser')
 			->with('bob', 'bob', AppPasswordProvisioningService::ADMIN_TOKEN_NAME)
@@ -360,6 +366,25 @@ class CredentialsControllerTest extends TestCase {
 		$data = $this->controller->adminProvisionUser('bob')->getData();
 
 		$this->assertTrue($data['success']);
+	}
+
+	public function testAdminProvisionUserRevokesMintedTokenWhenStoreFails(): void {
+		// If local storage fails after minting, the fresh Nextcloud token must
+		// be revoked so it isn't orphaned (invisible to the admin UI).
+		$user = $this->createMock(IUser::class);
+		$this->userManager->method('get')->with('bob')->willReturn($user);
+		$this->credentialStorage->method('getAppPassword')->with('bob')->willReturn(null);
+		$this->provisioning->method('mintAppPasswordForUser')->willReturn('minted-token');
+		$this->credentialStorage->method('storeAppPassword')
+			->willThrowException(new \RuntimeException('disk full'));
+
+		$this->provisioning->expects($this->once())->method('revokeToken')->with('minted-token');
+		$this->provisioning->expects($this->never())->method('syncToMcp');
+
+		$response = $this->controller->adminProvisionUser('bob');
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		$this->assertFalse($response->getData()['success']);
 	}
 
 	public function testAdminProvisionUserRejectsUnknownUser(): void {
