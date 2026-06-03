@@ -158,6 +158,14 @@ class ApiController extends Controller {
 		// drop blanks, and dedupe so the folders OR cleanly on the MCP server.
 		// Newline is the delimiter because, unlike a comma, it can't appear in a
 		// POSIX path, so folder names are never split mid-value.
+		//
+		// Trust boundary: these values are user-controlled but are only used as
+		// MatchText *filters* on the indexed file_path payload, never to access
+		// the filesystem. The MCP server always AND-s them under an ACL owner
+		// filter, so a hostile value (e.g. "/../etc/passwd") can only ever
+		// narrow a user's own results — it cannot widen scope or traverse paths.
+		// No path-shape validation is applied here precisely so that legitimate,
+		// unusual folder names are never silently dropped.
 		$pathPrefixesArray = [];
 		foreach (array_merge([$path_prefix], explode("\n", $path_prefixes)) as $folder) {
 			$folder = trim($folder);

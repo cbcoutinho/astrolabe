@@ -129,6 +129,24 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame(['/foo', '/bar'], $captured[8]);
 	}
 
+	public function testHandlesCrlfLineEndings(): void {
+		// Windows clients may send CRLF; trim() strips the trailing \r so the
+		// folders come through clean and identical to the LF case.
+		$this->authenticateUserWithToken();
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = $args;
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$this->controller->search(query: 'spec', path_prefixes: "/foo\r\n/bar");
+
+		$this->assertSame(['/foo', '/bar'], $captured[8]);
+	}
+
 	public function testCapsPathPrefixesAtTwenty(): void {
 		// A hostile/malformed client can't build an unbounded OR-filter: the
 		// list is sliced to 20 entries before it reaches the MCP server.
