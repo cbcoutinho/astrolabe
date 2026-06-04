@@ -46,7 +46,12 @@ In your Nextcloud, open **Apps**, search for **Astrolabe**, and choose **Downloa
 
 Requires Nextcloud 30 or later, with administrator access.
 
-<Screenshot label="Nextcloud Apps page with Astrolabe found in search and the “Download and enable” button." />
+<Screenshot
+  label="The Astrolabe app in Nextcloud's App Store with the Enable button in the app detail panel."
+  src="/astrolabe-install.png"
+  width={342}
+  height={470}
+/>
 
 </Step>
 
@@ -56,7 +61,12 @@ Go to **Settings → Administration → OpenID Connect Provider** and add a new 
 
 Nextcloud will generate a **Client ID** and **Client secret**. Copy both — you'll hand them to Astrolabe Cloud in the next step. The secret is shown once, so capture it now.
 
-<Screenshot label="Nextcloud OIDC admin section showing the newly created Astrolabe Cloud client with its Client ID and secret." />
+<Screenshot
+  label="Nextcloud OIDC admin section showing the Astrolabe Cloud client with its Client ID and (masked) secret."
+  src="/oidc-client.png"
+  width={740}
+  height={871}
+/>
 
 </Step>
 
@@ -74,17 +84,36 @@ That's the whole hand-off: your files never leave your Nextcloud, and we never a
 
 Back in Nextcloud, open **Settings → Administration → Astrolabe** and enter the **MCP server URL** from step 1. Save, and the status panel should report the backend as reachable and healthy.
 
-<Screenshot label="Astrolabe admin settings page with the MCP server URL filled in and a green/healthy server-status indicator." />
+<Screenshot
+  label="Astrolabe admin settings page with the MCP server URL filled in and a healthy service-status panel."
+  src="/astrolabe-admin.png"
+  width={1015}
+  height={800}
+/>
 
 </Step>
 
-<Step n="06" title="Authorize and start indexing">
+<Step n="06" title="Enable background indexing">
 
-Open **Settings → Personal → Astrolabe** and choose **Authorize access**. Astrolabe walks you through Nextcloud's standard login flow and provisions the access it needs to index your content in the background — no extra password to manage.
+Searching itself needs no extra setup — it runs against your active Nextcloud session. To let the backend build and maintain your vector index in the background, open **Settings → Personal → Astrolabe** and choose **Enable background indexing**. One click generates a dedicated app password from your current session, hands it to the backend, and stores it encrypted — nothing to copy-paste, and you can disable it again at any time.
 
-Initial indexing runs in the background and can take a little while depending on how much you've got. You can keep using Nextcloud while it works; the personal settings page shows sync progress.
+<Screenshot
+  label="Astrolabe personal settings page with the “Enable background indexing” button."
+  src="/astrolabe-personal.png"
+  width={1015}
+  height={652}
+/>
 
-<Screenshot label="Astrolabe personal settings page with the “Authorize access” button and the vector-sync progress indicator." />
+If you're signed in via a "remember me" cookie, Nextcloud may ask you to sign in again first so it can mint the app password.
+
+Initial indexing runs in the background and can take a little while depending on how much you've got. Open the Astrolabe app and check **Index Status** to watch your own documents sync; the admin page shows the same figures totalled across the whole tenant.
+
+<Screenshot
+  label="Astrolabe app Index Status tab showing sync status and indexed document counts."
+  src="/astrolabe-index-status.png"
+  width={993}
+  height={272}
+/>
 
 </Step>
 
@@ -114,7 +143,7 @@ Once initial indexing has run, open the unified search bar at the top of Nextclo
 
 **The Astrolabe admin page can't reach the backend** — Re-check the MCP server URL from step 5 for typos, and confirm it matches the one we sent you. The status panel surfaces the specific error it hit.
 
-**Search returns nothing yet** — Initial indexing may still be running; check sync progress in **Settings → Personal → Astrolabe** and give it time to finish the first pass.
+**Search returns nothing yet** — Initial indexing may still be running; check sync progress under **Index Status** in the Astrolabe app and give it time to finish the first pass.
 
 **Authorization fails** — Confirm the OpenID Connect app is enabled and that the Client ID and secret you registered in step 3 match what you entered in the portal in step 4.
 
