@@ -15,6 +15,11 @@
       "description": "Keep next and @next/mdx (and other @next/* packages) on the same version — they are released in lockstep and must stay aligned.",
       "matchPackageNames": ["next", "@next/**"],
       "groupName": "next monorepo"
+    },
+    {
+      "description": "Keep @mdx-js/* aligned with @next/mdx — @next/mdx pins a peer range on these, so update them together to avoid peer-dep drift.",
+      "matchPackageNames": ["@mdx-js/**"],
+      "groupName": "next monorepo"
     }
   ]
 }

@@ -36,7 +36,11 @@ export function Steps({ children }: Readonly<{ children: ReactNode }>) {
   // prose's default list styling. The explicit role="list" restores list
   // semantics that Safari/VoiceOver drop when `list-style: none` is set.
   return (
-    <ol role="list" className="not-prose mt-6 list-none space-y-5 pl-0">
+    <ol
+      role="list"
+      aria-label="Setup steps"
+      className="not-prose mt-6 list-none space-y-5 pl-0"
+    >
       {children}
     </ol>
   );
