@@ -318,7 +318,16 @@
 							{{ t('astrolabe', 'Indexed Documents') }}
 						</div>
 						<div class="mcp-status-value">
-							{{ vectorStatus.indexed_documents || 0 }}
+							{{ (vectorStatus.indexed_documents || 0).toLocaleString() }}
+						</div>
+					</div>
+
+					<div class="mcp-status-card">
+						<div class="mcp-status-label">
+							{{ t('astrolabe', 'Indexed Chunks') }}
+						</div>
+						<div class="mcp-status-value">
+							{{ (vectorStatus.indexed_chunks || 0).toLocaleString() }}
 						</div>
 					</div>
 
@@ -327,7 +336,7 @@
 							{{ t('astrolabe', 'Pending Documents') }}
 						</div>
 						<div class="mcp-status-value">
-							{{ vectorStatus.pending_documents || 0 }}
+							{{ (vectorStatus.pending_documents || 0).toLocaleString() }}
 						</div>
 					</div>
 

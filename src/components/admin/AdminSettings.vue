@@ -65,6 +65,10 @@
 						<div class="metric-value">{{ formatNumber(vectorSyncStatus.indexed_documents) }}</div>
 					</div>
 					<div class="metric-card">
+						<div class="metric-label">{{ t('astrolabe', 'Indexed Chunks') }}</div>
+						<div class="metric-value">{{ formatNumber(vectorSyncStatus.indexed_chunks) }}</div>
+					</div>
+					<div class="metric-card">
 						<div class="metric-label">{{ t('astrolabe', 'Pending Documents') }}</div>
 						<div class="metric-value">{{ formatNumber(vectorSyncStatus.pending_documents) }}</div>
 					</div>
