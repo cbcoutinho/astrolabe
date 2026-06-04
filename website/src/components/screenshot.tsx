@@ -36,7 +36,10 @@ export function Screenshot({
           alt={label}
           width={width}
           height={height}
-          className="rounded-lg border border-slate-200 shadow-card"
+          // `not-prose` on the figure drops Typography's `max-width: 100%`, so
+          // constrain the image here — large screenshots scale down to the
+          // column width while small ones stay at their natural size.
+          className="h-auto max-w-full rounded-lg border border-slate-200 shadow-card"
         />
       ) : (
         <div
