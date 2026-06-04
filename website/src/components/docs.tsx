@@ -20,9 +20,12 @@ export function Callout({
       <strong className="not-prose mb-1.5 block text-sm font-semibold text-slate-900">
         {title}
       </strong>
-      {/* Children are Markdown; prose styles the text and links. Trim the
-          paragraph margins so the box stays tight. */}
-      <div className="text-sm [&>p]:my-0">{children}</div>
+      {/* Children are Markdown; prose styles the text and links. Trim only the
+          orphan margins at the edges so the box stays tight while multi-paragraph
+          callouts keep their inter-paragraph spacing. */}
+      <div className="text-sm [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+        {children}
+      </div>
     </div>
   );
 }
