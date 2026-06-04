@@ -32,14 +32,19 @@ export function Callout({
 
 export function Steps({ children }: Readonly<{ children: ReactNode }>) {
   // An ordered list so assistive tech announces the sequence and count. Each
-  // Step renders its own visible number, so `not-prose` (+ list-none) strips
-  // prose's default list styling. The explicit role="list" restores list
-  // semantics that Safari/VoiceOver drop when `list-style: none` is set.
+  // Step renders its own visible number, so `list-none` + `pl-0` strip prose's
+  // default markers and indent (rather than `not-prose`, which would also block
+  // the prose-code/prose-a styling we want on the step *body* — only each
+  // Step's number/title row opts out via its own `not-prose`). The explicit
+  // role="list" restores list semantics that Safari/VoiceOver drop when
+  // `list-style: none` is set. `[&>li]:my-0` + `[&>li+li]:mt-5` set the
+  // inter-card gap explicitly (higher specificity than prose's `li` margins,
+  // which would otherwise shrink the spacing once prose applies to the list).
   return (
     <ol
       role="list"
       aria-label="Setup steps"
-      className="not-prose mt-6 list-none space-y-5 pl-0"
+      className="mt-6 list-none pl-0 [&>li]:my-0 [&>li+li]:mt-5"
     >
       {children}
     </ol>

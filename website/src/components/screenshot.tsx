@@ -26,7 +26,7 @@ export function Screenshot({
   caption,
 }: ScreenshotProps) {
   return (
-    <figure className="not-prose mt-5">
+    <figure className="not-prose mt-5 text-center">
       {src ? (
         // No `sizes` prop: next.config sets `images: { unoptimized: true }`
         // for the static export, so Next emits no responsive srcset and a
@@ -39,7 +39,7 @@ export function Screenshot({
           // `not-prose` on the figure drops Typography's `max-width: 100%`, so
           // constrain the image here — large screenshots scale down to the
           // column width while small ones stay at their natural size.
-          className="h-auto max-w-full rounded-lg border border-slate-200 shadow-card"
+          className="mx-auto h-auto max-w-full rounded-lg border border-slate-200 shadow-card"
         />
       ) : (
         <div
