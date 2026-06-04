@@ -19,8 +19,12 @@
 				<p v-if="provisionedAt" class="help-text">
 					{{ t('astrolabe', 'Provisioned at') }}: {{ formatDate(provisionedAt) }}
 				</p>
-				<div class="actions">
-					<NcButton variant="warning" :disabled="busy" @click="disable">
+				<div id="mcp-revoke-background-form" class="actions">
+					<NcButton
+						id="mcp-revoke-background-button"
+						variant="warning"
+						:disabled="busy"
+						@click="disable">
 						<template #icon>
 							<Delete :size="20" />
 						</template>
@@ -38,7 +42,11 @@
 
 			<template v-else>
 				<div class="actions">
-					<NcButton variant="primary" :disabled="busy" @click="enable">
+					<NcButton
+						id="mcp-enable-background-button"
+						variant="primary"
+						:disabled="busy"
+						@click="enable">
 						<template #icon>
 							<Check :size="20" />
 						</template>
