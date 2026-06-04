@@ -23,7 +23,7 @@ export function Callout({
       {/* Children are Markdown; prose styles the text and links. Trim only the
           orphan margins at the edges so the box stays tight while multi-paragraph
           callouts keep their inter-paragraph spacing. */}
-      <div className="text-sm [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+      <div className="text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
         {children}
       </div>
     </div>
@@ -53,7 +53,9 @@ export function Step({
         <span className="font-mono text-sm font-medium text-brand-600">{n}</span>
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
       </div>
-      <div className="mt-2 [&>*:first-child]:mt-0">{children}</div>
+      <div className="mt-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+        {children}
+      </div>
     </li>
   );
 }

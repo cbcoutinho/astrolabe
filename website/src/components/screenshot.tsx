@@ -27,7 +27,7 @@ export function Screenshot({
 }: ScreenshotProps) {
   return (
     <figure className="not-prose mt-5">
-      {src && width && height ? (
+      {src ? (
         // No `sizes` prop: next.config sets `images: { unoptimized: true }`
         // for the static export, so Next emits no responsive srcset and a
         // `sizes` hint would be silently ignored.

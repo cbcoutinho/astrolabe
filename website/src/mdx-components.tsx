@@ -11,5 +11,7 @@ const components: MDXComponents = {};
 export function useMDXComponents(
   otherComponents: MDXComponents,
 ): MDXComponents {
-  return { ...otherComponents, ...components };
+  // Global defaults first, incoming per-page components last so page-level
+  // overrides win (the @next/mdx convention).
+  return { ...components, ...otherComponents };
 }
