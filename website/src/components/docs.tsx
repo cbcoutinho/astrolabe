@@ -50,7 +50,7 @@ export function Step({
         <span className="font-mono text-sm font-medium text-brand-600">{n}</span>
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
       </div>
-      <div className="mt-2 [&>p:first-child]:mt-0">{children}</div>
+      <div className="mt-2 [&>*:first-child]:mt-0">{children}</div>
     </li>
   );
 }
