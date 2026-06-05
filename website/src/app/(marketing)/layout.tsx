@@ -5,7 +5,10 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { portalSignInUrl } from "@/lib/portal";
 
-const nav = [{ label: "Pricing", href: "/pricing" }];
+const nav = [
+  { label: "Docs", href: "/docs" },
+  { label: "Pricing", href: "/pricing" },
+];
 
 export default function MarketingLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

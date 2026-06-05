@@ -1,0 +1,152 @@
+import { PageHeader } from "@/components/page-header";
+import { Screenshot } from "@/components/screenshot";
+import { Callout, Steps, Step, DocsCTA } from "@/components/docs";
+
+export const metadata = {
+  title: "Docs — Set up Astrolabe with Astrolabe Cloud",
+  description:
+    "Step-by-step guide to connecting your Nextcloud to the managed Astrolabe Cloud backend: install the app, register an OIDC client, point Astrolabe at your tenant, and connect an MCP client.",
+};
+
+<div className="not-prose">
+  <PageHeader
+    eyebrow="Docs"
+    title="Set up Astrolabe with Astrolabe Cloud"
+    description="Connect your self-hosted Nextcloud to the managed Astrolabe Cloud backend in a few steps — install the app, register an OIDC client, point Astrolabe at your tenant, and (optionally) connect an MCP client."
+  />
+</div>
+
+<Callout title="This guide covers the managed Cloud backend">
+
+You bring your own Nextcloud; Astrolabe Cloud runs the vector index and the MCP server. Self-hosting the open-source backend yourself is possible but not covered here yet — for that, see the [Astrolabe app on GitHub](https://github.com/cbcoutinho/astrolabe).
+
+</Callout>
+
+## Before you start
+
+- A Nextcloud instance (version 30 or later) where you have administrator access
+- An Astrolabe Cloud tenant (invite-only during rollout)
+- The OpenID Connect (`oidc`) app available to enable in Nextcloud
+
+## Setup steps
+
+<Steps>
+
+<Step n="01" title="Get an Astrolabe Cloud tenant">
+
+Astrolabe Cloud runs the backend — the per-tenant vector index and the hosted MCP server — so there's nothing to install on a server of your own. Access is invite-only while we roll out: [request access](mailto:hello@astrolabecloud.com) and we'll provision a tenant for you.
+
+When your tenant is ready we'll send you your **MCP server URL** (e.g. `https://<your-tenant>.mcp.astrolabecloud.com`). Keep it handy — you'll paste it into Nextcloud in step 4.
+
+</Step>
+
+<Step n="02" title="Install the Astrolabe app in Nextcloud">
+
+In your Nextcloud, open **Apps**, search for **Astrolabe**, and choose **Download and enable**. You'll also need the **OpenID Connect** provider app (`oidc`) enabled — Astrolabe uses it to mint short-lived, per-user tokens for the Cloud backend, so no separate identity provider is required.
+
+Requires Nextcloud 30 or later, with administrator access.
+
+<Screenshot
+  label="The Astrolabe app in Nextcloud's App Store with the Enable button in the app detail panel."
+  src="/astrolabe-install.png"
+  width={342}
+  height={470}
+/>
+
+</Step>
+
+<Step n="03" title="Register an OIDC client for Astrolabe Cloud">
+
+Go to **Settings → Administration → OpenID Connect Provider** and add a new client for Astrolabe Cloud. Give it a recognisable name and use the redirect URL we provided with your tenant.
+
+Nextcloud will generate a **Client ID** and **Client secret**. Copy both — you'll hand them to Astrolabe Cloud in the next step. The secret is shown once, so capture it now.
+
+<Screenshot
+  label="Nextcloud OIDC admin section showing the Astrolabe Cloud client with its Client ID and (masked) secret."
+  src="/oidc-client.png"
+  width={740}
+  height={871}
+/>
+
+</Step>
+
+<Step n="04" title="Hand the credentials to Astrolabe Cloud">
+
+Paste the **Client ID**, **Client secret**, and your **Nextcloud URL** into the Astrolabe Cloud portal. We use them to configure your tenant's backend so it trusts tokens issued by your Nextcloud — and only yours.
+
+That's the whole hand-off: your files never leave your Nextcloud, and we never ask for an admin password. We provision the index and the MCP server on our side automatically.
+
+<Screenshot label="Astrolabe Cloud portal form where the Nextcloud URL, Client ID, and Client secret are entered." />
+
+</Step>
+
+<Step n="05" title="Point Astrolabe at your backend">
+
+Back in Nextcloud, open **Settings → Administration → Astrolabe** and enter the **MCP server URL** from step 1. Save, and the status panel should report the backend as reachable and healthy.
+
+<Screenshot
+  label="Astrolabe admin settings page with the MCP server URL filled in and a healthy service-status panel."
+  src="/astrolabe-admin.png"
+  width={1015}
+  height={800}
+/>
+
+</Step>
+
+<Step n="06" title="Enable background indexing">
+
+Searching itself needs no extra setup — it runs against your active Nextcloud session. To let the backend build and maintain your vector index in the background, open **Settings → Personal → Astrolabe** and choose **Enable background indexing**. One click generates a dedicated app password from your current session, hands it to the backend, and stores it encrypted — nothing to copy-paste, and you can disable it again at any time.
+
+<Screenshot
+  label="Astrolabe personal settings page with the “Enable background indexing” button."
+  src="/astrolabe-personal.png"
+  width={1015}
+  height={652}
+/>
+
+If you're signed in via a "remember me" cookie, Nextcloud may ask you to sign in again first so it can mint the app password.
+
+Initial indexing runs in the background and can take a little while depending on how much you've got. Open the Astrolabe app and check **Index Status** to watch your own documents sync; the admin page shows the same figures totalled across the whole tenant.
+
+<Screenshot
+  label="Astrolabe app Index Status tab showing sync status and indexed document counts."
+  src="/astrolabe-index-status.png"
+  width={993}
+  height={272}
+/>
+
+</Step>
+
+<Step n="07" title="Connect an MCP client (optional)">
+
+To let Claude, Cursor, or any MCP client act on your knowledge bank, add your **MCP server URL** as a remote MCP server in that client. It authenticates against your Nextcloud the first time you connect, then can search and read your content on your behalf.
+
+Prefer to stay inside Nextcloud? You can skip this — semantic search in the unified search bar works without connecting any external client.
+
+</Step>
+
+</Steps>
+
+## Check it worked
+
+Once initial indexing has run, open the unified search bar at the top of Nextcloud and ask for something in plain language — describe a document by what it's about rather than its exact title. Astrolabe results appear inline, ranked by meaning.
+
+<Screenshot
+  label="Astrolabe results in the Nextcloud unified search bar for a plain-language query."
+  src="/unified-search.png"
+  width={1738}
+  height={1103}
+  caption="What success looks like: a natural-language query surfacing relevant content in Nextcloud's search bar."
+/>
+
+## Troubleshooting
+
+**The Astrolabe admin page can't reach the backend** — Re-check the MCP server URL from step 5 for typos, and confirm it matches the one we sent you. The status panel surfaces the specific error it hit.
+
+**Search returns nothing yet** — Initial indexing may still be running; check sync progress under **Index Status** in the Astrolabe app and give it time to finish the first pass.
+
+**Authorization fails** — Confirm the OpenID Connect app is enabled and that the Client ID and secret you registered in step 3 match what you entered in the portal in step 4.
+
+Still stuck? [Get in touch](mailto:hello@astrolabecloud.com) and we'll help you get connected.
+
+<DocsCTA />
