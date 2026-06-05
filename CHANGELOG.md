@@ -25,6 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.21.0 (2026-06-05)
+
+### Feat
+
+- **website**: add /docs Cloud setup guide authored in MDX
+
+### Fix
+
+- **website**: let prose style step body; centre screenshots
+- **website**: constrain docs screenshots to the content column
+- **website**: address claude-review a11y findings on Cloud docs
+- **website**: address claude-review round on Cloud docs
+- **website**: address third-round PR review on Cloud docs
+- **website**: address second-round PR review on Cloud docs
+- **website**: address PR review feedback on Cloud docs
+
+### Refactor
+
+- **website**: address claude-review consistency nits on Cloud docs
+
 ## v0.20.1 (2026-06-04)
 
 ### Fix
