@@ -9,6 +9,9 @@ appstore_dir=$(build_dir)/artifacts
 package_name=$(appstore_dir)/$(app_name)
 cert_dir=$(HOME)/.nextcloud/certificates
 
+# Whitelabel branding config (override with: make whitelabel branding_config=/path/to/branding.json)
+branding_config?=$(project_dir)/branding.json
+
 # Nextcloud server path (configurable via environment variable)
 server_dir?=../../server
 occ=$(server_dir)/occ
@@ -74,6 +77,31 @@ assemble: clean install-deps build-frontend
 		--exclude='.idea' \
 		--exclude='src/' \
 		./ $(package_name)/
+
+# Create an UNSIGNED, whitelabeled release tarball for manual installation.
+#
+# Reuses the standard `assemble` pipeline, then rewrites the staged copy's
+# display branding from branding.json (name, summary, description, navigation
+# label, icons). The app id stays `astrolabe`, so the package installs into the
+# `astrolabe` apps directory like the stock build. No signing — intended for
+# manual install by Nextcloud admins, not the App Store.
+.PHONY: whitelabel
+whitelabel: assemble
+	@test -f $(branding_config) || { echo "Error: branding config not found at $(branding_config)"; echo "Copy branding.json, edit it, then: make whitelabel branding_config=/path/to/branding.json"; exit 1; }
+	php $(project_dir)/scripts/whitelabel.php \
+		--target=$(package_name) \
+		--config=$(branding_config) \
+		--project-root=$(project_dir)
+	# Create unsigned tarball (top-level dir must equal the app id: astrolabe)
+	cd $(appstore_dir) && \
+		tar -czf $(app_name)-whitelabel.tar.gz $(app_name)
+	@echo "========================================="
+	@echo "Whitelabel package created (unsigned):"
+	@echo "  $(appstore_dir)/$(app_name)-whitelabel.tar.gz"
+	@echo ""
+	@echo "Install manually: extract into your Nextcloud apps/ directory,"
+	@echo "then enable with: occ app:enable astrolabe"
+	@echo "========================================="
 
 # Validate signing prerequisites
 .PHONY: validate-signing

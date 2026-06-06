@@ -1,0 +1,11 @@
+{
+	"_comment": "Whitelabel branding overrides applied by `make whitelabel`. These are display-only: the app id stays `astrolabe`, so routes, translation domain and config keys are unchanged. Leave a field null/empty to keep the stock value.",
+	"name": "Astrolabe",
+	"summary": "AI-powered semantic search across your Nextcloud",
+	"navigationName": "Astrolabe",
+	"description": null,
+	"icons": {
+		"light": "img/app.svg",
+		"dark": "img/app-dark.svg"
+	}
+}
