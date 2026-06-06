@@ -155,6 +155,14 @@ class ApiController extends Controller {
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
+		// Server-side enforcement: when the admin has disabled the visualization
+		// panel, never compute PCA — regardless of what the client (or a direct
+		// API call) requests. The client also skips it, but this is the
+		// authoritative gate.
+		if (!$this->appConfig->getValueBool($this->appName, AdminSettings::SETTING_SHOW_VISUALIZATION, AdminSettings::DEFAULT_SHOW_VISUALIZATION)) {
+			$includePcaBool = false;
+		}
+
 		// ADR-027 Phase 2 path filter. Accept a newline-separated path_prefixes
 		// list (multi-folder) alongside the legacy single path_prefix; trim,
 		// drop blanks, and dedupe so the folders OR cleanly on the MCP server.
