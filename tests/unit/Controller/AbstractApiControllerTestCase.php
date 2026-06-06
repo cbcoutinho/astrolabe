@@ -7,6 +7,7 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 use OCA\Astrolabe\Controller\ApiController;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IRequest;
 use OCP\IUser;
@@ -29,6 +30,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 	protected LoggerInterface&MockObject $logger;
 	protected McpTokenMinter&MockObject $tokenMinter;
 	protected IConfig&MockObject $config;
+	protected IAppConfig&MockObject $appConfig;
 	protected ApiController $controller;
 
 	protected function setUp(): void {
@@ -40,6 +42,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->tokenMinter = $this->createMock(McpTokenMinter::class);
 		$this->config = $this->createMock(IConfig::class);
+		$this->appConfig = $this->createMock(IAppConfig::class);
 
 		$this->controller = new ApiController(
 			'astrolabe',
@@ -49,6 +52,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			$this->logger,
 			$this->tokenMinter,
 			$this->config,
+			$this->appConfig,
 		);
 	}
 

@@ -13,6 +13,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IRequest;
 use OCP\IUserSession;
@@ -35,6 +36,7 @@ class ApiController extends Controller {
 		private LoggerInterface $logger,
 		private McpTokenMinter $tokenMinter,
 		private IConfig $config,
+		private IAppConfig $appConfig,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -152,6 +154,14 @@ class ApiController extends Controller {
 		}
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
+
+		// Server-side enforcement: when the admin has disabled the visualization
+		// panel, never compute PCA — regardless of what the client (or a direct
+		// API call) requests. The client also skips it, but this is the
+		// authoritative gate.
+		if (!$this->appConfig->getValueBool($this->appName, AdminSettings::SETTING_SHOW_VISUALIZATION, AdminSettings::DEFAULT_SHOW_VISUALIZATION)) {
+			$includePcaBool = false;
+		}
 
 		// ADR-027 Phase 2 path filter. Accept a newline-separated path_prefixes
 		// list (multi-folder) alongside the legacy single path_prefix; trim,
@@ -279,6 +289,7 @@ class ApiController extends Controller {
 		string $fusion = AdminSettings::DEFAULT_SEARCH_FUSION,
 		int $scoreThreshold = AdminSettings::DEFAULT_SEARCH_SCORE_THRESHOLD,
 		int $limit = AdminSettings::DEFAULT_SEARCH_LIMIT,
+		bool $showVisualization = AdminSettings::DEFAULT_SHOW_VISUALIZATION,
 	): JSONResponse {
 		// Parameters are populated by the framework from the JSON request body
 		// (no need to read php://input directly).
@@ -300,11 +311,17 @@ class ApiController extends Controller {
 		$limit = max(5, min(100, $limit));
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_LIMIT, (string)$limit);
 
+		// Bool stored via IAppConfig so it round-trips with Admin::getForm()'s
+		// getValueBool() read (the string app-config values above are written
+		// through IConfig for parity with the rest of this method).
+		$this->appConfig->setValueBool($this->appName, AdminSettings::SETTING_SHOW_VISUALIZATION, $showVisualization);
+
 		$this->logger->info('Admin search settings saved', [
 			'algorithm' => $algorithm,
 			'fusion' => $fusion,
 			'scoreThreshold' => $scoreThreshold,
 			'limit' => $limit,
+			'showVisualization' => $showVisualization,
 		]);
 
 		return new JSONResponse([
@@ -314,6 +331,7 @@ class ApiController extends Controller {
 				'fusion' => $fusion,
 				'scoreThreshold' => $scoreThreshold,
 				'limit' => $limit,
+				'showVisualization' => $showVisualization,
 			],
 		]);
 	}

@@ -36,6 +36,12 @@ class Admin implements ISettings {
 	public const SETTING_ALLOW_USER_SELF_PROVISION = 'allow_user_self_provision';
 	public const DEFAULT_ALLOW_USER_SELF_PROVISION = true;
 
+	// Whether the 3D vector-space visualization panel is shown on the app page.
+	// When disabled, the Plotly panel is hidden and the search request skips
+	// the (more expensive) PCA computation. Stored as a bool via IAppConfig.
+	public const SETTING_SHOW_VISUALIZATION = 'show_visualization';
+	public const DEFAULT_SHOW_VISUALIZATION = true;
+
 	private $client;
 	private $config;
 	private $appConfig;
@@ -83,6 +89,11 @@ class Admin implements ISettings {
 				Application::APP_ID,
 				self::SETTING_SEARCH_LIMIT,
 				self::DEFAULT_SEARCH_LIMIT
+			),
+			'showVisualization' => $this->appConfig->getValueBool(
+				Application::APP_ID,
+				self::SETTING_SHOW_VISUALIZATION,
+				self::DEFAULT_SHOW_VISUALIZATION
 			),
 		];
 
