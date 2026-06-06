@@ -18,6 +18,13 @@ class WebhookPresets {
 	// See: https://github.com/nextcloud/server/issues/56371
 	public const FILE_EVENT_DELETED = 'OCP\\Files\\Events\\Node\\BeforeNodeDeletedEvent';
 
+	// System-tag assign/unassign (Nextcloud 32+). A single event class covers
+	// both directions; the payload's `eventType` distinguishes them. Lets
+	// adding/removing the `vector-index` tag trigger near-real-time (re)indexing
+	// instead of waiting for the hourly scan. Requires NC >= 32 — MapperEvent
+	// gained getWebhookSerializable() in 32.0.0; older servers never deliver it.
+	public const SYSTEMTAG_EVENT_MAPPER = 'OCP\\SystemTag\\MapperEvent';
+
 	// Calendar webhook events
 	public const CALENDAR_EVENT_CREATED = 'OCP\\Calendar\\Events\\CalendarObjectCreatedEvent';
 	public const CALENDAR_EVENT_UPDATED = 'OCP\\Calendar\\Events\\CalendarObjectUpdatedEvent';
@@ -126,7 +133,7 @@ class WebhookPresets {
 			],
 			'files_sync' => [
 				'name' => 'All Files Sync',
-				'description' => 'Real-time synchronization for all file operations (create, update, delete)',
+				'description' => 'Real-time synchronization for all file operations (create, update, delete) and tag changes (Nextcloud 32+)',
 				'app' => 'files',
 				'events' => [
 					[
@@ -139,6 +146,13 @@ class WebhookPresets {
 					],
 					[
 						'event' => self::FILE_EVENT_DELETED,
+						'filter' => [],
+					],
+					// Tag assign/unassign. Drives vector-index (re)indexing when a
+					// file or folder is tagged/untagged. Delivered only on NC >= 32;
+					// harmless to register on older servers (it simply never fires).
+					[
+						'event' => self::SYSTEMTAG_EVENT_MAPPER,
 						'filter' => [],
 					],
 				],
