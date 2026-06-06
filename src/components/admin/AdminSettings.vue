@@ -170,6 +170,17 @@
 				:name="t('astrolabe', 'AI search provider settings')"
 				:description="t('astrolabe', 'Configure the default search parameters for the AI Search provider in Nextcloud unified search.')">
 				<div class="settings-form">
+					<NcCheckboxRadioSwitch
+						:model-value="settings.showVisualization"
+						type="switch"
+						class="form-field"
+						@update:model-value="settings.showVisualization = $event">
+						{{ t('astrolabe', 'Show vector space visualization') }}
+					</NcCheckboxRadioSwitch>
+					<p class="help-text">
+						{{ t('astrolabe', 'Display the interactive 3D vector plot of search results on the Astrolabe app page. When disabled, the plot is hidden and its computation is skipped.') }}
+					</p>
+
 					<NcSelect
 						:model-value="selectedAlgorithmOption"
 						:options="algorithmOptions"
@@ -263,6 +274,7 @@ import {
 	NcButton,
 	NcSelect,
 	NcTextField,
+	NcCheckboxRadioSwitch,
 } from '@nextcloud/vue'
 
 import Refresh from 'vue-material-design-icons/Refresh.vue'
@@ -293,6 +305,7 @@ const settings = ref(initialData.searchSettings || {
 	fusion: 'rrf',
 	scoreThreshold: 0,
 	limit: 20,
+	showVisualization: true,
 })
 const allowUserSelfProvision = ref(initialData.allowUserSelfProvision ?? true)
 

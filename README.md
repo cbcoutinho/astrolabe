@@ -112,6 +112,9 @@ Located in: **Settings → Administration → Astrolabe**
 - **Vector Sync Metrics**: See how many documents are indexed, processing rates, and sync status
 - **Configuration Validation**: Verify server URL and connectivity
 - **Feature Availability**: Check which capabilities are enabled
+- **Vector Space Visualization**: Toggle the interactive 3D vector plot on the
+  app page. Enabled by default; when disabled, the plot is hidden for all users
+  and its PCA computation is skipped on each search.
 
 ### Unified Search Integration
 

@@ -209,7 +209,7 @@
 					</div>
 
 					<!-- 3D Visualization -->
-					<div v-if="coordinates.length > 0" class="mcp-viz-container">
+					<div v-if="showVisualization && coordinates.length > 0" class="mcp-viz-container">
 						<div class="mcp-viz-header">
 							<h3>{{ t('astrolabe', 'Vector Space Visualization') }}</h3>
 							<NcCheckboxRadioSwitch
@@ -466,6 +466,7 @@ import MarkdownViewer from './components/MarkdownViewer.vue'
 
 import axios from '@nextcloud/axios'
 import { FilePickerType, getFilePickerBuilder } from '@nextcloud/dialogs'
+import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import Plotly from 'plotly.js-dist-min'
 
@@ -528,6 +529,10 @@ export default {
 			searched: false,
 			expandedExcerpts: {},
 			// Visualization state
+			// Admin-controlled gate (initial state from PageController). When
+			// false the Plotly panel is hidden and search skips PCA. Defaults
+			// to true so the panel shows if the flag is ever absent.
+			showVisualization: loadState('astrolabe', 'app-config', {}).showVisualization ?? true,
 			coordinates: [],
 			queryCoords: [],
 			showQueryPoint: true,
@@ -844,7 +849,9 @@ export default {
 					query: queryText,
 					algorithm: this.algorithm,
 					limit: parseInt(this.limit) || 20,
-					include_pca: true,
+					// Skip the PCA computation entirely when the admin has
+					// disabled the visualization panel.
+					include_pca: this.showVisualization,
 				}
 
 				if (this.selectedDocTypes.length > 0) {
