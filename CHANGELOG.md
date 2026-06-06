@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.23.0 (2026-06-06)
+
+### Feat
+
+- **admin**: add setting to disable vector-space visualization panel
+
+### Fix
+
+- **admin**: enforce visualization toggle server-side and add tests
+
 ## v0.22.0 (2026-06-06)
 
 ### Feat
