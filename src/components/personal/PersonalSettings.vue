@@ -250,9 +250,9 @@ async function disable() {
 		console.error('Revoke error:', error)
 		// A 403 means an admin has since disabled self-provisioning (the Disable
 		// button is normally hidden in that state, but guard the API path too).
-		// Surface the server's message instead of the generic connection error.
+		// Show the user-facing message rather than the server's technical phrasing.
 		if (error?.response?.status === 403) {
-			showError(error.response.data?.error || t('astrolabe', 'Background indexing is managed by your administrator.'))
+			showError(t('astrolabe', 'Background indexing is managed by your administrator.'))
 		} else {
 			showError(t('astrolabe', 'Unable to connect to server. Your access may already be revoked, or the server may be down.'))
 		}

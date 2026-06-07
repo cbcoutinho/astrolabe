@@ -262,7 +262,7 @@ class CredentialsController extends Controller {
 		// (only an admin deprovision can remove access). Symmetric with the
 		// storeAppPassword() check above.
 		if (!$this->selfProvisionAllowed()) {
-			$this->logger->warning('Self-service revoke blocked (admin-disabled) for user: {uid}', ['uid' => $userId]);
+			$this->logger->warning('Self-provisioning blocked (admin-disabled) for user: {uid}', ['uid' => $userId]);
 			return new JSONResponse([
 				'success' => false,
 				'error' => 'User self-provisioning is disabled by your administrator'
@@ -283,7 +283,7 @@ class CredentialsController extends Controller {
 			$this->credentialStorage->deleteAppPassword($userId);
 			$this->logger->info("Deleted background sync credentials for user: $userId");
 
-			return new JSONResponse([
+			$response = new JSONResponse([
 				'success' => true,
 				'message' => 'Credentials deleted successfully'
 			], Http::STATUS_OK);
@@ -291,11 +291,13 @@ class CredentialsController extends Controller {
 			$this->logger->error("Failed to delete credentials for user $userId", [
 				'error' => $e->getMessage()
 			]);
-			return new JSONResponse([
+			$response = new JSONResponse([
 				'success' => false,
 				'error' => 'Failed to delete credentials'
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
+
+		return $response;
 	}
 
 	// ---------------------------------------------------------------------
