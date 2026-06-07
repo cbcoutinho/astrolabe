@@ -251,6 +251,7 @@ class CredentialsControllerTest extends TestCase {
 
 	public function testDeleteCredentialsRevokesFromMcpThenClearsLocal(): void {
 		$this->authenticate('alice');
+		$this->allowSelfProvision();
 		$this->credentialStorage->method('getAppPassword')->with('alice')->willReturn('sometoken');
 		// Self-service delete revokes the MCP copy but does NOT invalidate the
 		// Nextcloud token (the user owns it) — only an admin deprovision does.
@@ -266,6 +267,7 @@ class CredentialsControllerTest extends TestCase {
 
 	public function testDeleteCredentialsSkipsMcpWhenNoStoredPassword(): void {
 		$this->authenticate('alice');
+		$this->allowSelfProvision();
 		$this->credentialStorage->method('getAppPassword')->with('alice')->willReturn(null);
 		$this->provisioning->expects($this->never())->method('revokeFromMcp');
 		$this->credentialStorage->expects($this->once())->method('deleteAppPassword')->with('alice');
@@ -274,6 +276,22 @@ class CredentialsControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertTrue($response->getData()['success']);
+	}
+
+	public function testDeleteBlockedWhenSelfProvisionDisabled(): void {
+		$this->authenticate('alice');
+		$this->allowSelfProvision(false);
+
+		// Symmetric with storeAppPassword: when an admin manages provisioning,
+		// self-service revoke is blocked — neither the MCP copy nor the local
+		// credential may be touched.
+		$this->provisioning->expects($this->never())->method('revokeFromMcp');
+		$this->credentialStorage->expects($this->never())->method('deleteAppPassword');
+
+		$response = $this->controller->deleteCredentials();
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertFalse($response->getData()['success']);
 	}
 
 	public function testDeleteCredentialsRejectsUnauthenticated(): void {

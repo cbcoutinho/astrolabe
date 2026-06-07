@@ -257,6 +257,18 @@ class CredentialsController extends Controller {
 
 		$userId = $user->getUID();
 
+		// Defense-in-depth backstop behind the hidden personal "Disable" button:
+		// when an admin manages provisioning, self-service revoke is blocked too
+		// (only an admin deprovision can remove access). Symmetric with the
+		// storeAppPassword() check above.
+		if (!$this->selfProvisionAllowed()) {
+			$this->logger->warning('Self-service revoke blocked (admin-disabled) for user: {uid}', ['uid' => $userId]);
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'User self-provisioning is disabled by your administrator'
+			], Http::STATUS_FORBIDDEN);
+		}
+
 		try {
 			// Tell the MCP server to drop its copy first, while we still hold
 			// the app password it needs to authenticate the request. Best-effort:

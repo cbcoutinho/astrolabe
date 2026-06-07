@@ -12,7 +12,24 @@
 		<NcSettingsSection
 			:name="t('astrolabe', 'Background indexing')"
 			:description="t('astrolabe', 'Search itself uses your active Nextcloud session — no authorization step is needed. To have the MCP server index your files in the background, provide an app password it can use to read your files via WebDAV.')">
-			<template v-if="hasAccess">
+			<template v-if="!allowSelfProvision">
+				<p v-if="hasAccess">
+					<span class="status-badge status-enabled">{{ t('astrolabe', 'Background indexing enabled') }}</span>
+				</p>
+				<p v-if="hasAccess && provisionedAt" class="help-text">
+					{{ t('astrolabe', 'Provisioned at') }}: {{ formatDate(provisionedAt) }}
+				</p>
+				<NcNoteCard type="info">
+					<p v-if="hasAccess">
+						{{ t('astrolabe', 'Background indexing is enabled and managed by your administrator.') }}
+					</p>
+					<p v-else>
+						{{ t('astrolabe', 'Background indexing is managed by your administrator. Contact them to have it enabled for your account.') }}
+					</p>
+				</NcNoteCard>
+			</template>
+
+			<template v-else-if="hasAccess">
 				<p>
 					<span class="status-badge status-enabled">{{ t('astrolabe', 'Background indexing enabled') }}</span>
 				</p>
@@ -35,10 +52,6 @@
 					{{ t('astrolabe', 'The MCP server will lose access to your Nextcloud files. Existing indexed content remains searchable until it next reconciles.') }}
 				</p>
 			</template>
-
-			<NcNoteCard v-else-if="!allowSelfProvision" type="info">
-				<p>{{ t('astrolabe', 'Background indexing is managed by your administrator. Contact them to have it enabled for your account.') }}</p>
-			</NcNoteCard>
 
 			<template v-else>
 				<div class="actions">
