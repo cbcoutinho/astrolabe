@@ -21,7 +21,7 @@
 				</p>
 				<NcNoteCard type="info">
 					<p v-if="hasAccess">
-						{{ t('astrolabe', 'Background indexing is enabled and managed by your administrator.') }}
+						{{ t('astrolabe', 'Your background indexing is managed by your administrator.') }}
 					</p>
 					<p v-else>
 						{{ t('astrolabe', 'Background indexing is managed by your administrator. Contact them to have it enabled for your account.') }}
@@ -248,7 +248,14 @@ async function disable() {
 		}
 	} catch (error) {
 		console.error('Revoke error:', error)
-		showError(t('astrolabe', 'Unable to connect to server. Your access may already be revoked, or the server may be down.'))
+		// A 403 means an admin has since disabled self-provisioning (the Disable
+		// button is normally hidden in that state, but guard the API path too).
+		// Surface the server's message instead of the generic connection error.
+		if (error?.response?.status === 403) {
+			showError(error.response.data?.error || t('astrolabe', 'Background indexing is managed by your administrator.'))
+		} else {
+			showError(t('astrolabe', 'Unable to connect to server. Your access may already be revoked, or the server may be down.'))
+		}
 	} finally {
 		busy.value = false
 	}
