@@ -217,6 +217,11 @@ async function enable() {
 		if (response.ok && result.success) {
 			showSuccess(t('astrolabe', 'Background indexing enabled.'))
 			await refreshStatus()
+		} else if (response.status === 403) {
+			// Race: an admin disabled self-provisioning after the page loaded.
+			// Show the user-facing message rather than the server's technical
+			// string, mirroring disable()'s 403 handling.
+			showError(t('astrolabe', 'Background indexing is managed by your administrator.'))
 		} else {
 			showError(result.error || t('astrolabe', 'Failed to enable background indexing.'))
 		}
