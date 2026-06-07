@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.24.0 (2026-06-07)
+
+### Feat
+
+- **personal**: show read-only status when self-provisioning is admin-disabled
+
+### Fix
+
+- **personal**: harmonise enable() 403 messaging with disable()
+- **personal**: clearer messaging when self-provisioning is admin-disabled
+
+### Refactor
+
+- **personal**: resolve round-2 review + Sonar nits
+
 ## v0.23.0 (2026-06-06)
 
 ### Feat
