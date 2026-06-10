@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pact contract tests (ADR-029). Separate from tests/unit because these are
+  INTEGRATION tests: they require ext-ffi (pact-php's Rust verifier), a running
+  provider, and the Pact Broker. They are env-gated and skip when PACT_* is
+  unset, so they are safe to collect anywhere.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         bootstrap="bootstrap.php"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuite name="Astrolabe Contract Tests">
+        <directory suffix="Test.php">.</directory>
+    </testsuite>
+</phpunit>

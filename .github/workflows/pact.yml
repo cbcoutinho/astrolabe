@@ -1,0 +1,77 @@
+# Pact contract tests (ADR-029).
+#
+# astrolabe is the PROVIDER for the credentials status contract that
+# nextcloud-mcp-server publishes. This job stands up a Nextcloud + astrolabe
+# provider, joins the homelab tailnet, and verifies the published pacts against
+# it. The broker is only reachable over Tailscale, so broker-dependent steps
+# no-op when the secrets are absent (forks).
+#
+# Required repo/org secrets:
+#   TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET  Tailscale github-runner OAuth client
+#   PACT_BROKER / PACT_USERNAME / PACT_PASSWORD  broker URL + basic auth
+#
+# NOTE: provider verification is gated on the provider-state endpoint described
+# in tests/contract/README.md, which is not yet implemented. Until it lands this
+# job verifies whatever state-less interactions exist and is a no-op otherwise.
+
+name: Pact
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pact-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  PACT_BROKER: ${{ secrets.PACT_BROKER }}
+  PACT_USERNAME: ${{ secrets.PACT_USERNAME }}
+  PACT_PASSWORD: ${{ secrets.PACT_PASSWORD }}
+
+jobs:
+  provider-verify:
+    runs-on: ubuntu-latest
+    name: Provider verification (mcp -> astrolabe)
+    # Skip on forks / when the broker is not configured.
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up PHP 8.3 (with ffi)
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
+        with:
+          php-version: '8.3'
+          extensions: ffi, ctype, curl, dom, iconv, intl, json, mbstring, openssl, posix, xml, zip
+          coverage: none
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: composer install --no-progress
+
+      # TODO: stand up Nextcloud + astrolabe as the provider and export
+      # PACT_PROVIDER_URL once the provider-state endpoint (tests/contract/
+      # README.md) exists. Until then the verify step skips (no PACT_PROVIDER_URL).
+
+      - name: Join tailnet
+        if: ${{ env.PACT_BROKER != '' }}
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-runner
+
+      - name: Verify provider against broker pacts
+        if: ${{ env.PACT_BROKER != '' }}
+        env:
+          PACT_PROVIDER_VERSION: ${{ github.sha }}
+          PACT_PROVIDER_BRANCH: ${{ github.head_ref || github.ref_name }}
+          PACT_PUBLISH_RESULTS: ${{ github.ref == 'refs/heads/main' }}
+        run: composer test:contract
