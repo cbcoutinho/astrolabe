@@ -6,7 +6,7 @@ integration is **bidirectional**, so astrolabe plays both Pact roles:
 | Contract | Consumer | Provider | This side's role |
 |----------|----------|----------|------------------|
 | credentials status API (`GET /apps/astrolabe/api/v1/background-sync/credentials/{userId}`) | nextcloud-mcp-server | **astrolabe** | **provider verification** (`Provider/CredentialsPactVerifyTest.php`) |
-| MCP `/api/v1/*` (search, webhooks, apps, status, …) consumed by `McpServerClient` | **astrolabe** | nextcloud-mcp-server | consumer pacts (TODO — see below) |
+| MCP `/api/v1/*` (search, webhooks, apps, status, …) consumed by `McpServerClient` | **astrolabe** | nextcloud-mcp-server | **consumer pacts** (`Consumer/McpServerClientPactTest.php`) |
 
 The shared broker is homelab-hosted and reachable over Tailscale (board card
 #298). Architecture + the MCP-server side live in ADR-029 in the
@@ -64,10 +64,19 @@ and reviewed against the running stack, not blind. Spec for the implementer:
 
   The endpoint must return HTTP 200 on success.
 
-## TODO: consumer pacts (astrolabe -> MCP `/api/v1/*`)
+## Consumer pacts (astrolabe -> MCP `/api/v1/*`)
 
-`McpServerClient` consumes the MCP server's `/api/v1/*` API. Pinning it needs a
-consumer test that drives the *real* request-building against the Pact mock
-server. `McpServerClient` currently takes Nextcloud's `IClient`, so either:
-(a) construct it with a real PSR-18-backed client in the test, or (b) refactor
-`McpServerClient` to accept a PSR-18 `ClientInterface`. Decide before writing.
+`Consumer/McpServerClientPactTest.php` drives `McpServerClient` against the Pact
+mock server, producing the `astrolabe → nextcloud-mcp-server` pact that the MCP
+repo verifies. To make this testable, `McpServerClient` now depends on the
+standard PSR-18 `Psr\Http\Client\ClientInterface` (+ PSR-17 factories): the test
+injects a real Guzzle client, while production wraps Nextcloud's `IClient` behind
+`OCA\Astrolabe\Http\NextcloudPsr18Client` (registered in `Application.php`),
+preserving NC's TLS / proxy / DNS handling.
+
+**Scope (walking skeleton):** only the public, stateless `GET /api/v1/status`
+call is pinned so far — it needs no provider state and the single-user MCP server
+serves it directly, so the MCP provider-verification job stays green. The
+authenticated surface (`search`, `webhooks` CRUD, `apps`, `chunk-context`,
+`pdf-preview`) needs provider-state handlers and bearer-token injection on the
+MCP side and is the deferred follow-up.

@@ -18,3 +18,6 @@ css/
 test-results/
 playwright-report/
 .playwright-mcp/
+
+# Pact (ADR-029) — generated consumer pacts are published to the broker, not committed
+tests/contract/pacts/
