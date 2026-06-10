@@ -30,6 +30,7 @@ class NextcloudPsr18Client implements ClientInterface {
 	public function sendRequest(RequestInterface $request): ResponseInterface {
 		$headers = [];
 		foreach (array_keys($request->getHeaders()) as $name) {
+			$name = (string)$name;
 			$headers[$name] = $request->getHeaderLine($name);
 		}
 
@@ -49,9 +50,12 @@ class NextcloudPsr18Client implements ClientInterface {
 			$options,
 		);
 
+		/** @var array<string, list<string>> $responseHeaders */
+		$responseHeaders = $response->getHeaders();
+
 		return new Response(
 			$response->getStatusCode(),
-			$response->getHeaders(),
+			$responseHeaders,
 			(string)$response->getBody(),
 		);
 	}
