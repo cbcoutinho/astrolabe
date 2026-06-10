@@ -33,6 +33,11 @@ export PACT_PROVIDER_URL=http://localhost:8080      # running Nextcloud
 composer test:contract
 ```
 
+> The broker is **homelab-private** and only reachable over Tailscale, so the
+> `PACT_BROKER` host above won't resolve for external contributors. The tests
+> are env-gated and simply skip when `PACT_BROKER`/creds are unset, so the rest
+> of the suite still runs without broker access.
+
 ## REQUIRED: provider-state endpoint (not yet implemented)
 
 `CredentialsPactVerifyTest` points the verifier at a state-change endpoint that
