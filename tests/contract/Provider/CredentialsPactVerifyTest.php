@@ -91,8 +91,17 @@ final class CredentialsPactVerifyTest extends TestCase {
 			->setConsumerVersionSelectors($selectors);
 
 		if (getenv('PACT_PUBLISH_RESULTS') === 'true') {
+			// Fail loudly rather than publish verification results under a
+			// meaningless version: a bogus version corrupts the broker's
+			// can-i-deploy records.
+			$providerVersion = getenv('PACT_PROVIDER_VERSION') ?: '';
+			if ($providerVersion === '') {
+				throw new \RuntimeException(
+					'PACT_PROVIDER_VERSION must be set when PACT_PUBLISH_RESULTS=true'
+				);
+			}
 			$publish = new PublishOptions();
-			$publish->setProviderVersion(getenv('PACT_PROVIDER_VERSION') ?: 'dev');
+			$publish->setProviderVersion($providerVersion);
 			if ($branch = getenv('PACT_PROVIDER_BRANCH')) {
 				$publish->setProviderBranch($branch);
 			}
