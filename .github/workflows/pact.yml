@@ -126,4 +126,6 @@ jobs:
           PACT_PROVIDER_VERSION: ${{ github.sha }}
           PACT_PROVIDER_BRANCH: ${{ github.head_ref || github.ref_name }}
           PACT_PUBLISH_RESULTS: ${{ github.ref == 'refs/heads/main' }}
-        run: composer test:contract
+        # Only the provider test here; the consumer pact is generated/published
+        # by the consumer-publish job above.
+        run: ./vendor/bin/phpunit -c tests/contract/phpunit.xml --filter CredentialsPactVerifyTest --colors=never

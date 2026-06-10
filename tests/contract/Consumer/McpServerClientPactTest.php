@@ -109,6 +109,7 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertSame('0.1.0', $status['version'] ?? null);
 		$this->assertSame('basic', $status['auth_mode'] ?? null);
 		$this->assertFalse($status['vector_sync_enabled'] ?? null);
+		$this->assertSame(123, $status['uptime_seconds'] ?? null);
 		$this->assertSame('1.0', $status['management_api_version'] ?? null);
 	}
 }
