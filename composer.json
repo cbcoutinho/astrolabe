@@ -50,7 +50,8 @@
 	},
 	"config": {
 		"allow-plugins": {
-			"bamarni/composer-bin-plugin": true
+			"bamarni/composer-bin-plugin": true,
+			"pact-foundation/composer-downloads-plugin": true
 		},
 		"optimize-autoloader": true,
 		"sort-packages": true,

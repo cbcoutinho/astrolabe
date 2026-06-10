@@ -37,16 +37,21 @@ use PHPUnit\Framework\TestCase;
  *   PACT_PASSWORD      broker basic-auth password
  * Optional:
  *   PACT_PROVIDER_VERSION   provider version (git SHA) for published results
- *   PACT_PROVIDER_BRANCH    provider branch (default "master")
+ *   PACT_PROVIDER_BRANCH    provider branch (default "main")
  *   PACT_PUBLISH_RESULTS    "true" to publish verification results
  */
 final class CredentialsPactVerifyTest extends TestCase {
 	public function testHonoursPublishedConsumerPacts(): void {
 		$providerUrl = getenv('PACT_PROVIDER_URL') ?: '';
 		$brokerUrl = getenv('PACT_BROKER') ?: '';
-		if ($providerUrl === '' || $brokerUrl === '') {
+		$brokerUser = getenv('PACT_USERNAME') ?: '';
+		$brokerPass = getenv('PACT_PASSWORD') ?: '';
+		// Require the broker creds too, so a broker-set-but-creds-missing CI
+		// skips cleanly rather than silently attempting unauthenticated access.
+		if ($providerUrl === '' || $brokerUrl === '' || $brokerUser === '' || $brokerPass === '') {
 			$this->markTestSkipped(
-				'Provider verification needs PACT_PROVIDER_URL and PACT_BROKER. Skipped outside CI.'
+				'Provider verification needs PACT_PROVIDER_URL and PACT_BROKER '
+				. '(+ PACT_USERNAME/PACT_PASSWORD). Skipped outside CI.'
 			);
 		}
 
@@ -79,10 +84,10 @@ final class CredentialsPactVerifyTest extends TestCase {
 		$broker = new Broker();
 		$broker
 			->setUrl(new Uri($brokerUrl))
-			->setUsername(getenv('PACT_USERNAME') ?: '')
-			->setPassword(getenv('PACT_PASSWORD') ?: '')
+			->setUsername($brokerUser)
+			->setPassword($brokerPass)
 			->setEnablePending(true)
-			->setProviderBranch(getenv('PACT_PROVIDER_BRANCH') ?: 'master')
+			->setProviderBranch(getenv('PACT_PROVIDER_BRANCH') ?: 'main')
 			->setConsumerVersionSelectors($selectors);
 
 		if (getenv('PACT_PUBLISH_RESULTS') === 'true') {
