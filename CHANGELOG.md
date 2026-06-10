@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.25.0 (2026-06-10)
+
+### Feat
+
+- **contract**: add astrolabe -> MCP consumer pact (both directions, ADR-029)
+
+### Fix
+
+- **psalm**: resolve type coercions in PSR-18 adapter + stale baseline
+- **contract**: unblock composer install + finish PHP 8.1 drop (#132)
+
+### Refactor
+
+- **contract**: address review nits on the PSR-18 migration
+
 ## v0.24.0 (2026-06-07)
 
 ### Feat
