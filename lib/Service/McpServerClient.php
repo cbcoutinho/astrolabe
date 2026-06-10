@@ -477,7 +477,6 @@ class McpServerClient {
 				$this->baseUrl . '/api/v1/webhooks',
 				$this->withUserAgent([
 					'headers' => ['Authorization' => 'Bearer ' . $token],
-					'http_errors' => false,
 				]),
 			),
 			'Failed to list webhooks',
@@ -530,7 +529,6 @@ class McpServerClient {
 						'Content-Type' => 'application/json',
 					],
 					'json' => $requestBody,
-					'http_errors' => false,
 				]),
 			),
 			'Failed to create webhook',
@@ -614,7 +612,6 @@ class McpServerClient {
 				$this->baseUrl . '/api/v1/apps',
 				$this->withUserAgent([
 					'headers' => ['Authorization' => 'Bearer ' . $token],
-					'http_errors' => false,
 				]),
 			),
 			'Failed to get installed apps',

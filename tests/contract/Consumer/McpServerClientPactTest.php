@@ -102,6 +102,8 @@ final class McpServerClientPactTest extends TestCase {
 
 		$status = $this->clientFor($config)->getStatus();
 
+		// The mock server echoes the matcher example values, so these assertions
+		// are intentionally coupled to the `$matcher->like(...)` examples above.
 		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
 		$this->assertArrayNotHasKey('error', $status);
 		$this->assertSame('0.1.0', $status['version'] ?? null);

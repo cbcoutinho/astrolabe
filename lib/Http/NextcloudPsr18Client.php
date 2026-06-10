@@ -50,7 +50,10 @@ class NextcloudPsr18Client implements ClientInterface {
 			$options,
 		);
 
-		/** @var array<string, list<string>> $responseHeaders */
+		// IResponse::getHeaders() returns flat header strings (array<string,
+		// string>), unlike PSR-7's array<string, list<string>>; the Guzzle
+		// Response constructor accepts either shape.
+		/** @var array<string, string> $responseHeaders */
 		$responseHeaders = $response->getHeaders();
 
 		return new Response(
