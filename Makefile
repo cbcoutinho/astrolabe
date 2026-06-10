@@ -28,7 +28,7 @@ clean:
 validate-deps:
 	@command -v composer >/dev/null 2>&1 || { echo "Error: composer not found. Install from https://getcomposer.org/"; exit 1; }
 	@command -v npm >/dev/null 2>&1 || { echo "Error: npm not found. Install Node.js from https://nodejs.org/"; exit 1; }
-	@command -v php >/dev/null 2>&1 || { echo "Error: php not found. Install PHP 8.1 or higher."; exit 1; }
+	@command -v php >/dev/null 2>&1 || { echo "Error: php not found. Install PHP 8.2 or higher."; exit 1; }
 	@echo "✓ All dependencies found"
 
 # Install PHP and Node dependencies

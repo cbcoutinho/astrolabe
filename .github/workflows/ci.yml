@@ -198,7 +198,9 @@ jobs:
 
     strategy:
       matrix:
-        php-versions: ['8.1', '8.2', '8.3']
+        # PHP 8.1 dropped: Nextcloud 32+ (astrolabe's min-version) requires PHP
+        # 8.2+, and pact-php (contract tests, ADR-029) needs ^8.2.
+        php-versions: ['8.2', '8.3']
 
     name: PHPUnit (PHP ${{ matrix.php-versions }})
 

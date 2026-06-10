@@ -115,9 +115,6 @@
     <MixedAssignment>
       <code><![CDATA[$baseUrl]]></code>
     </MixedAssignment>
-    <PossiblyInvalidArgument>
-      <code><![CDATA[$response->getBody()]]></code>
-    </PossiblyInvalidArgument>
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
       <code><![CDATA[isServerReachable]]></code>

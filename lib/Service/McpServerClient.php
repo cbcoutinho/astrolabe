@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Service;
 
 use OCP\App\IAppManager;
-use OCP\Http\Client\IClient;
-use OCP\Http\Client\IClientService;
-use OCP\Http\Client\IResponse;
 use OCP\IConfig;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -19,19 +20,25 @@ use Psr\Log\LoggerInterface;
  * for all management operations.
  */
 class McpServerClient {
-	private IClient $httpClient;
+	private ClientInterface $httpClient;
+	private RequestFactoryInterface $requestFactory;
+	private StreamFactoryInterface $streamFactory;
 	private IConfig $config;
 	private LoggerInterface $logger;
 	private string $baseUrl;
 	private string $userAgent;
 
 	public function __construct(
-		IClientService $clientService,
+		ClientInterface $httpClient,
+		RequestFactoryInterface $requestFactory,
+		StreamFactoryInterface $streamFactory,
 		IConfig $config,
 		LoggerInterface $logger,
 		IAppManager $appManager,
 	) {
-		$this->httpClient = $clientService->newClient();
+		$this->httpClient = $httpClient;
+		$this->requestFactory = $requestFactory;
+		$this->streamFactory = $streamFactory;
 		$this->config = $config;
 		$this->logger = $logger;
 
@@ -62,13 +69,52 @@ class McpServerClient {
 	}
 
 	/**
+	 * Build a PSR-7 request from the small subset of Guzzle-style options the
+	 * call sites use ('headers', 'json', 'query') and send it via the PSR-18
+	 * client.
+	 *
+	 * PSR-18 clients return a response for every HTTP status and only throw on
+	 * transport errors, so the legacy 'http_errors' option is implicit and
+	 * ignored here; callers detect non-2xx via detectErrorResponse() or the
+	 * status guard in sendAndDecode().
+	 *
+	 * @param array<string, mixed> $options
+	 */
+	private function send(string $method, string $url, array $options = []): ResponseInterface {
+		/** @var array<string, scalar> $query */
+		$query = $options['query'] ?? [];
+		if ($query !== []) {
+			$separator = str_contains($url, '?') ? '&' : '?';
+			$url .= $separator . http_build_query($query);
+		}
+
+		$request = $this->requestFactory->createRequest($method, $url);
+
+		/** @var array<string, string> $headers */
+		$headers = $options['headers'] ?? [];
+		foreach ($headers as $name => $value) {
+			$request = $request->withHeader($name, $value);
+		}
+
+		if (array_key_exists('json', $options)) {
+			$body = json_encode($options['json'], JSON_THROW_ON_ERROR);
+			$request = $request->withBody($this->streamFactory->createStream($body));
+			if (!$request->hasHeader('Content-Type')) {
+				$request = $request->withHeader('Content-Type', 'application/json');
+			}
+		}
+
+		return $this->httpClient->sendRequest($request);
+	}
+
+	/**
 	 * Run an HTTP request closure, optionally route non-2xx responses through
 	 * detectErrorResponse(), JSON-decode the body, and turn any failure
 	 * (transport, non-2xx, malformed JSON) into a structured ['error' => …]
 	 * array. Centralises the try / decode / catch boilerplate that previously
 	 * lived in every public method.
 	 *
-	 * @param callable(): IResponse $request HTTP request closure
+	 * @param callable(): ResponseInterface $request HTTP request closure
 	 * @param string $errorMessage Log message on failure
 	 * @param array<string, mixed> $logContext Extra fields merged into the log entry
 	 * @param bool $usesErrorDetection When true, runs non-2xx responses through detectErrorResponse()
@@ -88,6 +134,14 @@ class McpServerClient {
 				$errorResult = $this->detectErrorResponse($response);
 				if ($errorResult !== null) {
 					return $errorResult;
+				}
+			} else {
+				// PSR-18 clients don't throw on HTTP status, so preserve the
+				// prior http_errors=true behaviour for callers that don't run
+				// their own error detection.
+				$statusCode = $response->getStatusCode();
+				if ($statusCode < 200 || $statusCode >= 300) {
+					throw new \RuntimeException("Unexpected HTTP $statusCode from MCP server");
 				}
 			}
 			/** @var mixed $data */
@@ -119,7 +173,7 @@ class McpServerClient {
 	 *
 	 * @return array{error: string, provisioning_required?: true}|null
 	 */
-	private function detectErrorResponse(IResponse $response): ?array {
+	private function detectErrorResponse(ResponseInterface $response): ?array {
 		$statusCode = $response->getStatusCode();
 
 		if ($statusCode === 428) {
@@ -144,7 +198,7 @@ class McpServerClient {
 	 * @psalm-suppress MixedAssignment $rawMessage is intentionally mixed
 	 *                  until is_string narrows it to a string below.
 	 */
-	private function extractProvisioningMessage(IResponse $response): string {
+	private function extractProvisioningMessage(ResponseInterface $response): string {
 		$default = 'Nextcloud access not provisioned. Complete authorization in Personal Settings.';
 
 		$decoded = json_decode((string)$response->getBody(), true);
@@ -174,7 +228,7 @@ class McpServerClient {
 	 */
 	public function getStatus(): array {
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->get(
+			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/status',
 				$this->withUserAgent(),
 			),
@@ -204,7 +258,7 @@ class McpServerClient {
 	 */
 	public function getVectorSyncStatus(): array {
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->get(
+			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/vector-sync/status',
 				$this->withUserAgent(),
 			),
@@ -287,7 +341,7 @@ class McpServerClient {
 		}
 
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->post(
+			fn (): ResponseInterface => $this->send('POST',
 				$this->baseUrl . '/api/v1/vector-viz/search',
 				$this->withUserAgent($options),
 			),
@@ -337,7 +391,7 @@ class McpServerClient {
 		float $scoreThreshold = 0.0,
 	): array {
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->post(
+			fn (): ResponseInterface => $this->send('POST',
 				$this->baseUrl . '/api/v1/search',
 				$this->withUserAgent([
 					'headers' => [
@@ -419,11 +473,10 @@ class McpServerClient {
 	 */
 	public function listWebhooks(string $token): array {
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->get(
+			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/webhooks',
 				$this->withUserAgent([
 					'headers' => ['Authorization' => 'Bearer ' . $token],
-					'http_errors' => false,
 				]),
 			),
 			'Failed to list webhooks',
@@ -468,7 +521,7 @@ class McpServerClient {
 		}
 
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->post(
+			fn (): ResponseInterface => $this->send('POST',
 				$this->baseUrl . '/api/v1/webhooks',
 				$this->withUserAgent([
 					'headers' => [
@@ -476,7 +529,6 @@ class McpServerClient {
 						'Content-Type' => 'application/json',
 					],
 					'json' => $requestBody,
-					'http_errors' => false,
 				]),
 			),
 			'Failed to create webhook',
@@ -496,13 +548,13 @@ class McpServerClient {
 	 */
 	public function deleteWebhook(int $webhookId, string $token): array {
 		try {
-			$response = $this->httpClient->delete(
+			$response = $this->send(
+				'DELETE',
 				$this->baseUrl . '/api/v1/webhooks/' . $webhookId,
 				$this->withUserAgent([
 					'headers' => [
 						'Authorization' => 'Bearer ' . $token
 					],
-					'http_errors' => false,
 				])
 			);
 
@@ -517,7 +569,7 @@ class McpServerClient {
 			}
 
 			/** @var mixed $data */
-			$data = json_decode($response->getBody(), true);
+			$data = json_decode((string)$response->getBody(), true);
 
 			if (json_last_error() !== JSON_ERROR_NONE) {
 				throw new \RuntimeException('Invalid JSON response from server');
@@ -556,11 +608,10 @@ class McpServerClient {
 	 */
 	public function getInstalledApps(string $token): array {
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->get(
+			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/apps',
 				$this->withUserAgent([
 					'headers' => ['Authorization' => 'Bearer ' . $token],
-					'http_errors' => false,
 				]),
 			),
 			'Failed to get installed apps',
@@ -608,7 +659,7 @@ class McpServerClient {
 		}
 
 		return $this->sendAndDecode(
-			fn (): IResponse => $this->httpClient->get(
+			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/chunk-context',
 				$this->withUserAgent([
 					'headers' => ['Authorization' => 'Bearer ' . $token],
@@ -647,7 +698,8 @@ class McpServerClient {
 		string $token,
 	): array {
 		try {
-			$response = $this->httpClient->get(
+			$response = $this->send(
+				'GET',
 				$this->baseUrl . '/api/v1/pdf-preview',
 				$this->withUserAgent([
 					'headers' => [
@@ -660,6 +712,14 @@ class McpServerClient {
 					]
 				])
 			);
+
+			// PSR-18 clients don't throw on HTTP status; turn non-2xx into an
+			// error here, mirroring the prior http_errors=true behaviour.
+			$statusCode = $response->getStatusCode();
+			if ($statusCode < 200 || $statusCode >= 300) {
+				throw new \RuntimeException("Unexpected HTTP $statusCode from MCP server");
+			}
+
 			/** @var array{success?: bool, image?: string, page_number?: int, total_pages?: int, error?: string} $data */
 			$data = json_decode((string)$response->getBody(), true);
 
