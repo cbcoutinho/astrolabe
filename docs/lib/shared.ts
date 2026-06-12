@@ -7,5 +7,7 @@ export const docsRoute = "/";
 export const gitConfig = {
   user: "cbcoutinho",
   repo: "astrolabe",
+  // Reserved for future "Edit this page on GitHub" links; the nav GitHub link
+  // only uses user/repo today.
   branch: "main",
 };
