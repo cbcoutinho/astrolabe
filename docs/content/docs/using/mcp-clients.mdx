@@ -1,0 +1,69 @@
+---
+title: Connect an MCP client
+description: Connect Claude.ai, Mistral, Cursor, or any MCP client to your tenant's MCP server so AI assistants can search and read your Nextcloud content.
+---
+
+Your tenant runs a hosted **MCP server**, so any
+[Model Context Protocol](https://modelcontextprotocol.io) client can search and
+read your knowledge bank on your behalf. Connecting from Nextcloud isn't
+required — semantic search in the unified search bar works without any external
+client — but an MCP client lets assistants like Claude or Mistral act on your
+content.
+
+## What you need
+
+- Your tenant's **MCP server URL** (the same tenant URI from
+  [setup](/getting-started/setup), e.g.
+  `https://<your-tenant>.mcp.astrolabecloud.com`).
+- An MCP client that supports **remote** (HTTP) MCP servers.
+
+<Callout title="First connection signs you in">
+
+The first time a client connects, it runs an OAuth login against **your**
+Nextcloud. You approve access once; the client then searches and reads your
+content as you, scoped to what background sync has indexed.
+
+</Callout>
+
+## Claude.ai / Claude Desktop
+
+1. Open **Settings → Connectors** (Claude.ai) and choose **Add custom
+   connector** — or, in Claude Desktop, **Settings → Connectors → Add**.
+2. Enter your tenant's **MCP server URL** as the remote server URL and save.
+3. Complete the sign-in prompt to authorize access to your Nextcloud.
+4. In a chat, enable the connector and ask about your content.
+
+<Screenshot label="Claude.ai Connectors settings with a custom remote MCP server URL entered." />
+
+## Mistral (Le Chat)
+
+1. In Le Chat, open **Connectors / Integrations** and add an **MCP server**.
+2. Enter your tenant's **MCP server URL** and save.
+3. Authorize access when prompted, then enable the connector in a conversation.
+
+<Screenshot label="Mistral Le Chat connector configuration with the tenant MCP server URL." />
+
+## Cursor and other clients
+
+Clients that use a JSON config (Cursor's `mcp.json`, and similar) point at the
+same remote URL, for example:
+
+```json
+{
+  "mcpServers": {
+    "astrolabe": {
+      "url": "https://<your-tenant>.mcp.astrolabecloud.com"
+    }
+  }
+}
+```
+
+The client opens the authorization flow on first use.
+
+<Callout title="Third-party UIs change">
+
+The exact menu names and steps in Claude, Mistral, and Cursor change over time.
+If a label here doesn't match, look for wherever the client adds a **remote /
+custom MCP server** and supply your tenant's MCP server URL.
+
+</Callout>

@@ -1,0 +1,49 @@
+---
+title: Search your content
+description: Find content by meaning from Nextcloud's search bar and the Astrolabe app, and tune how results are ranked.
+---
+
+Once initial indexing has run, you can search your knowledge bank by **meaning**
+rather than exact keywords — describe what a document is about and Astrolabe
+surfaces it.
+
+## From the unified search bar
+
+Open the search bar at the top of Nextcloud and ask for something in plain
+language. Astrolabe results appear inline, ranked by relevance. Searching uses
+your active Nextcloud session, so there's no extra authorization step.
+
+<Screenshot
+  label="Astrolabe results in the Nextcloud unified search bar for a plain-language query."
+  src="/unified-search.png"
+  width={1738}
+  height={1103}
+  caption="A natural-language query surfacing relevant content in Nextcloud's search bar."
+/>
+
+## From the Astrolabe app
+
+The **Astrolabe** app has a search dashboard for richer exploration, including
+an optional vector-space visualization of how results relate.
+
+## Tuning results (admin)
+
+Administrators can tune ranking in **Settings → Administration → Astrolabe**:
+
+- **Search Algorithm** — **Hybrid** (recommended), **Semantic only**, or
+  **Keyword (BM25) only**. Hybrid blends meaning-based and keyword matching.
+- **Fusion Method** — how hybrid results are merged: **RRF** (Reciprocal Rank
+  Fusion, recommended) or **DBSF** (Distribution-Based Score Fusion). Try DBSF
+  if RRF over- or under-weights keyword matches.
+- **Minimum Score Threshold** — drop results below this relevance score. Lower
+  it for broader, exploratory results; raise it for precision.
+- **Maximum Results** — how many results to return per query.
+- **Show vector space visualization** — toggles the 3D plot in the app.
+
+<Callout title="Start with the defaults">
+
+Hybrid + RRF with a low threshold works well for most content. Adjust only if
+results feel too noisy (raise the threshold) or too narrow (lower it, or switch
+fusion to DBSF).
+
+</Callout>

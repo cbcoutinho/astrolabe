@@ -27,9 +27,14 @@ export function SiteFooter({ year = BUILD_YEAR }: Readonly<{ year?: number }>) {
             aria-label="Footer"
             className="flex flex-wrap gap-x-6 gap-y-2 text-sm"
           >
-            <Link href="/docs" className="text-slate-600 hover:text-slate-900">
+            {/* Docs are a separate site at docs.astrolabecloud.com, opened in
+                the same tab (part of the same product experience). */}
+            <a
+              href="https://docs.astrolabecloud.com"
+              className="text-slate-600 hover:text-slate-900"
+            >
               Docs
-            </Link>
+            </a>
             <Link href="/pricing" className="text-slate-600 hover:text-slate-900">
               Pricing
             </Link>

@@ -1,0 +1,65 @@
+---
+title: Astrolabe Cloud
+description: Semantic search and MCP for your Nextcloud — you bring the Nextcloud, Astrolabe Cloud runs the index and the MCP server.
+---
+
+**Astrolabe** adds semantic (meaning-based) search to your Nextcloud and exposes
+your content to AI assistants over the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).
+**Astrolabe Cloud** is the managed backend: you bring your own Nextcloud, and we
+run the per-tenant vector index and the hosted MCP server for you — there's
+nothing to operate on a server of your own.
+
+<Callout title="What this documentation covers">
+
+These docs cover the **managed Cloud backend**. Self-hosting the open-source
+backend is possible but not covered here yet — for that, see the
+[Astrolabe app on GitHub](https://github.com/cbcoutinho/astrolabe).
+
+</Callout>
+
+## How it fits together
+
+- **Your Nextcloud** runs the **Astrolabe** app and the **OpenID Connect**
+  (`oidc`) app. Astrolabe never asks for an admin password — it mints
+  short-lived, per-user tokens through the `oidc` app.
+- **Astrolabe Cloud** runs your tenant's **vector index** and **MCP server**.
+  It trusts tokens issued by *your* Nextcloud, and only yours.
+- **You** decide which content is indexed (with a `vector-index` tag) and who
+  gets background indexing, and you can connect any **MCP client**
+  (Claude.ai, Mistral, Cursor, …) to search your knowledge bank.
+
+### Two OIDC clients
+
+The setup uses **two** OpenID Connect clients registered in your Nextcloud:
+
+- a **public client** for the Astrolabe frontend — its id is your
+  **management client id**; and
+- a **confidential client** for the Astrolabe Cloud backend — its id **and
+  secret** let Cloud provision your tenant and mint per-user tokens server-side.
+
+You'll create both in [Set up Astrolabe Cloud](/getting-started/setup).
+
+## Before you start
+
+- A **Nextcloud** instance where you have **administrator** access.
+  Nextcloud **30+** is required; **32+** is recommended so tag changes can
+  trigger reindexing automatically.
+- The **OpenID Connect** (`oidc`) provider app available to enable.
+- An **Astrolabe Cloud** account (invite-only during rollout).
+
+## Next steps
+
+<Steps>
+<Step n="01" title="Set up Astrolabe Cloud">
+Install the apps, register your two OIDC clients, create your tenant, and point
+Astrolabe at it — see [Set up Astrolabe Cloud](/getting-started/setup).
+</Step>
+<Step n="02" title="Index your content">
+Tag what you want indexed and turn on background sync — see
+[Index your content](/getting-started/indexing).
+</Step>
+<Step n="03" title="Search & connect clients">
+[Search your content](/using/search) from Nextcloud, and
+[connect an MCP client](/using/mcp-clients) like Claude.ai or Mistral.
+</Step>
+</Steps>

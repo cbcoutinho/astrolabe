@@ -1,0 +1,108 @@
+---
+title: Index your content
+description: Tag the documents you want indexed, enable background sync (self-service or admin-managed), and watch your content become searchable.
+---
+
+Once your tenant is connected (see
+[Set up Astrolabe Cloud](/getting-started/setup)), you choose **what** gets
+indexed and **who** gets background indexing. Nothing is indexed until you opt
+content in with a tag and turn on background sync.
+
+## Indexing steps
+
+<Steps>
+
+<Step n="01" title="Create and apply the vector-index tag">
+
+Astrolabe only indexes content you mark with a Nextcloud system tag named
+**`vector-index`**.
+
+1. As an administrator, create the tag: **Settings → Administration →
+   Flow / Tags** (or manage tags from the **Files** app), and add a collaborative
+   tag named exactly `vector-index`.
+2. Apply the `vector-index` tag to the files and folders you want searchable
+   (from the Files app, select items → **Tags**).
+
+Adding or removing the tag triggers a webhook that tells the Cloud backend to
+(re)index that content, so the index tracks your tags as they change.
+
+<Callout title="Requires Nextcloud 32+ for live retagging">
+
+Tag-change webhooks rely on Nextcloud 32+. On older versions you can still
+tag content, but reindexing won't be triggered automatically by tag changes.
+
+</Callout>
+
+<Screenshot label="Nextcloud Files app with the 'vector-index' tag being applied to a folder." />
+
+</Step>
+
+<Step n="02" title="Enable background sync">
+
+Background sync lets the Cloud backend read your tagged files (over WebDAV,
+using a dedicated app password) so it can build and maintain your index even
+when you're not signed in.
+
+Who can turn it on is controlled by the admin toggle **“Allow users to
+self-provision background indexing”** (in **Settings → Administration →
+Astrolabe → User provisioning**):
+
+- **Self-service (default).** Each user opens **Settings → Personal →
+  Astrolabe** and clicks **“Enable background indexing.”** One click mints a
+  dedicated app password, hands it to the backend, and stores it encrypted —
+  nothing to copy-paste, and it can be disabled again at any time.
+- **Admin-managed.** Turn the toggle **off** to hide the per-user button, then
+  provision users yourself from the **User provisioning** table
+  (**Provision** / **Deprovision** per user). Already-provisioned users keep
+  working until you deprovision them.
+
+<Screenshot
+  label="Astrolabe personal settings page with the 'Enable background indexing' button."
+  src="/astrolabe-personal.png"
+  width={1015}
+  height={652}
+/>
+
+<Screenshot label="Astrolabe admin User provisioning table with the self-provision toggle and per-user Provision/Deprovision actions." />
+
+<Callout title="Use HTTPS for the tenant URI">
+
+Enabling background indexing sends a user app password to the MCP server, so
+the **MCP Server URL** must be `https://` — never plain `http://`.
+
+</Callout>
+
+</Step>
+
+<Step n="03" title="Watch it sync">
+
+Once a user is provisioned, background sync scans their account for documents
+tagged `vector-index` and indexes them — they become available to semantic
+search within a few minutes.
+
+Open the **Astrolabe** app and check **Index Status** to watch your own
+documents sync; the admin page shows the same figures (indexed documents,
+chunks, pending, processing rate) totalled across the whole tenant.
+
+<Screenshot
+  label="Astrolabe app Index Status tab showing sync status and indexed document counts."
+  src="/astrolabe-index-status.png"
+  width={993}
+  height={272}
+/>
+
+</Step>
+
+</Steps>
+
+## Keeping content fresh
+
+Beyond files, the admin **Webhook** presets (Notes, Calendar, Tables, Forms,
+Files sync, Deck) keep indexed content current as it changes in those apps.
+Enable the presets for the apps you use from **Settings → Administration →
+Astrolabe**.
+
+## Next
+
+Your content is indexed — now [**search it**](/using/search) from Nextcloud, or
+[**connect an MCP client**](/using/mcp-clients).

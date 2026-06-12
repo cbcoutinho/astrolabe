@@ -1,0 +1,45 @@
+---
+title: Troubleshooting
+description: Common issues connecting Astrolabe to your Cloud tenant, indexing content, and searching.
+---
+
+## The admin page can't reach the backend
+
+- Recheck the **MCP Server URL** (your tenant URI) for typos and confirm it
+  matches the one in your provisioning email. The service-status panel surfaces
+  the specific error it hit.
+- Confirm the **OIDC client identifier** is your **management (public)** client
+  id — not the confidential client's id.
+
+## Authorization fails
+
+- Make sure the **OpenID Connect** (`oidc`) app is enabled.
+- Confirm both clients exist: the **public** Astrolabe-frontend client (its id =
+  the management client id) and the **confidential** Astrolabe Cloud client.
+- Check that the management client id entered in the admin page matches the one
+  you gave Astrolabe Cloud during tenant creation.
+
+## Search returns nothing yet
+
+- Initial indexing may still be running — open the **Astrolabe** app and check
+  **Index Status**.
+- Confirm the documents you expect are tagged **`vector-index`**; only tagged
+  content is indexed.
+- Confirm the user has **background indexing** enabled (or has been provisioned
+  by an admin).
+
+## "Background indexing is managed by your administrator"
+
+Self-service provisioning is turned off. Ask your administrator to provision you
+from **Settings → Administration → Astrolabe → User provisioning**, or to
+re-enable **“Allow users to self-provision background indexing.”**
+
+## Tag changes aren't picked up
+
+Tag-change reindexing requires **Nextcloud 32+**. On older versions, retag and
+re-trigger indexing, or upgrade Nextcloud.
+
+---
+
+Still stuck? [Get in touch](mailto:hello@astrolabecloud.com) and we'll help you
+get connected.
