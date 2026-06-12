@@ -25,6 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.26.0 (2026-06-12)
+
+### Feat
+
+- **docs**: serve at root + expand to full install/usage flow
+- **docs**: host documentation on Vercel at docs.astrolabecloud.com
+
+### Fix
+
+- **docs**: correct stale README dev comment + tidy robots.ts
+- **docs**: stale sitemap comment + a11y heading levels + orphaned dep
+- **docs**: robots.txt for previews + sitemap/icon/turbopack nits
+- **docs**: remove duplicated button.tsx, restore role=list, review nits
+- **docs**: review round — sonar scope, standalone step numbering, a11y label
+- **docs**: round-2 review nits — CI telemetry, sitemap, step-numbering note
+- **docs**: address PR review — permanent redirect, root metadata, CI, cleanups
+
 ## v0.25.0 (2026-06-10)
 
 ### Feat
