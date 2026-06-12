@@ -14,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return source.getPages().map((page) => ({
     url: `${SITE_URL}${page.url}`,
     changeFrequency: "monthly",
-    priority: 0.8,
+    // The intro page (/) is the entry point; leaf pages rank a touch lower.
+    priority: page.url === "/" ? 1 : 0.8,
   }));
 }
