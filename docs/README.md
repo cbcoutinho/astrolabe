@@ -10,7 +10,7 @@ astrolabecloud.com).
 
 ```bash
 npm install
-npm run dev      # http://localhost:3002 (root redirects to /docs)
+npm run dev      # http://localhost:3002
 ```
 
 Docs are MDX under `content/docs/`. Branded components (`Callout`, `Steps`,
