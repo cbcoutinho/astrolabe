@@ -17,8 +17,9 @@ function NavLink({
   className,
 }: Readonly<{ item: NavItem; className: string }>) {
   if (item.external) {
+    // Same-tab navigation to a sibling product site (e.g. the docs subdomain).
     return (
-      <a href={item.href} rel="noopener" className={className}>
+      <a href={item.href} className={className}>
         {item.label}
       </a>
     );

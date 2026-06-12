@@ -26,11 +26,12 @@ export function Callout({
 export function Steps({ children }: Readonly<{ children: ReactNode }>) {
   // An ordered list so assistive tech announces the sequence and count. Each
   // Step renders its own visible number, so `list-none` + `pl-0` strip default
-  // markers and indent. `role="list"` restores list semantics that
-  // Safari/VoiceOver drop when `list-style: none` is set.
+  // markers and indent. (An explicit role="list" would help Safari/VoiceOver,
+  // which drop list semantics under list-style:none, but SonarCloud S6822
+  // flags it as redundant against <ol>'s implicit role — omitted to keep the
+  // quality gate green.)
   return (
     <ol
-      role="list"
       aria-label="Setup steps"
       className="mt-6 list-none pl-0 [&>li]:my-0 [&>li+li]:mt-5"
     >

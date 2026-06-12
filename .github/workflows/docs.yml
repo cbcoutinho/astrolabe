@@ -1,0 +1,51 @@
+name: Docs site CI
+
+# Typecheck + build the Fumadocs documentation app in docs/ so a broken build
+# or type error surfaces on the PR rather than at Vercel deploy time. Scoped to
+# docs/** so it never runs on Nextcloud-app or marketing-site changes. The
+# actual deploy is handled by Vercel (git-connected), not here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      # Restore Next.js' build cache so incremental builds reuse compiled
+      # output. Keyed on lockfile + source so it busts when either changes.
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: docs/.next/cache
+          key: ${{ runner.os }}-nextjs-docs-${{ hashFiles('docs/package-lock.json') }}-${{ hashFiles('docs/**') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-docs-${{ hashFiles('docs/package-lock.json') }}-
+
+      - run: npm ci --no-audit --no-fund
+
+      # Generates .source types (fumadocs-mdx), then runs next typegen + tsc.
+      - run: npm run typecheck
+
+      - run: npm run build

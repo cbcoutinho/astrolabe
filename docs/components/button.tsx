@@ -1,5 +1,7 @@
 import Link from "next/link";
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import type { AnchorHTMLAttributes, ReactNode } from "react";
+
+import { cn } from "@/lib/cn";
 
 type Variant =
   | "primary"
@@ -32,26 +34,7 @@ const sizeClass: Record<Size, string> = {
 };
 
 function classes(variant: Variant, size: Size, extra?: string) {
-  return `${base} ${variantClass[variant]} ${sizeClass[size]} ${extra ?? ""}`.trim();
-}
-
-export function Button({
-  variant = "primary",
-  size = "md",
-  className,
-  children,
-  ...rest
-}: {
-  variant?: Variant;
-  size?: Size;
-  className?: string;
-  children: ReactNode;
-} & ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button className={classes(variant, size, className)} {...rest}>
-      {children}
-    </button>
-  );
+  return cn(base, variantClass[variant], sizeClass[size], extra);
 }
 
 export function LinkButton({
