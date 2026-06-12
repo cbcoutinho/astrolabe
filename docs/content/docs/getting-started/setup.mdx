@@ -1,0 +1,111 @@
+---
+title: Set up Astrolabe Cloud
+description: Install the apps, register two OIDC clients, create your tenant (with billing), and point Astrolabe at your Cloud backend.
+---
+
+This guide connects your self-hosted Nextcloud to the managed Astrolabe Cloud
+backend. When you're done, you'll move on to
+[indexing your content](/getting-started/indexing).
+
+<Steps>
+
+<Step n="01" title="Install the apps and register two OIDC clients">
+
+In your Nextcloud, open **Apps**, find **Astrolabe**, and choose **Download and
+enable**. Also enable the **OpenID Connect** provider app (`oidc`) — Astrolabe
+uses it to mint short-lived, per-user tokens, so no separate identity provider
+is required.
+
+<Screenshot
+  label="The Astrolabe app in Nextcloud's App Store with the Enable button in the app detail panel."
+  src="/astrolabe-install.png"
+  width={342}
+  height={470}
+/>
+
+Then go to **Settings → Administration → OpenID Connect Provider** and create
+**two** clients:
+
+- **Astrolabe frontend — public client.** This client's id is your
+  **management client id**. It lets the Cloud MCP server trust requests coming
+  from the Astrolabe UI.
+- **Astrolabe Cloud — confidential client.** Nextcloud generates a **Client
+  ID** and **Client secret**. Astrolabe Cloud uses these to provision your
+  tenant and mint per-user tokens server-side. The secret is shown once —
+  capture it now.
+
+<Callout title="Which id goes where?">
+
+The **management (public) client id** is used in two places: the Cloud
+tenant-creation form (step 2) and your Nextcloud admin page (step 4). The
+**confidential** client's id **and secret** are only entered in the Cloud
+tenant-creation form.
+
+</Callout>
+
+<Screenshot
+  label="Nextcloud OIDC admin section showing the two registered clients — the public Astrolabe frontend client and the confidential Astrolabe Cloud client with its Client ID and (masked) secret."
+/>
+
+</Step>
+
+<Step n="02" title="Create your tenant in Astrolabe Cloud">
+
+In the Astrolabe Cloud portal, start tenant creation and provide:
+
+- the **confidential** client's **Client ID** and **Client secret** (so Cloud
+  can provision your tenant and authenticate to your Nextcloud), and
+- the **management (public)** client id (so the MCP server trusts your
+  Astrolabe UI).
+
+<Screenshot label="Astrolabe Cloud tenant-creation form with fields for the confidential client id and secret, plus the management client id." />
+
+</Step>
+
+<Step n="03" title="Set up billing">
+
+Continue to checkout — Astrolabe Cloud redirects you to **Stripe** to set up
+your subscription. Once payment is confirmed, your tenant is queued for
+provisioning.
+
+<Screenshot label="Stripe checkout page for the Astrolabe Cloud subscription." />
+
+</Step>
+
+<Step n="04" title="Point Astrolabe at your tenant">
+
+When provisioning finishes you'll receive an **email**. Back in Nextcloud, open
+**Settings → Administration → Astrolabe** and fill in:
+
+- **MCP Server URL** — your **tenant URI** (e.g.
+  `https://<your-tenant>.mcp.astrolabecloud.com`).
+- **OIDC client identifier** — your **management client id** from step 1.
+
+Save, and the **service-status** panel should report the backend as reachable
+and healthy.
+
+<Callout title="Field naming">
+
+In the current app the management client id is entered in the field labeled
+**“OIDC client identifier”**, and the tenant URI in **“MCP Server URL”**.
+
+</Callout>
+
+<Screenshot
+  label="Astrolabe admin settings page with the tenant URI and management client id filled in and a healthy service-status panel."
+  src="/astrolabe-admin.png"
+  width={1015}
+  height={800}
+/>
+
+</Step>
+
+</Steps>
+
+## Next
+
+Your tenant is connected. Continue to
+[**Index your content**](/getting-started/indexing) to choose what gets indexed
+and turn on background sync.
+
+<DocsCTA />
