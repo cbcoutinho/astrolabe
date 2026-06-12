@@ -40,6 +40,9 @@ export function Steps({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
+// `n` is a hand-authored label ("01", "02", …), not auto-incremented — inserting
+// a step means renumbering the ones after it. Fine at this scale; revisit with a
+// CSS counter or a positional index from <Steps> if the list grows.
 export function Step({
   n,
   title,
