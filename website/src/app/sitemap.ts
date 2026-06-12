@@ -5,8 +5,9 @@ export const dynamic = "force-static";
 
 const SITE_URL = "https://astrolabecloud.com";
 
-// Emitted as a static /sitemap.xml by the export. The site is two static
-// routes; add entries here as pages are added. lastModified is omitted
+// Emitted as a static /sitemap.xml by the export. Docs are no longer part of
+// this site — they live at docs.astrolabecloud.com with their own sitemap — so
+// only the marketing routes are listed here. lastModified is omitted
 // deliberately — Date.now() at build time would churn the file on every
 // deploy and isn't meaningful for largely-static marketing pages.
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -15,11 +16,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${SITE_URL}/`,
       changeFrequency: "monthly",
       priority: 1,
-    },
-    {
-      url: `${SITE_URL}/docs`,
-      changeFrequency: "monthly",
-      priority: 0.9,
     },
     {
       url: `${SITE_URL}/pricing`,

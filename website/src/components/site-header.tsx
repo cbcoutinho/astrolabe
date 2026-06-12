@@ -4,9 +4,31 @@ import type { ReactNode } from "react";
 import { Container } from "./container";
 import { Logo } from "./logo";
 
-type NavItem = { label: string; href: string };
+// `external` items live on another origin (e.g. the docs subdomain), so they
+// render as a plain <a> rather than a client-routed next/link.
+type NavItem = { label: string; href: string; external?: boolean };
 
 type HeaderVariant = "default" | "inverse" | "transparent";
+
+// Renders a nav entry as a client-routed link, or a plain anchor when the entry
+// points off-site (e.g. the docs subdomain). Same-tab navigation either way.
+function NavLink({
+  item,
+  className,
+}: Readonly<{ item: NavItem; className: string }>) {
+  if (item.external) {
+    return (
+      <a href={item.href} rel="noopener" className={className}>
+        {item.label}
+      </a>
+    );
+  }
+  return (
+    <Link href={item.href} className={className}>
+      {item.label}
+    </Link>
+  );
+}
 
 // Header wrapper styling per variant. Pulled out of the component as a flat
 // lookup so there's no nested ternary at the call site.
@@ -56,13 +78,11 @@ export function SiteHeader({
               className="hidden items-center gap-6 sm:flex"
             >
               {nav.map((item) => (
-                <Link
+                <NavLink
                   key={item.href}
-                  href={item.href}
+                  item={item}
                   className={`text-sm font-medium transition-colors ${linkClass}`}
-                >
-                  {item.label}
-                </Link>
+                />
               ))}
             </nav>
           )}
@@ -114,13 +134,11 @@ export function SiteHeader({
                     className="flex flex-col gap-1"
                   >
                     {nav.map((item) => (
-                      <Link
+                      <NavLink
                         key={item.href}
-                        href={item.href}
+                        item={item}
                         className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                      >
-                        {item.label}
-                      </Link>
+                      />
                     ))}
                   </nav>
                 )}

@@ -2,11 +2,10 @@ import type { ReactNode } from "react";
 
 import { LinkButton } from "@/components/button";
 
-// Presentational components for the MDX docs. The docs layout wraps page
-// content in a `prose` (Tailwind typography) container, so Markdown text inside
-// these components is styled automatically. Structural chrome (the callout box,
-// the step number/title row) is marked `not-prose` to opt out of prose styling
-// and keep full control of its layout.
+// Presentational MDX components for the docs. Fumadocs wraps page content in
+// its own typography ("prose") styles; structural chrome (the callout box, the
+// step number/title row, the CTA) is marked `not-prose` to opt out and keep
+// full control of its layout, while body text keeps prose styling.
 
 export function Callout({
   title,
@@ -14,15 +13,9 @@ export function Callout({
 }: Readonly<{ title: string; children: ReactNode }>) {
   return (
     <div className="my-8 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
-      {/* A strong label, not a heading: it names the box's purpose and should
-          stay out of the document's heading outline (which the `##` section
-          headings own). `block` makes the inline <strong> carry the margin. */}
       <strong className="not-prose mb-1.5 block text-sm font-semibold text-slate-900">
         {title}
       </strong>
-      {/* Children are Markdown; prose styles the text and links. Trim only the
-          orphan margins at the edges so the box stays tight while multi-paragraph
-          callouts keep their inter-paragraph spacing. */}
       <div className="text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
         {children}
       </div>
@@ -32,14 +25,9 @@ export function Callout({
 
 export function Steps({ children }: Readonly<{ children: ReactNode }>) {
   // An ordered list so assistive tech announces the sequence and count. Each
-  // Step renders its own visible number, so `list-none` + `pl-0` strip prose's
-  // default markers and indent (rather than `not-prose`, which would also block
-  // the prose-code/prose-a styling we want on the step *body* — only each
-  // Step's number/title row opts out via its own `not-prose`). The explicit
-  // role="list" restores list semantics that Safari/VoiceOver drop when
-  // `list-style: none` is set. `[&>li]:my-0` + `[&>li+li]:mt-5` set the
-  // inter-card gap explicitly (higher specificity than prose's `li` margins,
-  // which would otherwise shrink the spacing once prose applies to the list).
+  // Step renders its own visible number, so `list-none` + `pl-0` strip default
+  // markers and indent. `role="list"` restores list semantics that
+  // Safari/VoiceOver drop when `list-style: none` is set.
   return (
     <ol
       role="list"
@@ -69,9 +57,9 @@ export function Step({
   );
 }
 
-// Closing call-to-action for the docs page. Kept as a component (not inline MDX)
-// because multi-line text inside a JSX element written in .mdx gets reparsed as
-// a Markdown paragraph — which would nest a <p> inside this <p> and break
+// Closing call-to-action for the docs home. Kept as a component (not inline
+// MDX) because multi-line text inside a JSX element written in .mdx gets
+// reparsed as a Markdown paragraph — which would nest a <p> and break
 // hydration. In a .tsx file the JSX text is left alone.
 export function DocsCTA() {
   return (

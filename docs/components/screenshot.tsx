@@ -3,14 +3,10 @@ import Image from "next/image";
 // A figure for admin-portal screenshots in the docs. While a real screenshot
 // hasn't been captured yet, `src` is omitted and the component renders a
 // labelled dashed placeholder instead of a broken <img> — so the page is
-// complete and self-documenting in the meantime. To wire a real shot: drop the
-// PNG into website/public/, then pass `src` plus its intrinsic `width`/`height`
-// (required by next/image under the static export). The placeholder's `label`
-// becomes the image `alt`, so describe what the screenshot shows.
-// `src` requires `width`/`height` together (next/image needs intrinsic
-// dimensions under the static export); omitting `src` renders the placeholder
-// and forbids stray dimensions. The discriminated union enforces this at build
-// time so a real screenshot can't be wired up without its dimensions.
+// complete and self-documenting in the meantime. `src` requires `width`/
+// `height` together (next/image needs intrinsic dimensions); the discriminated
+// union enforces this at build time. The figure is `not-prose` so Fumadocs'
+// content typography doesn't restyle it.
 type ScreenshotProps = Readonly<
   { label: string; caption?: string } & (
     | { src: string; width: number; height: number }
@@ -28,17 +24,11 @@ export function Screenshot({
   return (
     <figure className="not-prose mt-5 text-center">
       {src ? (
-        // No `sizes` prop: next.config sets `images: { unoptimized: true }`
-        // for the static export, so Next emits no responsive srcset and a
-        // `sizes` hint would be silently ignored.
         <Image
           src={src}
           alt={label}
           width={width}
           height={height}
-          // `not-prose` on the figure drops Typography's `max-width: 100%`, so
-          // constrain the image here — large screenshots scale down to the
-          // column width while small ones stay at their natural size.
           className="mx-auto h-auto max-w-full rounded-lg border border-slate-200 shadow-card"
         />
       ) : (

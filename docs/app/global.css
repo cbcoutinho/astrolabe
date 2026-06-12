@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* Brand theme — mirrors the marketing site (website/src/app/globals.css) so the
+   docs feel like the same product. Tailwind v4 registers theme tokens in CSS;
+   these generate the brand and ink color utilities and the `shadow-card`
+   utility used by the ported docs components. */
+@theme {
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular,
+    monospace;
+
+  --color-brand-50: #e6f3fa;
+  --color-brand-100: #cce6f4;
+  --color-brand-200: #99cee9;
+  --color-brand-300: #66b5df;
+  --color-brand-400: #339cd4;
+  --color-brand-500: #0082c9;
+  --color-brand-600: #006aa3;
+  --color-brand-700: #00517c;
+  --color-brand-800: #003855;
+  --color-brand-900: #001f2f;
+
+  --color-ink: #0b1320;
+  --color-ink-900: #0b1320;
+  --color-ink-800: #172033;
+  --color-ink-700: #1f2a44;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04),
+    0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 4px 6px -1px rgb(15 23 42 / 0.06),
+    0 2px 4px -2px rgb(15 23 42 / 0.08);
+}
+
+/* Retheme Fumadocs' accent (links, active nav, focus) to the Nextcloud-blue
+   brand. Fumadocs reads these `--color-fd-*` tokens from its preset. */
+:root {
+  --color-fd-primary: #0082c9;
+}
+
+.dark {
+  --color-fd-primary: #339cd4;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}

@@ -9,6 +9,11 @@ self-contained Next.js project that builds to a static export and is published
 to **GitHub Pages** by `.github/workflows/landing-pages.yml`. It has its own
 `package.json`/`node_modules` and is not part of the app's Vite build.
 
+The **documentation** is no longer part of this site: it lives in `../docs`
+(a Fumadocs app on Vercel) and is served at
+[docs.astrolabecloud.com](https://docs.astrolabecloud.com). The header/footer
+"Docs" links point there.
+
 ## Local dev
 
 ```bash
