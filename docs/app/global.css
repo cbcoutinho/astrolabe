@@ -46,6 +46,12 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* When Fumadocs opens a dialog/sheet (search, mobile sidebar), react-remove-scroll
+   inlines a `margin-right` on <body> to compensate for the hidden scrollbar. With
+   `scrollbar-gutter: stable` (above) that gutter is already reserved, so the
+   compensation would double-shift the layout. Zero it out — `!important` is
+   required because the library sets the value inline. Don't remove: it isn't dead
+   CSS, it prevents a horizontal jump when the search dialog opens. */
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;

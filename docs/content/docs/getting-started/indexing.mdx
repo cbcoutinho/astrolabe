@@ -3,13 +3,14 @@ title: Index your content
 description: Tag the documents you want indexed, enable background sync (self-service or admin-managed), and watch your content become searchable.
 ---
 
-With your tenant connected, you choose **what** gets indexed and **who** gets
-background indexing. Nothing is indexed until you opt content in with a tag and
-turn on background sync.
+Once your tenant is connected (see
+[Set up Astrolabe Cloud](/getting-started/setup)), you choose **what** gets
+indexed and **who** gets background indexing. Nothing is indexed until you opt
+content in with a tag and turn on background sync — the three steps below.
 
 <Steps>
 
-<Step n="05" title="Create and apply the vector-index tag">
+<Step n="01" title="Create and apply the vector-index tag">
 
 Astrolabe only indexes content you mark with a Nextcloud system tag named
 **`vector-index`**.
@@ -34,7 +35,7 @@ tag content, but reindexing won't be triggered automatically by tag changes.
 
 </Step>
 
-<Step n="06" title="Enable background sync">
+<Step n="02" title="Enable background sync">
 
 Background sync lets the Cloud backend read your tagged files (over WebDAV,
 using a dedicated app password) so it can build and maintain your index even
@@ -71,7 +72,7 @@ the **MCP Server URL** must be `https://` — never plain `http://`.
 
 </Step>
 
-<Step n="07" title="Watch it sync">
+<Step n="03" title="Watch it sync">
 
 Once a user is provisioned, background sync scans their account for documents
 tagged `vector-index` and indexes them — they become available to semantic
