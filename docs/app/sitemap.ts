@@ -2,7 +2,10 @@ import type { MetadataRoute } from "next";
 
 import { source } from "@/lib/source";
 
-const SITE_URL = "https://docs.astrolabecloud.com";
+// Production domain by default; override for non-prod deploys via env so a
+// preview's sitemap points at the preview rather than production.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.astrolabecloud.com";
 
 // Emitted as /sitemap.xml. Generated from the docs source so new pages are
 // discovered automatically as content grows (the root "/" just 308-redirects
