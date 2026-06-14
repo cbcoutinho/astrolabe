@@ -46,21 +46,48 @@ tenant-creation form.
 </Callout>
 
 <Screenshot
-  label="Nextcloud OIDC admin section showing the two registered clients — the public Astrolabe frontend client and the confidential Astrolabe Cloud client with its Client ID and (masked) secret."
+  label="Nextcloud's OpenID Connect Provider admin showing the registered clients, including the public Astrolabe frontend client and the confidential Astrolabe Cloud client."
+  src="/oidc-clients.png"
+  width={1100}
+  height={509}
 />
 
 </Step>
 
 <Step n="02" title="Create your tenant in Astrolabe Cloud">
 
-In the Astrolabe Cloud portal, start tenant creation and provide:
+In the Astrolabe Cloud portal, open **New tenant**. The form has two sections:
 
-- the **confidential** client's **Client ID** and **Client secret** (so Cloud
-  can provision your tenant and authenticate to your Nextcloud), and
-- the **management (public)** client id (so the MCP server trusts your
-  Astrolabe UI).
+**Tenant identity** — a **Display name**, a **Slug** (lowercase letters,
+numbers and hyphens, 3–40 chars — it becomes your tenant subdomain), a
+**Contact email**, a **Plan**, and an **Embedding provider**.
 
-<Screenshot label="Astrolabe Cloud tenant-creation form with fields for the confidential client id and secret, plus the management client id." />
+<Callout title="The embedding choice is permanent">
+
+The **Embedding provider** (API — Mistral, or in-process) sizes the vector
+index at provisioning and **can't be changed afterwards without a destructive
+re-provision**. Pick deliberately.
+
+</Callout>
+
+**Connect your Nextcloud** —
+
+- **Nextcloud URL** and **OIDC issuer URL** (usually the same Nextcloud base
+  URL; it must serve `/.well-known/openid-configuration`).
+- the **confidential** client's **OIDC client ID** and **OIDC client secret**
+  (so Cloud can provision your tenant and authenticate to your Nextcloud).
+- under **Management API (optional)**, put the **management (public)** client
+  id in **Allowed management clients** (so the MCP server trusts your Astrolabe
+  UI). Leave it empty to keep that API closed.
+
+Cloud validates OIDC discovery against your issuer before it lets you continue.
+
+<Screenshot
+  label="Astrolabe Cloud tenant-creation form: tenant identity (name, slug, plan, embedding provider) and the Connect-your-Nextcloud fields (URL, issuer, confidential client id + secret, allowed management clients)."
+  src="/cloud-tenant-form.png"
+  width={1425}
+  height={1925}
+/>
 
 </Step>
 
@@ -70,26 +97,38 @@ Continue to checkout — Astrolabe Cloud redirects you to **Stripe** to set up
 your subscription. Once payment is confirmed, your tenant is queued for
 provisioning.
 
-<Screenshot label="Stripe checkout page for the Astrolabe Cloud subscription." />
+<Screenshot
+  label="Stripe checkout page for the Astrolabe Cloud subscription."
+  src="/stripe-checkout.png"
+  width={1440}
+  height={900}
+/>
 
 </Step>
 
 <Step n="04" title="Point Astrolabe at your tenant">
 
-When provisioning finishes you'll receive an **email**. Back in Nextcloud, open
+When provisioning finishes you'll receive an **email**. Your tenant URI is the
+**Public URL** shown on the tenant page, of the form
+`https://<your-slug>.tenants.astrolabecloud.com`. Back in Nextcloud, open
 **Settings → Administration → Astrolabe** and fill in:
 
-- **MCP Server URL** — your **tenant URI** (e.g.
-  `https://<your-tenant>.mcp.astrolabecloud.com`).
-- **OIDC client identifier** — your **management client id** from step 1.
+- **MCP Server URL (internal)** — your **tenant URI**. Must be `https://`.
+- **MCP Server URL (public)** — leave blank to reuse the internal URL, or set
+  it explicitly; it becomes the audience (`aud`) of the minted access tokens.
+- **OIDC client identifier** — your **management (public) client id** from
+  step 1.
 
 Save, and the **service-status** panel should report the backend as reachable
 and healthy.
 
 <Callout title="Field naming">
 
-In the current app the management client id is entered in the field labeled
-**“OIDC client identifier”**, and the tenant URI in **“MCP Server URL”**.
+The app has two URL fields — **“MCP Server URL (internal)”** (where Astrolabe
+reaches the MCP server) and **“MCP Server URL (public)”** (the token audience).
+For a Cloud tenant, put your tenant URI in the internal field; the public field
+can be left blank. The management client id goes in **“OIDC client
+identifier”**.
 
 </Callout>
 
