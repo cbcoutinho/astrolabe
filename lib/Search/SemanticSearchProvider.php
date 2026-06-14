@@ -161,7 +161,7 @@ class SemanticSearchProvider implements IProvider {
 			offset: $offset,
 			algorithm: $algorithm,
 			fusion: $fusion,
-			scoreThreshold: $scoreThreshold / 100.0, // Convert percentage to 0-1 range
+			scoreThreshold: (float)$scoreThreshold / 100.0, // Convert percentage to 0-1 range
 		);
 
 		if (!empty($results['error'])) {
