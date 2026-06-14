@@ -157,16 +157,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Get php version
-        id: versions
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
-        with:
-          filename: appinfo/info.xml
-
-      - name: Set up php${{ steps.versions.outputs.php-min }}
+      # PHP 8.1 dropped: Nextcloud 32+ (astrolabe's min-version) requires PHP
+      # 8.2+, and Psalm 6 pulls webmozart/assert ^2 which uses PHP 8.2-only
+      # syntax. Run static analysis on the 8.2 floor rather than the version
+      # matrix's php-min (which still reports 8.1 for Nextcloud 32).
+      - name: Set up PHP 8.2
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
         with:
-          php-version: ${{ steps.versions.outputs.php-min }}
+          php-version: '8.2'
           extensions: bz2, ctype, curl, dom, fileinfo, gd, iconv, intl, json, libxml, mbstring, openssl, pcntl, posix, session, simplexml, xmlreader, xmlwriter, zip, zlib, sqlite, pdo_sqlite
           coverage: none
           ini-file: development
