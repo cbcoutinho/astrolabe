@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.26.2 (2026-06-14)
+
+### Fix
+
+- **psalm**: make psalm 6 resolve and pass under PHP 8.2+
+
 ## v0.26.1 (2026-06-13)
 
 ### Fix
