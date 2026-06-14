@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.26.1@d747f6500b38ac4f7dfc5edbcae6e4b637d7add0">
+<files psalm-version="6.16.1@f1f5de594dc76faf8784e02d3dc4716c91c6f6ac">
+  <file src="lib/AppInfo/Application.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[Application]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function boot(IBootContext $context): void {]]></code>
+      <code><![CDATA[public function register(IRegistrationContext $context): void {]]></code>
+    </MissingOverrideAttribute>
+  </file>
   <file src="lib/Controller/ApiController.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[ApiController]]></code>
+    </ClassMustBeFinal>
     <DeprecatedMethod>
       <code><![CDATA[setAppValue]]></code>
       <code><![CDATA[setAppValue]]></code>
@@ -55,11 +67,33 @@
     </UnusedClass>
   </file>
   <file src="lib/Controller/CredentialsController.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[CredentialsController]]></code>
+    </ClassMustBeFinal>
     <UnusedClass>
       <code><![CDATA[CredentialsController]]></code>
     </UnusedClass>
   </file>
+  <file src="lib/Controller/PageController.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[PageController]]></code>
+    </ClassMustBeFinal>
+  </file>
+  <file src="lib/Http/NextcloudPsr18Client.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[NextcloudPsr18Client]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function sendRequest(RequestInterface $request): ResponseInterface {]]></code>
+    </MissingOverrideAttribute>
+  </file>
   <file src="lib/Listener/AstrolabeAdminSettingsListener.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[AstrolabeAdminSettingsListener]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function handle(Event $event): void {]]></code>
+    </MissingOverrideAttribute>
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
     </PossiblyUnusedMethod>
@@ -67,13 +101,34 @@
       <code><![CDATA[$event instanceof DeclarativeSettingsSetValueEvent]]></code>
     </RedundantCondition>
   </file>
+  <file src="lib/Migration/Version0160Date20260527000000PurgeOauthTokens.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[Version0160Date20260527000000PurgeOauthTokens]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {]]></code>
+      <code><![CDATA[public function description(): string {]]></code>
+      <code><![CDATA[public function name(): string {]]></code>
+      <code><![CDATA[public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {]]></code>
+      <code><![CDATA[public function preSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {]]></code>
+    </MissingOverrideAttribute>
+  </file>
   <file src="lib/Search/SemanticSearchProvider.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[SemanticSearchProvider]]></code>
+    </ClassMustBeFinal>
     <DeprecatedMethod>
       <code><![CDATA[getAppValue]]></code>
       <code><![CDATA[getAppValue]]></code>
       <code><![CDATA[getAppValue]]></code>
       <code><![CDATA[getAppValue]]></code>
     </DeprecatedMethod>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function getId(): string {]]></code>
+      <code><![CDATA[public function getName(): string {]]></code>
+      <code><![CDATA[public function getOrder(string $route, array $routeParameters): int {]]></code>
+      <code><![CDATA[public function search(IUser $user, ISearchQuery $query): SearchResult {]]></code>
+    </MissingOverrideAttribute>
     <MixedArgument>
       <code><![CDATA[$chunkNum]]></code>
       <code><![CDATA[$docType]]></code>
@@ -111,7 +166,20 @@
       <code><![CDATA[empty($status['error'])]]></code>
     </RiskyTruthyFalsyComparison>
   </file>
+  <file src="lib/Service/AppPasswordProvisioningService.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[AppPasswordProvisioningService]]></code>
+    </ClassMustBeFinal>
+  </file>
+  <file src="lib/Service/BackgroundSyncCredentialStorage.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[BackgroundSyncCredentialStorage]]></code>
+    </ClassMustBeFinal>
+  </file>
   <file src="lib/Service/McpServerClient.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[McpServerClient]]></code>
+    </ClassMustBeFinal>
     <MixedAssignment>
       <code><![CDATA[$baseUrl]]></code>
     </MixedAssignment>
@@ -120,7 +188,20 @@
       <code><![CDATA[isServerReachable]]></code>
     </PossiblyUnusedMethod>
   </file>
+  <file src="lib/Service/McpTokenMintException.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[McpTokenMintException]]></code>
+    </ClassMustBeFinal>
+  </file>
+  <file src="lib/Service/McpTokenMinter.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[McpTokenMinter]]></code>
+    </ClassMustBeFinal>
+  </file>
   <file src="lib/Service/WebhookPresets.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[WebhookPresets]]></code>
+    </ClassMustBeFinal>
     <MissingClosureParamType>
       <code><![CDATA[$eventConfig]]></code>
     </MissingClosureParamType>
@@ -145,6 +226,14 @@
     </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/Admin.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[Admin]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function getForm(): TemplateResponse {]]></code>
+      <code><![CDATA[public function getPriority(): int {]]></code>
+      <code><![CDATA[public function getSection(): string {]]></code>
+    </MissingOverrideAttribute>
     <MixedAssignment>
       <code><![CDATA[$clientId]]></code>
       <code><![CDATA[$serverUrl]]></code>
@@ -157,21 +246,53 @@
     </UnusedProperty>
   </file>
   <file src="lib/Settings/AdminSection.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[AdminSection]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function getID(): string {]]></code>
+      <code><![CDATA[public function getIcon(): string {]]></code>
+      <code><![CDATA[public function getName(): string {]]></code>
+      <code><![CDATA[public function getPriority(): int {]]></code>
+    </MissingOverrideAttribute>
     <UnusedClass>
       <code><![CDATA[AdminSection]]></code>
     </UnusedClass>
   </file>
   <file src="lib/Settings/AstrolabeAdminSettings.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[AstrolabeAdminSettings]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function getSchema(): array {]]></code>
+    </MissingOverrideAttribute>
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
     </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/Personal.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[Personal]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function getForm(): TemplateResponse {]]></code>
+      <code><![CDATA[public function getPriority(): int {]]></code>
+      <code><![CDATA[public function getSection(): string {]]></code>
+    </MissingOverrideAttribute>
     <UnusedClass>
       <code><![CDATA[Personal]]></code>
     </UnusedClass>
   </file>
   <file src="lib/Settings/PersonalSection.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[PersonalSection]]></code>
+    </ClassMustBeFinal>
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function getID(): string {]]></code>
+      <code><![CDATA[public function getIcon(): string {]]></code>
+      <code><![CDATA[public function getName(): string {]]></code>
+      <code><![CDATA[public function getPriority(): int {]]></code>
+    </MissingOverrideAttribute>
     <UnusedClass>
       <code><![CDATA[PersonalSection]]></code>
     </UnusedClass>
