@@ -20,8 +20,10 @@ Astrolabe only indexes content you mark with a Nextcloud system tag named
 1. As an administrator, create the tag: **Settings → Administration →
    Flow / Tags** (or manage tags from the **Files** app), and add a collaborative
    tag named exactly `vector-index`.
-2. Apply the `vector-index` tag to the files and folders you want searchable
-   (from the Files app, select items → **Tags**).
+2. Apply the `vector-index` tag to the files and folders you want searchable:
+   in the **Files** app, open an item's **⋯ (Actions) → Manage tags**, tick
+   **`vector-index`**, and click **Apply**. Tagging a folder indexes the files
+   inside it.
 
 Adding or removing the tag triggers a webhook that tells the Cloud backend to
 (re)index that content, so the index tracks your tags as they change.
@@ -33,7 +35,12 @@ tag content, but reindexing won't be triggered automatically by tag changes.
 
 </Callout>
 
-<Screenshot label="Nextcloud Files app with the 'vector-index' tag being applied to a folder." />
+<Screenshot
+  label="Nextcloud Files app 'Manage tags' dialog with the 'vector-index' tag being applied to a folder."
+  src="/vector-index-tag.png"
+  width={1349}
+  height={766}
+/>
 
 </Step>
 
@@ -55,6 +62,14 @@ Astrolabe → User provisioning**):
   provision users yourself from the **User provisioning** table
   (**Provision** / **Deprovision** per user). Already-provisioned users keep
   working until you deprovision them.
+
+<Callout title="Signed in with “remember me”?">
+
+Enabling background indexing mints an app password, which Nextcloud only allows
+from a password-confirmed session. If you're signed in via a “remember me”
+cookie, you'll be prompted to sign in again first, then enable it.
+
+</Callout>
 
 <Screenshot
   label="Astrolabe personal settings page with the 'Enable background indexing' button."
