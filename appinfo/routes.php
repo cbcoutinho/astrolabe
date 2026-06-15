@@ -98,6 +98,11 @@ return [
 			'url' => '/api/admin/search-settings',
 			'verb' => 'POST',
 		],
+		[
+			'name' => 'api#saveSearchSources',
+			'url' => '/api/admin/search-sources',
+			'verb' => 'POST',
+		],
 
 		// Webhook management (admin)
 		[

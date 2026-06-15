@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
+use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\Files\FileInfo;
 use OCP\Files\IMimeTypeDetector;
@@ -50,6 +51,7 @@ class SemanticSearchProvider implements IProvider {
 		private IPreview $previewManager,
 		private LoggerInterface $logger,
 		private ICacheFactory $cacheFactory,
+		private SearchSources $searchSources,
 	) {
 	}
 
@@ -152,6 +154,14 @@ class SemanticSearchProvider implements IProvider {
 		// Calculate offset from cursor
 		$offset = $cursor ? (int)$cursor : 0;
 
+		// Restrict to admin-approved, installed source types. When no source is
+		// enabled there is nothing to search — return empty rather than letting
+		// the server default to "all indexed types".
+		$enabledDocTypes = $this->searchSources->effectiveEnabledDocTypes();
+		if ($enabledDocTypes === []) {
+			return SearchResult::complete($this->getName(), []);
+		}
+
 		// Execute semantic search with OAuth token and admin settings
 		// Server extracts user_id from token - results filtered to that user's documents
 		$results = $this->client->searchForUnifiedSearch(
@@ -162,6 +172,7 @@ class SemanticSearchProvider implements IProvider {
 			algorithm: $algorithm,
 			fusion: $fusion,
 			scoreThreshold: (float)$scoreThreshold / 100.0, // Convert percentage to 0-1 range
+			docTypes: $enabledDocTypes,
 		);
 
 		if (!empty($results['error'])) {

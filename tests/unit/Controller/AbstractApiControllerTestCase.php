@@ -7,6 +7,7 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 use OCA\Astrolabe\Controller\ApiController;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
+use OCA\Astrolabe\Service\SearchSources;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IRequest;
@@ -31,6 +32,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 	protected McpTokenMinter&MockObject $tokenMinter;
 	protected IConfig&MockObject $config;
 	protected IAppConfig&MockObject $appConfig;
+	protected SearchSources&MockObject $searchSources;
 	protected ApiController $controller;
 
 	protected function setUp(): void {
@@ -43,6 +45,12 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		$this->tokenMinter = $this->createMock(McpTokenMinter::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->searchSources = $this->createMock(SearchSources::class);
+		// Default: every catalog source is installed and approved, so search
+		// tests see the pre-feature behaviour (no doc_type narrowing). Tests
+		// that exercise the consent gate override this per case.
+		$this->searchSources->method('effectiveEnabledDocTypes')
+			->willReturn(['note', 'file', 'deck_card', 'calendar', 'contact', 'news_item']);
 
 		$this->controller = new ApiController(
 			'astrolabe',
@@ -53,6 +61,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			$this->tokenMinter,
 			$this->config,
 			$this->appConfig,
+			$this->searchSources,
 		);
 	}
 

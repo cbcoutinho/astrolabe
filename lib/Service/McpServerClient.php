@@ -389,7 +389,23 @@ class McpServerClient {
 		string $algorithm = 'hybrid',
 		string $fusion = 'rrf',
 		float $scoreThreshold = 0.0,
+		?array $docTypes = null,
 	): array {
+		$body = [
+			'query' => $query,
+			'algorithm' => $algorithm,
+			'fusion' => $fusion,
+			'score_threshold' => $scoreThreshold,
+			'limit' => min($limit, 100),
+			'offset' => $offset,
+			'include_pca' => false,
+			'include_chunks' => true,
+		];
+		// Restrict to admin-approved, installed source types when provided.
+		if ($docTypes !== null) {
+			$body['doc_types'] = array_values($docTypes);
+		}
+
 		return $this->sendAndDecode(
 			fn (): ResponseInterface => $this->send('POST',
 				$this->baseUrl . '/api/v1/search',
@@ -398,16 +414,7 @@ class McpServerClient {
 						'Authorization' => 'Bearer ' . $token,
 						'Content-Type' => 'application/json',
 					],
-					'json' => [
-						'query' => $query,
-						'algorithm' => $algorithm,
-						'fusion' => $fusion,
-						'score_threshold' => $scoreThreshold,
-						'limit' => min($limit, 100),
-						'offset' => $offset,
-						'include_pca' => false,
-						'include_chunks' => true,
-					],
+					'json' => $body,
 				]),
 			),
 			'Unified search failed',
@@ -533,6 +540,39 @@ class McpServerClient {
 			),
 			'Failed to create webhook',
 			['event' => $event],
+			usesErrorDetection: true,
+		);
+	}
+
+	/**
+	 * Purge all indexed vectors for the given doc types.
+	 *
+	 * Used when an admin disables a source for semantic search: consent is
+	 * binding on data-at-rest, so the already-indexed content for that source's
+	 * doc type(s) must be deleted, not just hidden. The purge is global (all
+	 * owners) because the admin disable is a global decision.
+	 *
+	 * Requires OAuth bearer token for authentication.
+	 *
+	 * @param list<string> $docTypes Doc types to purge (e.g. ['file'])
+	 * @param string $token OAuth bearer token
+	 * @return array{purged?: array<string, int>, error?: string, provisioning_required?: true}
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 */
+	public function purgeDocTypes(array $docTypes, string $token): array {
+		return $this->sendAndDecode(
+			fn (): ResponseInterface => $this->send('POST',
+				$this->baseUrl . '/api/v1/vector-sync/purge',
+				$this->withUserAgent([
+					'headers' => [
+						'Authorization' => 'Bearer ' . $token,
+						'Content-Type' => 'application/json',
+					],
+					'json' => ['doc_types' => $docTypes],
+				]),
+			),
+			'Failed to purge indexed documents',
 			usesErrorDetection: true,
 		);
 	}

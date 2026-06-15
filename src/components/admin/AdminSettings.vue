@@ -164,6 +164,32 @@
 				</template>
 			</NcSettingsSection>
 
+			<!-- Searchable sources (admin consent) -->
+			<NcSettingsSection
+				v-if="vectorSyncEnabled"
+				:name="t('astrolabe', 'Searchable sources')"
+				:description="t('astrolabe', 'Choose which installed apps may be indexed and searched semantically. Only apps installed in Nextcloud are listed. Disabling a source deletes its already-indexed content and stops further indexing — re-enabling requires a full re-index.')">
+				<div v-if="searchSources.length === 0" class="empty-state">
+					<NcNoteCard type="info">
+						<p>{{ t('astrolabe', 'No supported apps are installed.') }}</p>
+					</NcNoteCard>
+				</div>
+				<div v-else class="settings-form">
+					<div v-for="source in searchSources" :key="source.app" class="source-row">
+						<NcCheckboxRadioSwitch
+							:model-value="source.enabled"
+							type="switch"
+							:disabled="savingSources"
+							@update:model-value="onToggleSource(source, $event)">
+							{{ sourceLabel(source) }}
+						</NcCheckboxRadioSwitch>
+					</div>
+					<NcNoteCard type="warning" class="sources-info">
+						<p>{{ t('astrolabe', 'A source must be both installed and enabled to be searchable. Disabling a source removes its indexed data; this cannot be undone without re-indexing.') }}</p>
+					</NcNoteCard>
+				</div>
+			</NcSettingsSection>
+
 			<!-- AI search provider settings -->
 			<NcSettingsSection
 				v-if="vectorSyncEnabled"
@@ -256,6 +282,15 @@
 				</ul>
 			</NcSettingsSection>
 		</template>
+
+		<NcDialog
+			v-if="confirmDialogOpen"
+			:open="confirmDialogOpen"
+			:name="t('astrolabe', 'Disable source for semantic search?')"
+			:message="confirmMessage"
+			:buttons="confirmButtons"
+			@update:open="confirmDialogOpen = $event"
+			@closing="cancelDisable" />
 	</div>
 </template>
 
@@ -265,7 +300,7 @@ import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
-import { showError, showSuccess } from '@nextcloud/dialogs'
+import { showError, showSuccess, showWarning } from '@nextcloud/dialogs'
 
 import {
 	NcSettingsSection,
@@ -275,6 +310,7 @@ import {
 	NcSelect,
 	NcTextField,
 	NcCheckboxRadioSwitch,
+	NcDialog,
 } from '@nextcloud/vue'
 
 import Refresh from 'vue-material-design-icons/Refresh.vue'
@@ -308,6 +344,31 @@ const settings = ref(initialData.searchSettings || {
 	showVisualization: true,
 })
 const allowUserSelfProvision = ref(initialData.allowUserSelfProvision ?? true)
+
+// Searchable-sources (admin consent) state. Only installed sources are
+// provided by the backend; each carries its current enabled state.
+const searchSources = ref(initialData.searchSources || [])
+const savingSources = ref(false)
+const confirmDialogOpen = ref(false)
+const pendingSource = ref(null)
+
+const confirmMessage = computed(() =>
+	pendingSource.value
+		? t('astrolabe', 'Disabling "{source}" deletes its already-indexed documents and stops further indexing. Re-enabling later requires a full re-index. Continue?', { source: sourceLabel(pendingSource.value) })
+		: '',
+)
+
+const confirmButtons = computed(() => [
+	{
+		label: t('astrolabe', 'Cancel'),
+		callback: cancelDisable,
+	},
+	{
+		label: t('astrolabe', 'Disable and delete indexed data'),
+		type: 'error',
+		callback: confirmDisable,
+	},
+])
 
 // Computed properties
 const algorithmOptions = computed(() => [
@@ -393,6 +454,73 @@ async function saveSettings() {
 		showError(t('astrolabe', 'Failed to save settings'))
 	} finally {
 		saving.value = false
+	}
+}
+
+function sourceLabel(source) {
+	return t('astrolabe', source.label)
+}
+
+// Toggling a source. Enabling is non-destructive and applies immediately;
+// disabling deletes indexed data, so it routes through a confirmation dialog.
+function onToggleSource(source, value) {
+	if (value) {
+		source.enabled = true
+		persistSources()
+	} else {
+		pendingSource.value = source
+		confirmDialogOpen.value = true
+	}
+}
+
+function cancelDisable() {
+	// The switch is bound to source.enabled, which we never changed, so it
+	// snaps back to "on" on its own. Just clear the pending state.
+	confirmDialogOpen.value = false
+	pendingSource.value = null
+}
+
+function confirmDisable() {
+	if (pendingSource.value) {
+		pendingSource.value.enabled = false
+	}
+	confirmDialogOpen.value = false
+	pendingSource.value = null
+	persistSources()
+}
+
+// Persist the full enabled/disabled state. The backend receives the disabled
+// source ids and purges any newly-disabled source's indexed data.
+async function persistSources() {
+	savingSources.value = true
+	const disabledSources = searchSources.value
+		.filter(s => !s.enabled)
+		.map(s => s.app)
+
+	try {
+		const response = await axios.post(
+			generateUrl('/apps/astrolabe/api/admin/search-sources'),
+			{ disabledSources },
+			{ headers: { 'Content-Type': 'application/json' } },
+		)
+
+		if (response.data.success) {
+			// Re-sync from the authoritative server state.
+			searchSources.value = response.data.searchSources || searchSources.value
+			const purge = response.data.purge
+			if (purge?.warning) {
+				showWarning(purge.warning)
+			} else {
+				showSuccess(t('astrolabe', 'Searchable sources updated'))
+			}
+		} else {
+			showError(response.data.error || t('astrolabe', 'Failed to update searchable sources'))
+		}
+	} catch (err) {
+		console.error('Failed to update searchable sources:', err)
+		showError(err.response?.data?.error || err.message || t('astrolabe', 'Network error'))
+	} finally {
+		savingSources.value = false
 	}
 }
 

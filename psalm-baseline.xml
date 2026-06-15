@@ -198,6 +198,11 @@
       <code><![CDATA[McpTokenMinter]]></code>
     </ClassMustBeFinal>
   </file>
+  <file src="lib/Service/SearchSources.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[SearchSources]]></code>
+    </ClassMustBeFinal>
+  </file>
   <file src="lib/Service/WebhookPresets.php">
     <ClassMustBeFinal>
       <code><![CDATA[WebhookPresets]]></code>
