@@ -102,7 +102,9 @@ test.describe('Astrolabe search', () => {
 		const searchInput = page.getByRole('textbox', { name: 'Search query' })
 		await expect(searchInput).toBeVisible({ timeout: 15000 })
 		await searchInput.fill('kubernetes cluster architecture')
-		await searchInput.press('Enter')
+		// The query box is a multi-line textarea: Enter inserts a newline,
+		// Ctrl/Cmd+Enter submits the search.
+		await searchInput.press('Control+Enter')
 
 		// Step 5: Wait for search results, error, or no-results state
 		// Use .first() because the results count text also appears in the Plotly heading
