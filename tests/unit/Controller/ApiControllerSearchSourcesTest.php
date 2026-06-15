@@ -90,6 +90,27 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 		$this->controller->saveSearchSources(['deck', 'bogus']);
 	}
 
+	public function testPurgeWarningWhenMcpUnreachable(): void {
+		// No authenticated user → tokenForCurrentUser() returns a JSONResponse,
+		// so the eager purge can't run. Config must still be saved (consent),
+		// and the response surfaces a warning rather than failing.
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->searchSources->method('getDisabledSources')->willReturn([]);
+		$this->searchSources->method('installedSources')->willReturn([]);
+
+		$this->appConfig->expects($this->once())
+			->method('setValueString')
+			->with('astrolabe', Admin::SETTING_DISABLED_SEARCH_SOURCES, '["files"]');
+		$this->client->expects($this->never())->method('purgeDocTypes');
+
+		$response = $this->controller->saveSearchSources(['files']);
+
+		$data = $response->getData();
+		$this->assertTrue($data['success']);
+		$this->assertArrayHasKey('warning', $data['purge']);
+		$this->assertStringContainsString('Could not reach', $data['purge']['warning']);
+	}
+
 	/** Build a controller whose effective enabled doc types are exactly $enabled. */
 	private function controllerWithEnabled(array $enabled): ApiController {
 		$searchSources = $this->createMock(SearchSources::class);

@@ -383,7 +383,7 @@ class ApiController extends Controller {
 		$this->appConfig->setValueString(
 			$this->appName,
 			AdminSettings::SETTING_DISABLED_SEARCH_SOURCES,
-			(string)json_encode($newDisabled),
+			json_encode($newDisabled, JSON_THROW_ON_ERROR),
 		);
 
 		$this->logger->info('Admin search sources saved', [

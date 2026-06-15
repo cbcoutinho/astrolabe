@@ -365,7 +365,7 @@ const confirmButtons = computed(() => [
 	},
 	{
 		label: t('astrolabe', 'Disable and delete indexed data'),
-		type: 'error',
+		variant: 'error',
 		callback: confirmDisable,
 	},
 ])
@@ -457,8 +457,20 @@ async function saveSettings() {
 	}
 }
 
+// Static label map so the l10n extraction toolchain can pick up each string
+// (a dynamic t(source.label) wouldn't be statically analyzable). Keep keys in
+// sync with SearchSources::CATALOG; falls back to the server-provided label.
+const SOURCE_LABELS = {
+	notes: t('astrolabe', 'Notes'),
+	files: t('astrolabe', 'Files'),
+	deck: t('astrolabe', 'Deck'),
+	news: t('astrolabe', 'News'),
+	calendar: t('astrolabe', 'Calendar'),
+	contacts: t('astrolabe', 'Contacts'),
+}
+
 function sourceLabel(source) {
-	return t('astrolabe', source.label)
+	return SOURCE_LABELS[source.app] ?? source.label
 }
 
 // Toggling a source. Enabling is non-destructive and applies immediately;
