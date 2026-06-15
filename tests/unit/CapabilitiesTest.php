@@ -22,12 +22,13 @@ final class CapabilitiesTest extends TestCase {
 	}
 
 	public function testExposesEnabledDocTypesAndSources(): void {
-		$this->searchSources->method('effectiveEnabledDocTypes')
-			->willReturn(['note', 'file']);
-		$this->searchSources->method('installedSources')->willReturn([
-			['app' => 'notes', 'docTypes' => ['note'], 'label' => 'Notes', 'enabled' => true],
-			['app' => 'files', 'docTypes' => ['file'], 'label' => 'Files', 'enabled' => true],
-			['app' => 'deck', 'docTypes' => ['deck_card'], 'label' => 'Deck', 'enabled' => false],
+		$this->searchSources->method('sourcesWithEnabledDocTypes')->willReturn([
+			'sources' => [
+				['app' => 'notes', 'docTypes' => ['note'], 'label' => 'Notes', 'enabled' => true],
+				['app' => 'files', 'docTypes' => ['file'], 'label' => 'Files', 'enabled' => true],
+				['app' => 'deck', 'docTypes' => ['deck_card'], 'label' => 'Deck', 'enabled' => false],
+			],
+			'enabledDocTypes' => ['note', 'file'],
 		]);
 
 		$caps = (new Capabilities($this->searchSources))->getCapabilities();
@@ -48,8 +49,10 @@ final class CapabilitiesTest extends TestCase {
 	}
 
 	public function testEmptyWhenNothingEnabled(): void {
-		$this->searchSources->method('effectiveEnabledDocTypes')->willReturn([]);
-		$this->searchSources->method('installedSources')->willReturn([]);
+		$this->searchSources->method('sourcesWithEnabledDocTypes')->willReturn([
+			'sources' => [],
+			'enabledDocTypes' => [],
+		]);
 
 		$caps = (new Capabilities($this->searchSources))->getCapabilities();
 

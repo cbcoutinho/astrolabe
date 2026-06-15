@@ -121,6 +121,35 @@ class SearchSources {
 	}
 
 	/**
+	 * Installed sources together with the flattened enabled doc-type list, in a
+	 * single pass.
+	 *
+	 * Both outputs derive from one ``installedSources()`` sweep (which touches
+	 * IAppManager/IAppConfig), so the capability endpoint can expose both
+	 * without iterating twice and without duplicating the accumulation loop.
+	 *
+	 * @return array{
+	 *   sources: list<array{app: string, docTypes: list<string>, label: string, enabled: bool}>,
+	 *   enabledDocTypes: list<string>
+	 * }
+	 */
+	public function sourcesWithEnabledDocTypes(): array {
+		$sources = $this->installedSources();
+		$types = [];
+		foreach ($sources as $source) {
+			if ($source['enabled']) {
+				foreach ($source['docTypes'] as $docType) {
+					$types[] = $docType;
+				}
+			}
+		}
+		return [
+			'sources' => $sources,
+			'enabledDocTypes' => array_values(array_unique($types)),
+		];
+	}
+
+	/**
 	 * Doc types of sources that are installed AND admin-approved.
 	 *
 	 * This is the authoritative allow-list applied to search and exposed via
@@ -129,15 +158,7 @@ class SearchSources {
 	 * @return list<string>
 	 */
 	public function effectiveEnabledDocTypes(): array {
-		$types = [];
-		foreach ($this->installedSources() as $source) {
-			if ($source['enabled']) {
-				foreach ($source['docTypes'] as $docType) {
-					$types[] = $docType;
-				}
-			}
-		}
-		return array_values(array_unique($types));
+		return $this->sourcesWithEnabledDocTypes()['enabledDocTypes'];
 	}
 
 	/**

@@ -35,12 +35,13 @@ final class Capabilities implements ICapability {
 	 */
 	#[\Override]
 	public function getCapabilities(): array {
-		// Compute both outputs from a single installedSources() pass (it touches
-		// IAppManager/IAppConfig), rather than also calling
-		// effectiveEnabledDocTypes() which would iterate it again.
+		// Single pass for both outputs (the accumulation lives in SearchSources
+		// so it isn't duplicated here).
+		['sources' => $installed, 'enabledDocTypes' => $enabledDocTypes]
+			= $this->searchSources->sourcesWithEnabledDocTypes();
+
 		$sources = [];
-		$enabledDocTypes = [];
-		foreach ($this->searchSources->installedSources() as $source) {
+		foreach ($installed as $source) {
 			// ``label`` is intentionally omitted — it's a UI concern for the
 			// admin page; the MCP server keys off ``app``/``doc_types`` and
 			// renders no labels. Add it here if a consumer ever needs it.
@@ -49,17 +50,12 @@ final class Capabilities implements ICapability {
 				'doc_types' => $source['docTypes'],
 				'enabled' => $source['enabled'],
 			];
-			if ($source['enabled']) {
-				foreach ($source['docTypes'] as $docType) {
-					$enabledDocTypes[] = $docType;
-				}
-			}
 		}
 
 		return [
 			'astrolabe' => [
 				'semantic_search' => [
-					'enabled_doc_types' => array_values(array_unique($enabledDocTypes)),
+					'enabled_doc_types' => $enabledDocTypes,
 					'sources' => $sources,
 				],
 			],

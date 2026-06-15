@@ -61,6 +61,21 @@ final class SearchSourcesTest extends TestCase {
 		);
 	}
 
+	public function testSourcesWithEnabledDocTypesReturnsBoth(): void {
+		$this->allAppsInstalled();
+		$sources = $this->withDisabled('["files"]');
+
+		$result = $sources->sourcesWithEnabledDocTypes();
+
+		$this->assertNotContains('file', $result['enabledDocTypes']);
+		$this->assertContains('note', $result['enabledDocTypes']);
+		// sources includes the disabled one (with enabled=false).
+		$apps = array_column($result['sources'], 'app');
+		$this->assertContains('files', $apps);
+		$byApp = array_column($result['sources'], 'enabled', 'app');
+		$this->assertFalse($byApp['files']);
+	}
+
 	public function testDisabledSourceExcludedFromDocTypes(): void {
 		$this->allAppsInstalled();
 		$sources = $this->withDisabled('["files"]');
