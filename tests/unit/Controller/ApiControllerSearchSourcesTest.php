@@ -90,6 +90,26 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 		$this->controller->saveSearchSources(['deck', 'bogus']);
 	}
 
+	public function testPurgeWarningWhenMcpReturnsError(): void {
+		// MCP server reachable but the purge call returns an error payload —
+		// config is still saved and the error surfaces as a warning.
+		$this->authenticateUserWithToken('admin', 'tok');
+		$this->searchSources->method('getDisabledSources')->willReturn([]);
+		$this->searchSources->method('installedSources')->willReturn([]);
+
+		$this->client->expects($this->once())
+			->method('purgeDocTypes')
+			->with(['file'], 'tok')
+			->willReturn(['error' => 'qdrant unavailable']);
+
+		$response = $this->controller->saveSearchSources(['files']);
+
+		$data = $response->getData();
+		$this->assertTrue($data['success']);
+		$this->assertSame('qdrant unavailable', $data['purge']['warning']);
+		$this->assertArrayNotHasKey('result', $data['purge']);
+	}
+
 	public function testPurgeWarningWhenMcpUnreachable(): void {
 		// No authenticated user → tokenForCurrentUser() returns a JSONResponse,
 		// so the eager purge can't run. Config must still be saved (consent),
@@ -132,19 +152,26 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 		$this->authenticateUserWithToken('admin', 'tok');
 		$controller = $this->controllerWithEnabled(['note']);
 
-		$captured = [];
+		// Name the callback params after McpServerClient::search()'s signature so
+		// the assertion is self-documenting and breaks loudly if the order drifts.
+		$capturedDocTypes = null;
 		$this->client->expects($this->once())
 			->method('search')
-			->willReturnCallback(function (...$args) use (&$captured): array {
-				$captured = $args;
+			->willReturnCallback(function (
+				string $query,
+				string $algorithm,
+				int $limit,
+				bool $includePca,
+				?array $docTypes,
+			) use (&$capturedDocTypes): array {
+				$capturedDocTypes = $docTypes;
 				return ['results' => [], 'algorithm_used' => 'hybrid'];
 			});
 
 		// Caller asks for note + file, but only note is enabled.
 		$controller->search(query: 'x', doc_types: 'note,file', include_pca: 'false');
 
-		// 5th positional arg (index 4) is the doc_types array sent to the MCP server.
-		$this->assertSame(['note'], $captured[4]);
+		$this->assertSame(['note'], $capturedDocTypes);
 	}
 
 	public function testSearchShortCircuitsWhenNoSourceEnabled(): void {

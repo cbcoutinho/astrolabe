@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\App\IAppManager;
 use OCP\IAppConfig;
+use OCP\IUserSession;
 
 /**
  * Catalog of content sources that can be indexed/searched semantically, plus
@@ -45,26 +46,32 @@ class SearchSources {
 
 	private IAppManager $appManager;
 	private IAppConfig $appConfig;
+	private IUserSession $userSession;
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
 		IAppManager $appManager,
 		IAppConfig $appConfig,
+		IUserSession $userSession,
 	) {
 		$this->appManager = $appManager;
 		$this->appConfig = $appConfig;
+		$this->userSession = $userSession;
 	}
 
 	/**
-	 * Whether a source app is installed/enabled for the current user.
+	 * Whether a source app is installed/enabled for the current session user.
 	 *
-	 * ``files`` is core functionality and always available.
+	 * ``files`` is core functionality and always available. The current user is
+	 * threaded explicitly so that group-restricted apps resolve per-user (the
+	 * capability endpoint runs in the authenticated user's context); a null
+	 * session user falls back to a global check inside ``isEnabledForUser``.
 	 */
 	public function isInstalled(string $appId): bool {
 		if ($appId === 'files') {
 			return true;
 		}
-		return $this->appManager->isEnabledForUser($appId);
+		return $this->appManager->isEnabledForUser($appId, $this->userSession->getUser());
 	}
 
 	/**

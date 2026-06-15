@@ -289,8 +289,7 @@
 			:name="t('astrolabe', 'Disable source for semantic search?')"
 			:message="confirmMessage"
 			:buttons="confirmButtons"
-			@update:open="confirmDialogOpen = $event"
-			@closing="cancelDisable" />
+			@update:open="confirmDialogOpen = $event" />
 	</div>
 </template>
 
@@ -493,12 +492,15 @@ function cancelDisable() {
 }
 
 function confirmDisable() {
-	if (pendingSource.value) {
-		pendingSource.value.enabled = false
-	}
+	// Capture the source before clearing state so we never depend on the
+	// dialog's close/callback event ordering.
+	const src = pendingSource.value
 	confirmDialogOpen.value = false
 	pendingSource.value = null
-	persistSources()
+	if (src) {
+		src.enabled = false
+		persistSources()
+	}
 }
 
 // Persist the full enabled/disabled state. The backend receives the disabled

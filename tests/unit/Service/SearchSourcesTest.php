@@ -8,6 +8,8 @@ use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\App\IAppManager;
 use OCP\IAppConfig;
+use OCP\IUser;
+use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -20,18 +22,21 @@ use PHPUnit\Framework\TestCase;
 final class SearchSourcesTest extends TestCase {
 	private IAppManager&MockObject $appManager;
 	private IAppConfig&MockObject $appConfig;
+	private IUserSession&MockObject $userSession;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->appManager = $this->createMock(IAppManager::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession->method('getUser')->willReturn($this->createMock(IUser::class));
 	}
 
 	private function withDisabled(string $json): SearchSources {
 		$this->appConfig->method('getValueString')
 			->with('astrolabe', Admin::SETTING_DISABLED_SEARCH_SOURCES, Admin::DEFAULT_DISABLED_SEARCH_SOURCES)
 			->willReturn($json);
-		return new SearchSources($this->appManager, $this->appConfig);
+		return new SearchSources($this->appManager, $this->appConfig, $this->userSession);
 	}
 
 	/** Mark every non-core app installed (files is always core). */
