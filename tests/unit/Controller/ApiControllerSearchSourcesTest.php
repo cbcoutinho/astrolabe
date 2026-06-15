@@ -87,7 +87,8 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 			->with(['deck_card'], 'tok')
 			->willReturn(['purged' => ['deck_card' => 0]]);
 
-		$this->controller->saveSearchSources(['deck', 'bogus']);
+		$response = $this->controller->saveSearchSources(['deck', 'bogus']);
+		$this->assertTrue($response->getData()['success']);
 	}
 
 	public function testPurgeWarningWhenMcpReturnsError(): void {

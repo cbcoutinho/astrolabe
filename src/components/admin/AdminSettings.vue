@@ -516,6 +516,10 @@ function confirmDisable() {
 // source ids and purges any newly-disabled source's indexed data.
 async function persistSources() {
 	savingSources.value = true
+	// The toggle is applied optimistically before this call; snapshot so we can
+	// revert the switch if the save fails (otherwise the UI would show the new
+	// state while the server still holds the old one).
+	const snapshot = searchSources.value.map(s => ({ ...s }))
 	const disabledSources = searchSources.value
 		.filter(s => !s.enabled)
 		.map(s => s.app)
@@ -539,9 +543,11 @@ async function persistSources() {
 				showWarning(purge.warning)
 			}
 		} else {
+			searchSources.value = snapshot
 			showError(response.data.error || t('astrolabe', 'Failed to update searchable sources'))
 		}
 	} catch (err) {
+		searchSources.value = snapshot
 		console.error('Failed to update searchable sources:', err)
 		showError(err.response?.data?.error || err.message || t('astrolabe', 'Network error'))
 	} finally {
