@@ -114,8 +114,9 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label>{{ t('astrolabe', 'Minimum Score') }}: {{ scoreThreshold }}%</label>
+								<label for="mcp-minimum-score">{{ t('astrolabe', 'Minimum Score') }}: {{ scoreThreshold }}%</label>
 								<input
+									id="mcp-minimum-score"
 									v-model="scoreThreshold"
 									type="range"
 									min="0"
