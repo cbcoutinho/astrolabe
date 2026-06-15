@@ -37,6 +37,9 @@ final class Capabilities implements ICapability {
 	public function getCapabilities(): array {
 		$sources = [];
 		foreach ($this->searchSources->installedSources() as $source) {
+			// ``label`` is intentionally omitted — it's a UI concern for the
+			// admin page; the MCP server keys off ``app``/``doc_types`` and
+			// renders no labels. Add it here if a consumer ever needs it.
 			$sources[] = [
 				'app' => $source['app'],
 				'doc_types' => $source['docTypes'],

@@ -246,9 +246,6 @@
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
     </PossiblyUnusedMethod>
-    <UnusedProperty>
-      <code><![CDATA[$client]]></code>
-    </UnusedProperty>
   </file>
   <file src="lib/Settings/AdminSection.php">
     <ClassMustBeFinal>

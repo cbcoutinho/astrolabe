@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Settings;
 
 use OCA\Astrolabe\AppInfo\Application;
-use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\SearchSources;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
@@ -51,20 +50,17 @@ class Admin implements ISettings {
 	public const SETTING_DISABLED_SEARCH_SOURCES = 'disabled_search_sources';
 	public const DEFAULT_DISABLED_SEARCH_SOURCES = '[]';
 
-	private $client;
 	private $config;
 	private $appConfig;
 	private $initialState;
 	private $searchSources;
 
 	public function __construct(
-		McpServerClient $client,
 		IConfig $config,
 		IAppConfig $appConfig,
 		IInitialState $initialState,
 		SearchSources $searchSources,
 	) {
-		$this->client = $client;
 		$this->config = $config;
 		$this->appConfig = $appConfig;
 		$this->initialState = $initialState;

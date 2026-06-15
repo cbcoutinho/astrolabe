@@ -110,7 +110,7 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 		$this->assertArrayNotHasKey('result', $data['purge']);
 	}
 
-	public function testPurgeWarningWhenMcpUnreachable(): void {
+	public function testPurgeWarningWhenNoAuthenticatedUser(): void {
 		// No authenticated user → tokenForCurrentUser() returns a JSONResponse,
 		// so the eager purge can't run. Config must still be saved (consent),
 		// and the response surfaces a warning rather than failing.
@@ -129,6 +129,29 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 		$this->assertTrue($data['success']);
 		$this->assertArrayHasKey('warning', $data['purge']);
 		$this->assertStringContainsString('Could not reach', $data['purge']['warning']);
+	}
+
+	public function testPurgeWarningWhenTokenMintFails(): void {
+		// MCP token mint throws (e.g. oidc app broken) → purge can't run, but
+		// the config is still persisted and a warning is surfaced.
+		$user = $this->createMock(\OCP\IUser::class);
+		$user->method('getUID')->willReturn('admin');
+		$this->userSession->method('getUser')->willReturn($user);
+		$this->tokenMinter->method('mintForUser')
+			->willThrowException(new \OCA\Astrolabe\Service\McpTokenMintException('mint failed'));
+		$this->searchSources->method('getDisabledSources')->willReturn([]);
+		$this->searchSources->method('installedSources')->willReturn([]);
+
+		$this->appConfig->expects($this->once())
+			->method('setValueString')
+			->with('astrolabe', Admin::SETTING_DISABLED_SEARCH_SOURCES, '["files"]');
+		$this->client->expects($this->never())->method('purgeDocTypes');
+
+		$response = $this->controller->saveSearchSources(['files']);
+
+		$data = $response->getData();
+		$this->assertTrue($data['success']);
+		$this->assertArrayHasKey('warning', $data['purge']);
 	}
 
 	/** Build a controller whose effective enabled doc types are exactly $enabled. */

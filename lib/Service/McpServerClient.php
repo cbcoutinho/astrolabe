@@ -363,6 +363,7 @@ class McpServerClient {
 	 * @param string $algorithm Search algorithm: hybrid, semantic, or bm25 (default: hybrid)
 	 * @param string $fusion Fusion method for hybrid: rrf or dbsf (default: rrf)
 	 * @param float $scoreThreshold Minimum score threshold 0-1 (default: 0)
+	 * @param ?list<string> $docTypes Admin-approved source doc types to search; null = no restriction
 	 * @return array{
 	 *   results?: array<array{
 	 *     id?: string|int,
@@ -403,7 +404,7 @@ class McpServerClient {
 		];
 		// Restrict to admin-approved, installed source types when provided.
 		if ($docTypes !== null) {
-			$body['doc_types'] = array_values($docTypes);
+			$body['doc_types'] = $docTypes;
 		}
 
 		return $this->sendAndDecode(

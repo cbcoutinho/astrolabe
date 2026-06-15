@@ -289,7 +289,7 @@
 			:name="t('astrolabe', 'Disable source for semantic search?')"
 			:message="confirmMessage"
 			:buttons="confirmButtons"
-			@update:open="confirmDialogOpen = $event" />
+			@update:open="onConfirmDialogToggle" />
 	</div>
 </template>
 
@@ -491,6 +491,15 @@ function cancelDisable() {
 	pendingSource.value = null
 }
 
+// Dialog dismissed (Escape / outside-click / button) — keep confirmDialogOpen
+// in sync and clear the pending source so a stale label can't linger.
+function onConfirmDialogToggle(open) {
+	confirmDialogOpen.value = open
+	if (!open) {
+		pendingSource.value = null
+	}
+}
+
 function confirmDisable() {
 	// Capture the source before clearing state so we never depend on the
 	// dialog's close/callback event ordering.
@@ -521,11 +530,13 @@ async function persistSources() {
 		if (response.data.success) {
 			// Re-sync from the authoritative server state.
 			searchSources.value = response.data.searchSources || searchSources.value
+			// The backend persists before purging, so the setting is always saved
+			// on success — confirm that first, then surface any purge warning so
+			// the admin doesn't think the save itself failed.
+			showSuccess(t('astrolabe', 'Searchable sources updated'))
 			const purge = response.data.purge
 			if (purge?.warning) {
 				showWarning(purge.warning)
-			} else {
-				showSuccess(t('astrolabe', 'Searchable sources updated'))
 			}
 		} else {
 			showError(response.data.error || t('astrolabe', 'Failed to update searchable sources'))
