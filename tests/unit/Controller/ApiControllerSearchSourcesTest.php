@@ -111,6 +111,24 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 		$this->assertArrayNotHasKey('result', $data['purge']);
 	}
 
+	public function testPurgeWarningOnPartialFailure(): void {
+		// MCP server purged some doc types but reported others as failed.
+		$this->authenticateUserWithToken('admin', 'tok');
+		$this->searchSources->method('getDisabledSources')->willReturn([]);
+		$this->searchSources->method('installedSources')->willReturn([]);
+
+		$this->client->expects($this->once())
+			->method('purgeDocTypes')
+			->willReturn(['purged' => ['file' => 3], 'failed' => ['note']]);
+
+		$response = $this->controller->saveSearchSources(['files', 'notes']);
+
+		$data = $response->getData();
+		$this->assertTrue($data['success']);
+		$this->assertArrayHasKey('warning', $data['purge']);
+		$this->assertStringContainsString('note', $data['purge']['warning']);
+	}
+
 	public function testPurgeWarningWhenNoAuthenticatedUser(): void {
 		// No authenticated user → tokenForCurrentUser() returns a JSONResponse,
 		// so the eager purge can't run. Config must still be saved (consent),

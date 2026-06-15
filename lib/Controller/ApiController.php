@@ -406,6 +406,14 @@ class ApiController extends Controller {
 					$purge['warning'] = $result['error'];
 				} else {
 					$purge['result'] = $result['purged'] ?? $result;
+					// Partial failure: the MCP server reports which doc types it
+					// could not purge. Surface a warning so the admin knows
+					// consent isn't yet enforced for them (the MCP scanner
+					// backstop will catch up).
+					if (isset($result['failed']) && $result['failed'] !== []) {
+						$failed = implode(', ', $result['failed']);
+						$purge['warning'] = "Some content could not be deleted yet ($failed); it will be removed on the next sync.";
+					}
 				}
 			}
 		}

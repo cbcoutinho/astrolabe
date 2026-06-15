@@ -557,7 +557,7 @@ class McpServerClient {
 	 *
 	 * @param list<string> $docTypes Doc types to purge (e.g. ['file'])
 	 * @param string $token OAuth bearer token
-	 * @return array{purged?: array<string, int>, error?: string, provisioning_required?: true}
+	 * @return array{purged?: array<string, int>, failed?: list<string>, error?: string, provisioning_required?: true}
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
