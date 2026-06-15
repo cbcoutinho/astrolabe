@@ -1312,8 +1312,12 @@ export default {
 .mcp-search-input {
 	width: 100%;
 	margin-bottom: 12px;
-	min-height: 60px;
-	max-height: 320px;
+
+	// `.mcp-search-input` lands on NcTextArea's wrapper div, so reach the real
+	// <textarea> to bound how far the vertical drag handle can grow it.
+	:deep(textarea) {
+		max-height: 320px;
+	}
 }
 
 .mcp-algorithm-select {
@@ -1794,7 +1798,6 @@ a.mcp-result-title {
 		align-items: stretch;
 	}
 
-	.mcp-search-input,
 	.mcp-algorithm-select {
 		min-width: 100%;
 	}
