@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.27.0 (2026-06-15)
+
+### Feat
+
+- **search**: resizable multi-line query box for semantic search
+
+### Fix
+
+- **a11y**: associate Minimum Score slider with its label
+- **search**: bound textarea drag via inner element; drop redundant rule
+
 ## v0.26.2 (2026-06-14)
 
 ### Fix
