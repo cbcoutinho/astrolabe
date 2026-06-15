@@ -46,14 +46,17 @@
 
 				<!-- Search Controls -->
 				<div class="mcp-search-card">
-					<div class="mcp-search-row">
-						<NcTextField
-							v-model="query"
-							:label="t('astrolabe', 'Search query')"
-							:placeholder="t('astrolabe', 'Enter your search query...')"
-							class="mcp-search-input"
-							@keyup.enter="performSearch" />
+					<NcTextArea
+						v-model="query"
+						:label="t('astrolabe', 'Search query')"
+						:placeholder="t('astrolabe', 'Enter your search query… (Ctrl/⌘+Enter to search)')"
+						class="mcp-search-input"
+						resize="vertical"
+						:rows="2"
+						@keydown.ctrl.enter.prevent="performSearch"
+						@keydown.meta.enter.prevent="performSearch" />
 
+					<div class="mcp-search-row">
 						<NcSelect
 							:model-value="selectedAlgorithmOption"
 							:options="algorithmOptions"
@@ -111,8 +114,9 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label>{{ t('astrolabe', 'Minimum Score') }}: {{ scoreThreshold }}%</label>
+								<label for="mcp-minimum-score">{{ t('astrolabe', 'Minimum Score') }}: {{ scoreThreshold }}%</label>
 								<input
+									id="mcp-minimum-score"
 									v-model="scoreThreshold"
 									type="range"
 									min="0"
@@ -442,6 +446,7 @@ import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -479,6 +484,7 @@ export default {
 		NcAppContent,
 		NcButton,
 		NcTextField,
+		NcTextArea,
 		NcSelect,
 		NcLoadingIcon,
 		NcNoteCard,
@@ -1305,8 +1311,14 @@ export default {
 }
 
 .mcp-search-input {
-	flex: 1;
-	min-width: 250px;
+	width: 100%;
+	margin-bottom: 12px;
+
+	// `.mcp-search-input` lands on NcTextArea's wrapper div, so reach the real
+	// <textarea> to bound how far the vertical drag handle can grow it.
+	:deep(textarea) {
+		max-height: 320px;
+	}
 }
 
 .mcp-algorithm-select {
@@ -1787,7 +1799,6 @@ a.mcp-result-title {
 		align-items: stretch;
 	}
 
-	.mcp-search-input,
 	.mcp-algorithm-select {
 		min-width: 100%;
 	}
