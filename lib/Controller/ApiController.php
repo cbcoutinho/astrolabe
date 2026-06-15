@@ -371,13 +371,7 @@ class ApiController extends Controller {
 
 		// Doc types of sources that just transitioned enabled -> disabled.
 		$newlyDisabled = array_values(array_diff($newDisabled, $oldDisabled));
-		$docTypesToPurge = [];
-		foreach ($newlyDisabled as $sourceId) {
-			foreach (SearchSources::CATALOG[$sourceId]['docTypes'] as $docType) {
-				$docTypesToPurge[] = $docType;
-			}
-		}
-		$docTypesToPurge = array_values(array_unique($docTypesToPurge));
+		$docTypesToPurge = SearchSources::docTypesForSources($newlyDisabled);
 
 		// Persist first: stop future indexing/search before attempting purge.
 		$this->appConfig->setValueString(
@@ -405,7 +399,7 @@ class ApiController extends Controller {
 				if (isset($result['error'])) {
 					$purge['warning'] = $result['error'];
 				} else {
-					$purge['result'] = $result['purged'] ?? $result;
+					$purge['result'] = $result['purged'] ?? [];
 					// Partial failure: the MCP server reports which doc types it
 					// could not purge. Surface a warning so the admin knows
 					// consent isn't yet enforced for them (the MCP scanner

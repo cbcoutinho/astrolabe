@@ -476,8 +476,10 @@ function sourceLabel(source) {
 // disabling deletes indexed data, so it routes through a confirmation dialog.
 function onToggleSource(source, value) {
 	if (value) {
+		// Snapshot BEFORE the optimistic mutation so a failed save can revert.
+		const snapshot = searchSources.value.map(s => ({ ...s }))
 		source.enabled = true
-		persistSources()
+		persistSources(snapshot)
 	} else {
 		pendingSource.value = source
 		confirmDialogOpen.value = true
@@ -504,22 +506,21 @@ function confirmDisable() {
 	// Capture the source before clearing state so we never depend on the
 	// dialog's close/callback event ordering.
 	const src = pendingSource.value
+	// Snapshot BEFORE the optimistic mutation so a failed save can revert.
+	const snapshot = searchSources.value.map(s => ({ ...s }))
 	confirmDialogOpen.value = false
 	pendingSource.value = null
 	if (src) {
 		src.enabled = false
-		persistSources()
+		persistSources(snapshot)
 	}
 }
 
 // Persist the full enabled/disabled state. The backend receives the disabled
-// source ids and purges any newly-disabled source's indexed data.
-async function persistSources() {
+// source ids and purges any newly-disabled source's indexed data. `snapshot` is
+// the pre-toggle state, restored if the save fails.
+async function persistSources(snapshot) {
 	savingSources.value = true
-	// The toggle is applied optimistically before this call; snapshot so we can
-	// revert the switch if the save fails (otherwise the UI would show the new
-	// state while the server still holds the old one).
-	const snapshot = searchSources.value.map(s => ({ ...s }))
 	const disabledSources = searchSources.value
 		.filter(s => !s.enabled)
 		.map(s => s.app)

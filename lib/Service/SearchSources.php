@@ -162,6 +162,22 @@ class SearchSources {
 	}
 
 	/**
+	 * Flatten the catalog doc types for a list of (valid) source app ids.
+	 *
+	 * @param list<string> $sourceIds
+	 * @return list<string>
+	 */
+	public static function docTypesForSources(array $sourceIds): array {
+		$types = [];
+		foreach ($sourceIds as $sourceId) {
+			foreach (self::CATALOG[$sourceId]['docTypes'] as $docType) {
+				$types[] = $docType;
+			}
+		}
+		return array_values(array_unique($types));
+	}
+
+	/**
 	 * Filter an arbitrary list down to valid, unique source app ids.
 	 *
 	 * @param array<mixed> $ids

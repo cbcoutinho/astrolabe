@@ -126,6 +126,14 @@ final class SearchSourcesTest extends TestCase {
 		$this->assertSame(['files'], $sources->getDisabledSources());
 	}
 
+	public function testDocTypesForSourcesFlattensAndDedupes(): void {
+		$this->assertSame(
+			['note', 'file', 'deck_card'],
+			SearchSources::docTypesForSources(['notes', 'files', 'deck']),
+		);
+		$this->assertSame([], SearchSources::docTypesForSources([]));
+	}
+
 	public function testNormalizeSourceIdsFiltersAndDedupes(): void {
 		$this->assertSame(
 			['notes', 'files'],
