@@ -25,10 +25,13 @@ use Psr\Log\LoggerInterface;
  * request shape and response contract it depends on, producing a pact with
  * consumer=astrolabe, provider=nextcloud-mcp-server that the MCP server verifies.
  *
- * Scope (walking skeleton): the public, stateless ``GET /api/v1/status`` call.
- * The authenticated surface (search, webhooks, apps, chunk-context, pdf-preview)
- * needs provider states + bearer-token handling on the MCP side and is the
- * deferred follow-up (see tests/contract/README.md).
+ * Scope: the public, stateless ``GET /api/v1/status`` call, plus the
+ * bearer-authenticated ``POST /api/v1/vector-sync/purge`` consent-purge call
+ * (with a provider state). Full provider verification of the authenticated
+ * surface (search, webhooks, apps, chunk-context, pdf-preview, purge) needs
+ * provider-state + token handling stood up on the MCP side — the deferred
+ * follow-up (see tests/contract/README.md); the published pact rides the
+ * broker's pending flow until then.
  *
  * It is an INTEGRATION test: pact-php boots its bundled Rust mock server (needs
  * ext-ffi), so it runs in the contract suite, not ``composer test:unit``.
@@ -111,5 +114,58 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertFalse($status['vector_sync_enabled'] ?? null);
 		$this->assertSame(123, $status['uptime_seconds'] ?? null);
 		$this->assertSame('1.0', $status['management_api_version'] ?? null);
+	}
+
+	/**
+	 * Consent-purge contract: when an admin disables a source for semantic
+	 * search, McpServerClient::purgeDocTypes() asks the MCP server to delete the
+	 * already-indexed content for that source's doc type(s). This pins the
+	 * request shape (bearer-authenticated POST with a doc_types array) and the
+	 * ``purged`` map the client reads back.
+	 *
+	 * The provider state names the precondition the MCP server sets up before
+	 * replaying this interaction (an admin caller authorised to purge). Provider
+	 * verification of this authenticated endpoint is the deferred follow-up
+	 * (ADR-029); the published pact rides the broker's pending flow until then.
+	 */
+	public function testPurgeDocTypesHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/vector-sync/purge')
+			->addHeader('Authorization', $matcher->like('Bearer mint-token'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				// Any non-empty array of doc-type strings; the gate sends the
+				// disabled source's catalog doc types (e.g. files -> "file").
+				'doc_types' => $matcher->eachLike('file'),
+			]);
+
+		// 200 with a per-doc-type deleted count. ``failed`` is omitted on full
+		// success (the MCP server only includes it on partial failure), so the
+		// contract pins only the ``purged`` map the client returns to the admin.
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'purged' => [
+					'file' => $matcher->integer(4),
+				],
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an admin can purge indexed documents')
+			->uponReceiving('a request to purge a disabled source\'s doc types')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->purgeDocTypes(['file'], 'mint-token');
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertArrayNotHasKey('error', $result);
+		$this->assertSame(4, $result['purged']['file'] ?? null);
 	}
 }

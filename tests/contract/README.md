@@ -6,7 +6,8 @@ integration is **bidirectional**, so astrolabe plays both Pact roles:
 | Contract | Consumer | Provider | This side's role |
 |----------|----------|----------|------------------|
 | credentials status API (`GET /apps/astrolabe/api/v1/background-sync/credentials/{userId}`) | nextcloud-mcp-server | **astrolabe** | **provider verification** (`Provider/CredentialsPactVerifyTest.php`) |
-| MCP `/api/v1/*` (search, webhooks, apps, status, …) consumed by `McpServerClient` | **astrolabe** | nextcloud-mcp-server | **consumer pacts** (`Consumer/McpServerClientPactTest.php`) |
+| OCS capabilities (`GET /ocs/v2.php/cloud/capabilities` → `astrolabe.semantic_search.enabled_doc_types`, from `OCA\Astrolabe\Capabilities`) | nextcloud-mcp-server | **astrolabe** | **provider verification** (states below; verifier wiring is the phase-4 follow-up) |
+| MCP `/api/v1/*` (search, webhooks, apps, status, `vector-sync/purge`, …) consumed by `McpServerClient` | **astrolabe** | nextcloud-mcp-server | **consumer pacts** (`Consumer/McpServerClientPactTest.php`) |
 
 The shared broker is homelab-hosted and reachable over Tailscale (board card
 #298). Architecture + the MCP-server side live in ADR-029 in the
@@ -63,6 +64,17 @@ and reviewed against the running stack, not blind. Spec for the implementer:
   | `user bob has no background-sync credentials` | `deleteAppPassword('bob')` (ensure none) | no-op |
 
   The endpoint must return HTTP 200 on success.
+
+- **Provider states the OCS-capabilities pact declares** (defined consumer-side
+  in `nextcloud-mcp-server/tests/contract/test_astrolabe_capabilities_consumer.py`).
+  These gate `SearchSources`/`Capabilities` output, so setup sets the
+  `disabled_search_sources` app-config accordingly (and ensures the relevant
+  apps are installed) before the OCS endpoint is read:
+
+  | `state` string | `setup` action |
+  |----------------|----------------|
+  | `astrolabe has approved file and note for semantic search` | ensure `files`/`notes` installed and not in `disabled_search_sources`, so `enabled_doc_types` ⊇ `["file", "note"]` |
+  | `astrolabe has disabled all sources for semantic search` | set `disabled_search_sources` to every catalog source id, so `enabled_doc_types` is `[]` |
 
 ## Consumer pacts (astrolabe -> MCP `/api/v1/*`)
 
