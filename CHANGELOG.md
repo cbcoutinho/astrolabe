@@ -25,6 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.28.0 (2026-06-16)
+
+### Feat
+
+- **search**: surface partial purge failures from the MCP server
+- **search**: admin-controllable searchable sources with consent-gated indexing
+
+### Fix
+
+- **search**: address round-6 review — snapshot-before-mutate, dedupe purge loop
+- **search**: dedupe enabled-doc-types accumulation (SonarQube gate)
+- **search**: address round-4 review — revert UI on save failure, dedupe call
+- **search**: address round-3 review — dialog Escape, save feedback, cleanup
+- **search**: address round-2 review — per-user app check, dialog race, tests
+- **search**: address PR review — dialog variant, l10n labels, json guard
+
 ## v0.27.0 (2026-06-15)
 
 ### Feat
