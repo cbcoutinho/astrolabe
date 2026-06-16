@@ -135,7 +135,7 @@ final class McpServerClientPactTest extends TestCase {
 		$request = (new ConsumerRequest())
 			->setMethod('POST')
 			->setPath('/api/v1/vector-sync/purge')
-			->addHeader('Authorization', $matcher->like('Bearer mint-token'))
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
 			->addHeader('Content-Type', 'application/json')
 			->setBody([
 				// Any non-empty array of doc-type strings; the gate sends the
