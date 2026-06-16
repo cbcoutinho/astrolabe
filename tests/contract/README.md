@@ -71,10 +71,10 @@ and reviewed against the running stack, not blind. Spec for the implementer:
   `disabled_search_sources` app-config accordingly (and ensures the relevant
   apps are installed) before the OCS endpoint is read:
 
-  | `state` string | `setup` action |
-  |----------------|----------------|
-  | `astrolabe has approved file and note for semantic search` | ensure `files`/`notes` installed and not in `disabled_search_sources`, so `enabled_doc_types` ⊇ `["file", "note"]` |
-  | `astrolabe has disabled all sources for semantic search` | set `disabled_search_sources` to every catalog source id, so `enabled_doc_types` is `[]` |
+  | `state` string | `setup` action | `teardown` action |
+  |----------------|----------------|-------------------|
+  | `astrolabe has approved file and note for semantic search` | ensure `files`/`notes` installed and not in `disabled_search_sources`, so `enabled_doc_types` ⊇ `["file", "note"]` | restore the prior `disabled_search_sources` value (delete the app-config key if it was unset) |
+  | `astrolabe has disabled all sources for semantic search` | set `disabled_search_sources` to every catalog source id, so `enabled_doc_types` is `[]` | restore the prior `disabled_search_sources` value (delete the app-config key if it was unset) |
 
 ## Consumer pacts (astrolabe -> MCP `/api/v1/*`)
 
@@ -86,9 +86,12 @@ injects a real Guzzle client, while production wraps Nextcloud's `IClient` behin
 `OCA\Astrolabe\Http\NextcloudPsr18Client` (registered in `Application.php`),
 preserving NC's TLS / proxy / DNS handling.
 
-**Scope (walking skeleton):** only the public, stateless `GET /api/v1/status`
-call is pinned so far — it needs no provider state and the single-user MCP server
-serves it directly, so the MCP provider-verification job stays green. The
-authenticated surface (`search`, `webhooks` CRUD, `apps`, `chunk-context`,
-`pdf-preview`) needs provider-state handlers and bearer-token injection on the
-MCP side and is the deferred follow-up.
+**Scope:** the public, stateless `GET /api/v1/status` call (no provider state,
+served directly so the MCP provider-verification job stays green) and the
+bearer-authenticated `POST /api/v1/vector-sync/purge` consent-purge call (with
+the `an admin can purge indexed documents` provider state). Full provider
+verification of the authenticated surface (`search`, `webhooks` CRUD, `apps`,
+`chunk-context`, `pdf-preview`, `vector-sync/purge`) needs provider-state
+handlers and bearer-token injection on the MCP side and is the deferred
+follow-up; until then the purge pact rides the broker's pending flow (the MCP
+verifier opts in via `include_pending`).
