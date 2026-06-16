@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\AppInfo;
 
 use GuzzleHttp\Psr7\HttpFactory;
+use OCA\Astrolabe\Capabilities;
 use OCA\Astrolabe\Http\NextcloudPsr18Client;
 use OCA\Astrolabe\Listener\AstrolabeAdminSettingsListener;
 use OCA\Astrolabe\Search\SemanticSearchProvider;
@@ -45,6 +46,10 @@ class Application extends App implements IBootstrap {
 
 		// Register unified search provider for semantic search
 		$context->registerSearchProvider(SemanticSearchProvider::class);
+
+		// Advertise admin-approved searchable sources to the MCP server via the
+		// OCS capabilities endpoint.
+		$context->registerCapability(Capabilities::class);
 
 		// Register declarative admin settings
 		$context->registerDeclarativeSettings(AstrolabeAdminSettings::class);

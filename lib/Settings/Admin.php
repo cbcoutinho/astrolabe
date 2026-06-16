@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Settings;
 
 use OCA\Astrolabe\AppInfo\Application;
-use OCA\Astrolabe\Service\McpServerClient;
+use OCA\Astrolabe\Service\SearchSources;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
@@ -42,21 +42,29 @@ class Admin implements ISettings {
 	public const SETTING_SHOW_VISUALIZATION = 'show_visualization';
 	public const DEFAULT_SHOW_VISUALIZATION = true;
 
-	private $client;
+	// Source apps the admin has DISABLED for semantic search, stored as a JSON
+	// array of source app ids (see SearchSources::CATALOG). The disabled-set is
+	// stored (rather than the enabled-set) so the default empty value means
+	// "all sources allowed" and sources added to the catalog later are allowed
+	// by default. A source is searchable only if installed AND not in this set.
+	public const SETTING_DISABLED_SEARCH_SOURCES = 'disabled_search_sources';
+	public const DEFAULT_DISABLED_SEARCH_SOURCES = '[]';
+
 	private $config;
 	private $appConfig;
 	private $initialState;
+	private $searchSources;
 
 	public function __construct(
-		McpServerClient $client,
 		IConfig $config,
 		IAppConfig $appConfig,
 		IInitialState $initialState,
+		SearchSources $searchSources,
 	) {
-		$this->client = $client;
 		$this->config = $config;
 		$this->appConfig = $appConfig;
 		$this->initialState = $initialState;
+		$this->searchSources = $searchSources;
 	}
 
 	/**
@@ -103,6 +111,11 @@ class Admin implements ISettings {
 			self::DEFAULT_ALLOW_USER_SELF_PROVISION,
 		);
 
+		// Installed search sources with their current admin-consent state.
+		// Only installed apps are listed — admins consent to what they actually
+		// have. Uninstalled apps are excluded entirely.
+		$searchSources = $this->searchSources->installedSources();
+
 		// Provide initial state for Vue.js frontend
 		// MCP server data will be fetched asynchronously by Vue component
 		$this->initialState->provideInitialState('admin-config', [
@@ -111,6 +124,7 @@ class Admin implements ISettings {
 				'clientIdConfigured' => $clientIdConfigured,
 			],
 			'searchSettings' => $searchSettings,
+			'searchSources' => $searchSources,
 			'allowUserSelfProvision' => $allowUserSelfProvision,
 		]);
 

@@ -7,6 +7,7 @@ namespace OCA\Astrolabe\Controller;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
+use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\AppFramework\Controller;
@@ -37,6 +38,7 @@ class ApiController extends Controller {
 		private McpTokenMinter $tokenMinter,
 		private IConfig $config,
 		private IAppConfig $appConfig,
+		private SearchSources $searchSources,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -139,18 +141,30 @@ class ApiController extends Controller {
 		// Enforce limit bounds
 		$limit = max(1, min($limit, 50));
 
-		// Parse doc_types filter
-		$docTypesArray = null;
+		// Restrict to admin-approved, installed sources. This is the
+		// authoritative consent gate for the in-app search path; the MCP server
+		// enforces the same gate independently for its direct Qdrant queries.
+		// An empty doc_types filter means "all" only *within* this set, so when
+		// the client requests no explicit types we pass the enabled set
+		// explicitly rather than null (which the MCP server treats as "every
+		// indexed type", bypassing consent).
+		$enabledDocTypes = $this->searchSources->effectiveEnabledDocTypes();
 		if (!empty($doc_types)) {
-			$validDocTypes = ['note', 'file', 'deck_card', 'calendar', 'contact', 'news_item'];
-			$docTypesArray = array_filter(
-				explode(',', $doc_types),
-				fn ($t) => in_array(trim($t), $validDocTypes),
-			);
-			$docTypesArray = array_map('trim', $docTypesArray);
-			if (empty($docTypesArray)) {
-				$docTypesArray = null;
-			}
+			$requested = array_map('trim', explode(',', $doc_types));
+			$docTypesArray = array_values(array_intersect($requested, $enabledDocTypes));
+		} else {
+			$docTypesArray = $enabledDocTypes;
+		}
+
+		// No installed + approved source matches the request — nothing to
+		// search. Short-circuit instead of falling through to a null filter.
+		if ($docTypesArray === []) {
+			return new JSONResponse([
+				'success' => true,
+				'results' => [],
+				'algorithm_used' => $algorithm,
+				'total_documents' => 0,
+			]);
 		}
 
 		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
@@ -333,6 +347,75 @@ class ApiController extends Controller {
 				'limit' => $limit,
 				'showVisualization' => $showVisualization,
 			],
+		]);
+	}
+
+	/**
+	 * Save which content sources are approved for semantic search. Admin-only.
+	 *
+	 * The request carries the desired *disabled* source app ids (toggled-off
+	 * sources). Disabling a source is consent-binding on data-at-rest: any
+	 * source that transitions enabled->disabled has its already-indexed vectors
+	 * purged from the MCP server, not merely hidden.
+	 *
+	 * The config is persisted first so indexing stops immediately even if the
+	 * eager purge cannot run (e.g. the MCP server is unreachable); the MCP
+	 * server's scanner reconcile-purge is the backstop. Purge problems are
+	 * reported in the response without failing the save.
+	 *
+	 * @param list<string> $disabledSources Source app ids to disable
+	 */
+	public function saveSearchSources(array $disabledSources = []): JSONResponse {
+		$newDisabled = SearchSources::normalizeSourceIds($disabledSources);
+		$oldDisabled = $this->searchSources->getDisabledSources();
+
+		// Doc types of sources that just transitioned enabled -> disabled.
+		$newlyDisabled = array_values(array_diff($newDisabled, $oldDisabled));
+		$docTypesToPurge = SearchSources::docTypesForSources($newlyDisabled);
+
+		// Persist first: stop future indexing/search before attempting purge.
+		$this->appConfig->setValueString(
+			$this->appName,
+			AdminSettings::SETTING_DISABLED_SEARCH_SOURCES,
+			json_encode($newDisabled, JSON_THROW_ON_ERROR),
+		);
+
+		$this->logger->info('Admin search sources saved', [
+			'disabled' => $newDisabled,
+			'newly_disabled' => $newlyDisabled,
+		]);
+
+		$purge = null;
+		if ($docTypesToPurge !== []) {
+			$purge = ['docTypes' => $docTypesToPurge];
+			$accessToken = $this->tokenForCurrentUser();
+			if ($accessToken instanceof JSONResponse) {
+				// Couldn't mint a token to reach the MCP server. The config is
+				// already saved, so indexing/search are gated; the scanner will
+				// reconcile-purge later. Surface a warning, not a failure.
+				$purge['warning'] = 'Could not reach the MCP server to delete indexed documents now; they will be removed on the next sync.';
+			} else {
+				$result = $this->client->purgeDocTypes($docTypesToPurge, $accessToken);
+				if (isset($result['error'])) {
+					$purge['warning'] = $result['error'];
+				} else {
+					$purge['result'] = $result['purged'] ?? [];
+					// Partial failure: the MCP server reports which doc types it
+					// could not purge. Surface a warning so the admin knows
+					// consent isn't yet enforced for them (the MCP scanner
+					// backstop will catch up).
+					if (isset($result['failed']) && $result['failed'] !== []) {
+						$failed = implode(', ', $result['failed']);
+						$purge['warning'] = "Some content could not be deleted yet ($failed); it will be removed on the next sync.";
+					}
+				}
+			}
+		}
+
+		return new JSONResponse([
+			'success' => true,
+			'searchSources' => $this->searchSources->installedSources(),
+			'purge' => $purge,
 		]);
 	}
 
