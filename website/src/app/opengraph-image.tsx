@@ -59,6 +59,8 @@ export default function OpengraphImage() {
         </div>
 
         <div style={{ display: "flex", fontSize: "30px", color: "rgba(255,255,255,0.85)" }}>
+          {/* next/og renders via Satori (canvas, not HTML), so the bare "&"
+              is drawn literally — no HTML-entity encoding needed. */}
           Semantic search & MCP · astrolabecloud.com
         </div>
       </div>

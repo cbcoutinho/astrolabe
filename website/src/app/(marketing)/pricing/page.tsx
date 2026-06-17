@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   // deep-merged) and suppresses the auto-merged root opengraph-image, so this
   // is self-contained: correct canonical /pricing url + the generated card.
   openGraph: {
+    title: "Pricing — Astrolabe Cloud",
     url: `${SITE_URL}/pricing`,
     siteName: "Astrolabe Cloud",
     type: "website",
