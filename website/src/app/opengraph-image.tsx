@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 
+import { OG_IMAGE_ALT } from "@/lib/site";
+
 // Default social-share card for every route (home + pricing). Next.js wires
 // this up as og:image, and — because there is no twitter-image file — reuses it
 // for twitter:image too. Rendered at build time by next/og's ImageResponse.
@@ -8,7 +10,8 @@ import { ImageResponse } from "next/og";
 // PNG (same convention as sitemap.ts / robots.ts).
 export const dynamic = "force-static";
 
-export const alt = "Astrolabe Cloud — Semantic search & MCP for your Nextcloud";
+// Single source of truth shared with the page metadata (og:image:alt).
+export const alt = OG_IMAGE_ALT;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
