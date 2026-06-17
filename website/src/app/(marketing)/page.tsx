@@ -19,6 +19,22 @@ export const metadata: Metadata = {
     url: "https://astrolabecloud.com",
     siteName: "Astrolabe Cloud",
     type: "website",
+    // Declaring openGraph here overrides the parent metadata, so the
+    // root opengraph-image.tsx is no longer auto-merged — reference it
+    // explicitly (same generated card pricing inherits automatically).
+    images: [
+      {
+        url: "/opengraph-image",
+        type: "image/png",
+        width: 1200,
+        height: 630,
+        alt: "Astrolabe Cloud — Semantic search & MCP for your Nextcloud",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/opengraph-image"],
   },
 };
 
@@ -58,9 +74,26 @@ const howSteps = [
   },
 ];
 
+// schema.org structured data so search engines can render rich results. Kept
+// deliberately accurate to the product: no offers/price node while signups are
+// invite-only. Rendered as a JSON-LD <script> per the Next.js guidance.
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Astrolabe Cloud",
+  description: "Semantic search and a managed MCP server for your Nextcloud.",
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Web",
+  url: "https://astrolabecloud.com",
+};
+
 export default function HomePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Hero on dark navy — problem first, then the fix, beside the product. */}
       <section className="bg-ink-900 text-white">
         <Container size="lg" className="py-20 sm:py-28">
@@ -68,7 +101,7 @@ export default function HomePage() {
             <div>
               <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-300" />
-                <span>For self-hosted Nextcloud</span>
+                <span>Managed MCP for your Nextcloud</span>
               </p>
               <h1 className="mt-6 text-balance text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
                 Your Nextcloud knows more than its search bar lets on.
@@ -182,7 +215,7 @@ export default function HomePage() {
               How it works
             </p>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-              Self-hosted Nextcloud, managed everything else.
+              Bring your Nextcloud — we manage the rest.
             </h2>
             <p className="mt-4 text-base text-slate-600">
               You stay in control of your files. We run the parts that turn a
