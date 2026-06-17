@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.29.0 (2026-06-17)
+
+### Feat
+
+- **website**: add og:image + JSON-LD, fix managed-vs-self-hosted copy
+
+### Refactor
+
+- **website**: address review — pricing og:url, twitter alt, jsonLd image
+
 ## v0.28.0 (2026-06-16)
 
 ### Feat
