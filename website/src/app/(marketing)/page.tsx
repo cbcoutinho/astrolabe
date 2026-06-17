@@ -4,6 +4,7 @@ import Image from "next/image";
 import { LinkButton } from "@/components/button";
 import { Container } from "@/components/container";
 import { CheckMark } from "@/components/icons";
+import { OG_IMAGE_ALT, OG_IMAGE_PATH, SITE_URL } from "@/lib/site";
 
 const APPSTORE_URL = "https://apps.nextcloud.com/apps/astrolabe";
 const GITHUB_URL = "https://github.com/cbcoutinho/astrolabe";
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
     title: "Astrolabe Cloud — Semantic search & MCP for your Nextcloud",
     description:
       "Find your Nextcloud content by meaning, not keywords — and let any MCP client act on it. Bring your own Nextcloud; we run the index and the server.",
-    url: "https://astrolabecloud.com",
+    url: SITE_URL,
     siteName: "Astrolabe Cloud",
     type: "website",
     // Declaring openGraph here overrides the parent metadata, so the
@@ -24,17 +25,17 @@ export const metadata: Metadata = {
     // explicitly (same generated card pricing inherits automatically).
     images: [
       {
-        url: "/opengraph-image",
+        url: OG_IMAGE_PATH,
         type: "image/png",
         width: 1200,
         height: 630,
-        alt: "Astrolabe Cloud — Semantic search & MCP for your Nextcloud",
+        alt: OG_IMAGE_ALT,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    images: ["/opengraph-image"],
+    images: [{ url: OG_IMAGE_PATH, alt: OG_IMAGE_ALT }],
   },
 };
 
@@ -84,7 +85,8 @@ const jsonLd = {
   description: "Semantic search and a managed MCP server for your Nextcloud.",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web",
-  url: "https://astrolabecloud.com",
+  url: SITE_URL,
+  image: `${SITE_URL}${OG_IMAGE_PATH}`,
 };
 
 export default function HomePage() {

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
+import { SITE_URL } from "@/lib/site";
+
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
@@ -13,8 +15,6 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   display: "swap",
 });
-
-const SITE_URL = "https://astrolabecloud.com";
 
 export const metadata: Metadata = {
   // Absolute base so the generated og:image (opengraph-image.tsx) and other

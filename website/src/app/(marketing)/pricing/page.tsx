@@ -4,11 +4,33 @@ import { LinkButton } from "@/components/button";
 import { Container } from "@/components/container";
 import { CheckMark } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
+import { OG_IMAGE_ALT, OG_IMAGE_PATH, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Pricing — Astrolabe Cloud",
   description:
     "One managed Astrolabe backend per Nextcloud, with semantic search and a hosted MCP endpoint included. We're invite-only while we roll out — get in touch.",
+  // A page-level openGraph block replaces the parent's entirely (it is not
+  // deep-merged) and suppresses the auto-merged root opengraph-image, so this
+  // is self-contained: correct canonical /pricing url + the generated card.
+  openGraph: {
+    url: `${SITE_URL}/pricing`,
+    siteName: "Astrolabe Cloud",
+    type: "website",
+    images: [
+      {
+        url: OG_IMAGE_PATH,
+        type: "image/png",
+        width: 1200,
+        height: 630,
+        alt: OG_IMAGE_ALT,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: [{ url: OG_IMAGE_PATH, alt: OG_IMAGE_ALT }],
+  },
 };
 
 // Static page: the landing app has no control-plane access, so there is no
