@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 import { portalSignInUrl } from "@/lib/portal";
 
 const nav = [
+  { label: "Product", href: "/product" },
   // Docs live on their own Vercel-hosted site at docs.astrolabecloud.com,
   // separate from this GitHub Pages marketing site.
   { label: "Docs", href: "https://docs.astrolabecloud.com", external: true },
