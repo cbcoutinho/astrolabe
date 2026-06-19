@@ -1661,9 +1661,9 @@ a.mcp-result-title {
 	font-weight: 600;
 	color: var(--color-main-text);
 
-	&.status-idle { color: var(--color-success); }
-	&.status-syncing { color: var(--color-warning); }
-	&.status-error { color: var(--color-error); }
+	&.status-idle { color: var(--color-success-text); }
+	&.status-syncing { color: var(--color-warning-text); }
+	&.status-error { color: var(--color-error-text); }
 }
 
 // Navigation footer
