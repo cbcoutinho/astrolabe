@@ -43,7 +43,7 @@ Util::addStyle('astrolabe', 'astrolabe-main');
 		<p>
 			<strong><?php p($l->t('Semantic Search:')); ?></strong>
 			<?php if ($_['vectorSyncEnabled']): ?>
-				<span style="color: var(--color-success); font-weight: 600;"><?php p($l->t('Enabled')); ?></span>
+				<span style="color: var(--color-success-text); font-weight: 600;"><?php p($l->t('Enabled')); ?></span>
 			<?php else: ?>
 				<span style="color: var(--color-text-maxcontrast);"><?php p($l->t('Disabled')); ?></span>
 			<?php endif; ?>

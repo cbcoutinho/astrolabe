@@ -746,15 +746,15 @@ onMounted(async () => {
 	color: var(--color-main-text);
 
 	&.status-idle {
-		color: var(--color-success);
+		color: var(--color-success-text);
 	}
 
 	&.status-syncing {
-		color: var(--color-warning);
+		color: var(--color-warning-text);
 	}
 
 	&.status-error {
-		color: var(--color-error);
+		color: var(--color-error-text);
 	}
 }
 
