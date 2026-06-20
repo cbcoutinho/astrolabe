@@ -7,6 +7,7 @@ namespace OCA\Astrolabe\Settings;
 use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
 use OCA\Astrolabe\Service\McpServerClient;
+use OCA\Astrolabe\Service\SearchSources;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
@@ -29,6 +30,7 @@ class Personal implements ISettings {
 		private BackgroundSyncCredentialStorage $credentialStorage,
 		private IAppConfig $appConfig,
 		private IInitialState $initialState,
+		private SearchSources $searchSources,
 	) {
 	}
 
@@ -70,6 +72,8 @@ class Personal implements ISettings {
 			'hasBackgroundAccess' => $this->credentialStorage->hasAccess($userId),
 			'backgroundSyncProvisionedAt' => $this->credentialStorage->getProvisionedAt($userId),
 			'allowUserSelfProvision' => $allowUserSelfProvision,
+			// Per-user searchable-source narrowing (within the admin ceiling).
+			'searchSources' => $this->searchSources->userConfigurableSources(),
 		]);
 
 		return new TemplateResponse(

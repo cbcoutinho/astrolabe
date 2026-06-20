@@ -539,6 +539,9 @@ export default {
 			// false the Plotly panel is hidden and search skips PCA. Defaults
 			// to true so the panel shows if the flag is ever absent.
 			showVisualization: loadState('astrolabe', 'app-config', {}).showVisualization ?? true,
+			// Per-user effective doc types (admin ∩ user) for the type filter;
+			// empty/absent = show all (backend still intersects server-side).
+			enabledDocTypes: loadState('astrolabe', 'app-config', {}).enabledDocTypes ?? [],
 			coordinates: [],
 			queryCoords: [],
 			showQueryPoint: true,
@@ -573,7 +576,7 @@ export default {
 			]
 		},
 		docTypeOptions() {
-			return [
+			const all = [
 				{ id: 'note', label: this.t('astrolabe', 'Notes') },
 				{ id: 'file', label: this.t('astrolabe', 'Files') },
 				{ id: 'deck_card', label: this.t('astrolabe', 'Deck Cards') },
@@ -582,6 +585,13 @@ export default {
 				{ id: 'news_item', label: this.t('astrolabe', 'News') },
 				{ id: 'mail_message', label: this.t('astrolabe', 'Mail') },
 			]
+			// Only offer doc types enabled for this user (admin ∩ user). When the
+			// server didn't provide the set (older backend), show all — the search
+			// backend still intersects with the effective set server-side.
+			if (!this.enabledDocTypes || this.enabledDocTypes.length === 0) {
+				return all
+			}
+			return all.filter(opt => this.enabledDocTypes.includes(opt.id))
 		},
 		selectedAlgorithmOption() {
 			return this.algorithmOptions.find(opt => opt.id === this.algorithm) || this.algorithmOptions[0]

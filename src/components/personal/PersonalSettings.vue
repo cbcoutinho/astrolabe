@@ -72,6 +72,24 @@
 			</template>
 		</NcSettingsSection>
 
+		<NcSettingsSection
+			v-if="vectorSyncEnabled && searchSources.length"
+			:name="t('astrolabe', 'My searchable sources')"
+			:description="t('astrolabe', 'Choose which of your apps are indexed and searched for you. You can only narrow within what your administrator has enabled; turning one off removes that content from your index on the next sync.')">
+			<div v-for="source in searchSources" :key="source.app" class="source-row">
+				<NcCheckboxRadioSwitch
+					:model-value="source.userEnabled"
+					type="switch"
+					:disabled="!source.tenantEnabled || savingSources"
+					@update:model-value="onToggleSource(source, $event)">
+					{{ source.label }}
+					<span v-if="!source.tenantEnabled" class="help-text">
+						({{ t('astrolabe', 'disabled by administrator') }})
+					</span>
+				</NcCheckboxRadioSwitch>
+			</div>
+		</NcSettingsSection>
+
 		<NcSettingsSection :name="t('astrolabe', 'Search your content')">
 			<template v-if="vectorSyncEnabled">
 				<p class="help-text">
@@ -101,7 +119,7 @@ import { translate as t } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 
-import { NcSettingsSection, NcButton, NcNoteCard } from '@nextcloud/vue'
+import { NcSettingsSection, NcButton, NcNoteCard, NcCheckboxRadioSwitch } from '@nextcloud/vue'
 
 import Check from 'vue-material-design-icons/Check.vue'
 import Delete from 'vue-material-design-icons/Delete.vue'
@@ -115,6 +133,8 @@ const hasAccess = ref(config.hasBackgroundAccess ?? false)
 const provisionedAt = ref(config.backgroundSyncProvisionedAt ?? null)
 const allowSelfProvision = ref(config.allowUserSelfProvision ?? true)
 const busy = ref(false)
+const searchSources = ref(config.searchSources || [])
+const savingSources = ref(false)
 
 const appUrl = generateUrl('/apps/astrolabe/')
 const base = '/apps/astrolabe/api/v1/background-sync'
@@ -263,6 +283,37 @@ async function disable() {
 		}
 	} finally {
 		busy.value = false
+	}
+}
+
+// Persist the user's per-source narrowing. Optimistic update with revert on
+// error. No purge call — the MCP scanner removes this user's points for the
+// disabled source on its next sync (the per-user consent backstop).
+async function onToggleSource(source, value) {
+	const snapshot = searchSources.value.map(s => ({ ...s }))
+	source.userEnabled = value
+	savingSources.value = true
+	try {
+		const disabledSources = searchSources.value
+			.filter(s => s.tenantEnabled && !s.userEnabled)
+			.map(s => s.app)
+		const response = await axios.post(
+			generateUrl('/apps/astrolabe/api/user/search-sources'),
+			{ disabledSources },
+		)
+		if (response.data?.success) {
+			searchSources.value = response.data.searchSources || searchSources.value
+			showSuccess(t('astrolabe', 'Search preferences updated'))
+		} else {
+			searchSources.value = snapshot
+			showError(t('astrolabe', 'Failed to update search preferences'))
+		}
+	} catch (error) {
+		console.error('Failed to save user search sources:', error)
+		searchSources.value = snapshot
+		showError(t('astrolabe', 'Failed to update search preferences'))
+	} finally {
+		savingSources.value = false
 	}
 }
 </script>
