@@ -18,11 +18,38 @@ final class ApiControllerUserSearchSourcesTest extends AbstractApiControllerTest
 	public function testUnauthenticatedIsRejected(): void {
 		// No user on the session.
 		$this->userSession->method('getUser')->willReturn(null);
+		// We must bail before touching config or the source list.
+		$this->config->expects($this->never())->method('setUserValue');
+		$this->searchSources->expects($this->never())->method('userConfigurableSources');
 
 		$response = $this->controller->saveUserSearchSources(['notes']);
 
 		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
 		$this->assertFalse($response->getData()['success']);
+	}
+
+	public function testEmptyDisabledSourcesReEnablesAll(): void {
+		$this->authenticateUserWithToken('alice');
+
+		// Re-enabling everything persists an empty JSON array.
+		$this->config->expects($this->once())
+			->method('setUserValue')
+			->with(
+				'alice',
+				'astrolabe',
+				SearchSources::USER_SETTING_DISABLED_SEARCH_SOURCES,
+				json_encode([]),
+			);
+		$this->client->expects($this->never())->method('purgeDocTypes');
+		$this->searchSources->method('userConfigurableSources')->willReturn([
+			['app' => 'notes', 'docTypes' => ['note'], 'label' => 'Notes', 'tenantEnabled' => true, 'userEnabled' => true],
+		]);
+
+		$response = $this->controller->saveUserSearchSources([]);
+
+		$data = $response->getData();
+		$this->assertTrue($data['success']);
+		$this->assertTrue($data['searchSources'][0]['userEnabled']);
 	}
 
 	public function testPersistsNormalizedUserValueAndDoesNotPurge(): void {

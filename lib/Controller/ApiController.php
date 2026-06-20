@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
+use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
@@ -442,9 +443,11 @@ class ApiController extends Controller {
 		}
 
 		$normalized = SearchSources::normalizeSourceIds($disabledSources);
+		// Use Application::APP_ID (not $this->appName) so the write key matches
+		// how SearchSources::getUserDisabledSources() reads it back.
 		$this->config->setUserValue(
 			$user->getUID(),
-			$this->appName,
+			Application::APP_ID,
 			SearchSources::USER_SETTING_DISABLED_SEARCH_SOURCES,
 			json_encode($normalized, JSON_THROW_ON_ERROR),
 		);

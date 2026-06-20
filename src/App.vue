@@ -506,6 +506,8 @@ export default {
 		FolderSearch,
 	},
 	data() {
+		// Read the page's initial state once (loadState reads the DOM each call).
+		const appConfig = loadState('astrolabe', 'app-config', {})
 		return {
 			activeSection: 'search',
 			// Search state
@@ -538,10 +540,10 @@ export default {
 			// Admin-controlled gate (initial state from PageController). When
 			// false the Plotly panel is hidden and search skips PCA. Defaults
 			// to true so the panel shows if the flag is ever absent.
-			showVisualization: loadState('astrolabe', 'app-config', {}).showVisualization ?? true,
+			showVisualization: appConfig.showVisualization ?? true,
 			// Per-user effective doc types (admin ∩ user) for the type filter;
 			// empty/absent = show all (backend still intersects server-side).
-			enabledDocTypes: loadState('astrolabe', 'app-config', {}).enabledDocTypes ?? [],
+			enabledDocTypes: appConfig.enabledDocTypes ?? [],
 			coordinates: [],
 			queryCoords: [],
 			showQueryPoint: true,

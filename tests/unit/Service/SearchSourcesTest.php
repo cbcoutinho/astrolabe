@@ -218,4 +218,25 @@ final class SearchSourcesTest extends TestCase {
 		$sources = $this->withDisabled('[]', 'not json');
 		$this->assertSame([], $sources->getUserDisabledSources());
 	}
+
+	public function testNoSessionUserYieldsAdminCeilingOnly(): void {
+		// A system context (no session user) gets no per-user narrowing — only
+		// the admin ceiling applies. Guards against silently exposing all
+		// sources, or crashing on a null user.
+		$this->allAppsInstalled();
+		$this->appConfig->method('getValueString')->willReturn('["files"]');
+		$noUserSession = $this->createMock(IUserSession::class);
+		$noUserSession->method('getUser')->willReturn(null);
+		$sources = new SearchSources(
+			$this->appManager,
+			$this->appConfig,
+			$this->config,
+			$noUserSession,
+		);
+
+		$this->assertSame([], $sources->getUserDisabledSources());
+		$docTypes = $sources->effectiveEnabledDocTypes();
+		$this->assertNotContains('file', $docTypes); // admin-disabled
+		$this->assertContains('note', $docTypes); // admin-enabled, no user narrowing
+	}
 }
