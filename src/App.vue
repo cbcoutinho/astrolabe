@@ -980,6 +980,10 @@ export default {
 				}
 				return generateUrl('/apps/news/')
 			case 'mail_message':
+				// The Mail app's per-message route is a client-side hash built
+				// from account/mailbox/thread ids that aren't carried in the
+				// indexed metadata, so there's no stable deep link to a single
+				// message — fall back to the Mail app root.
 				return generateUrl('/apps/mail/')
 			case 'contact':
 				return generateUrl('/apps/contacts/')
