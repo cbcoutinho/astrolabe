@@ -362,6 +362,7 @@ class SemanticSearchProvider implements IProvider {
 			'deck_card' => 'icon-deck',
 			'calendar', 'calendar_event' => 'icon-calendar',
 			'news_item' => 'icon-rss',
+			'mail_message' => 'icon-mail',
 			'contact' => 'icon-contacts',
 			default => 'icon-file',
 		};
@@ -379,6 +380,7 @@ class SemanticSearchProvider implements IProvider {
 			'deck_card' => $this->l10n->t('Deck Card'),
 			'calendar', 'calendar_event' => $this->l10n->t('Calendar'),
 			'news_item' => $this->l10n->t('News'),
+			'mail_message' => $this->l10n->t('Mail'),
 			'contact' => $this->l10n->t('Contact'),
 			default => $this->l10n->t('Document'),
 		};

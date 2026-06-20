@@ -56,7 +56,7 @@ final class SearchSourcesTest extends TestCase {
 
 		$docTypes = $sources->effectiveEnabledDocTypes();
 		$this->assertEqualsCanonicalizing(
-			['note', 'file', 'deck_card', 'news_item', 'calendar', 'contact'],
+			['note', 'file', 'deck_card', 'news_item', 'mail_message', 'calendar', 'contact'],
 			$docTypes,
 		);
 	}

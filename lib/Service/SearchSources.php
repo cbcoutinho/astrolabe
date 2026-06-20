@@ -40,6 +40,7 @@ class SearchSources {
 		'files' => ['docTypes' => ['file'], 'label' => 'Files'],
 		'deck' => ['docTypes' => ['deck_card'], 'label' => 'Deck'],
 		'news' => ['docTypes' => ['news_item'], 'label' => 'News'],
+		'mail' => ['docTypes' => ['mail_message'], 'label' => 'Mail'],
 		'calendar' => ['docTypes' => ['calendar'], 'label' => 'Calendar'],
 		'contacts' => ['docTypes' => ['contact'], 'label' => 'Contacts'],
 	];

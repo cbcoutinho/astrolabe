@@ -580,6 +580,7 @@ export default {
 				{ id: 'calendar', label: this.t('astrolabe', 'Calendar') },
 				{ id: 'contact', label: this.t('astrolabe', 'Contacts') },
 				{ id: 'news_item', label: this.t('astrolabe', 'News') },
+				{ id: 'mail_message', label: this.t('astrolabe', 'Mail') },
 			]
 		},
 		selectedAlgorithmOption() {
@@ -978,6 +979,8 @@ export default {
 					return metadata.url
 				}
 				return generateUrl('/apps/news/')
+			case 'mail_message':
+				return generateUrl('/apps/mail/')
 			case 'contact':
 				return generateUrl('/apps/contacts/')
 			default:
@@ -1580,6 +1583,10 @@ export default {
 .mcp-doc-type-news_item {
 	border-left-color: #00838f;
 	.mcp-result-type { background: #e0f7fa; color: #00838f; }
+}
+.mcp-doc-type-mail_message {
+	border-left-color: #5e35b1;
+	.mcp-result-type { background: #ede7f6; color: #5e35b1; }
 }
 
 .mcp-result-score {
