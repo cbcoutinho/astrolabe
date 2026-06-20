@@ -670,6 +670,17 @@ export default {
 		},
 	},
 	watch: {
+		docTypeOptions(opts) {
+			// Drop any selected doc type that is no longer offered (e.g. the
+			// user/admin disabled its source), so an invisible selection can't
+			// silently restrict results. The backend also intersects, so this is
+			// UX hygiene, not a security gate.
+			const valid = new Set(opts.map(o => o.id))
+			const trimmed = this.selectedDocTypes.filter(id => valid.has(id))
+			if (trimmed.length !== this.selectedDocTypes.length) {
+				this.selectedDocTypes = trimmed
+			}
+		},
 		scoreThreshold() {
 			// Debounce so rapid slider drags don't trigger many Plotly.newPlot
 			// calls (each tears down and rebuilds the WebGL scene).

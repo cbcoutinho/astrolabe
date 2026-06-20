@@ -348,6 +348,10 @@ async function onToggleSource(source, value) {
 	}
 }
 
+.source-row {
+	margin-bottom: 4px;
+}
+
 .status-badge {
 	display: inline-block;
 	padding: 4px 10px;
