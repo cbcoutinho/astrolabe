@@ -464,6 +464,7 @@ const SOURCE_LABELS = {
 	files: t('astrolabe', 'Files'),
 	deck: t('astrolabe', 'Deck'),
 	news: t('astrolabe', 'News'),
+	mail: t('astrolabe', 'Mail'),
 	calendar: t('astrolabe', 'Calendar'),
 	contacts: t('astrolabe', 'Contacts'),
 }

@@ -56,7 +56,7 @@ final class SearchSourcesTest extends TestCase {
 
 		$docTypes = $sources->effectiveEnabledDocTypes();
 		$this->assertEqualsCanonicalizing(
-			['note', 'file', 'deck_card', 'news_item', 'calendar', 'contact'],
+			['note', 'file', 'deck_card', 'news_item', 'mail_message', 'calendar', 'contact'],
 			$docTypes,
 		);
 	}
@@ -97,9 +97,12 @@ final class SearchSourcesTest extends TestCase {
 		$this->assertContains('files', $apps); // core
 		$this->assertNotContains('deck', $apps);
 		$this->assertNotContains('calendar', $apps);
+		$this->assertNotContains('mail', $apps);
 
-		// Uninstalled deck contributes no doc_type even though not disabled.
-		$this->assertNotContains('deck_card', $sources->effectiveEnabledDocTypes());
+		// Uninstalled deck/mail contribute no doc_type even though not disabled.
+		$docTypes = $sources->effectiveEnabledDocTypes();
+		$this->assertNotContains('deck_card', $docTypes);
+		$this->assertNotContains('mail_message', $docTypes);
 	}
 
 	public function testInstalledSourcesCarryEnabledFlag(): void {

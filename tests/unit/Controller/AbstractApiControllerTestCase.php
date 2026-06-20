@@ -50,7 +50,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		// tests see the pre-feature behaviour (no doc_type narrowing). Tests
 		// that exercise the consent gate override this per case.
 		$this->searchSources->method('effectiveEnabledDocTypes')
-			->willReturn(['note', 'file', 'deck_card', 'calendar', 'contact', 'news_item']);
+			->willReturn(['note', 'file', 'deck_card', 'calendar', 'contact', 'news_item', 'mail_message']);
 
 		$this->controller = new ApiController(
 			'astrolabe',
