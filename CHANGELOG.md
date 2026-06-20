@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.30.2 (2026-06-20)
+
+### Fix
+
+- **ui**: use --color-success-text for filled status badges
+
 ## v0.30.1 (2026-06-19)
 
 ### Fix
