@@ -711,7 +711,7 @@ onMounted(async () => {
 
 	&.status-enabled {
 		background: var(--color-success);
-		color: var(--color-primary-element-text, #fff);
+		color: var(--color-success-text);
 	}
 
 	&.status-disabled {
@@ -856,7 +856,7 @@ onMounted(async () => {
 
 		&.preset-status-enabled {
 			background: var(--color-success);
-			color: var(--color-primary-element-text, #fff);
+			color: var(--color-success-text);
 		}
 
 		&.preset-status-disabled {

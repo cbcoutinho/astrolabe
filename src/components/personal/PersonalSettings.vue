@@ -306,7 +306,7 @@ async function disable() {
 
 	&.status-enabled {
 		background: var(--color-success);
-		color: var(--color-primary-element-text, #fff);
+		color: var(--color-success-text);
 	}
 }
 

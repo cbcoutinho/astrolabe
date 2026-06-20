@@ -291,7 +291,7 @@ onMounted(loadUsers)
 
 	&.status-enabled {
 		background: var(--color-success);
-		color: white;
+		color: var(--color-success-text);
 	}
 
 	&.status-disabled {
