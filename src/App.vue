@@ -506,6 +506,8 @@ export default {
 		FolderSearch,
 	},
 	data() {
+		// Read the page's initial state once (loadState reads the DOM each call).
+		const appConfig = loadState('astrolabe', 'app-config', {})
 		return {
 			activeSection: 'search',
 			// Search state
@@ -538,7 +540,10 @@ export default {
 			// Admin-controlled gate (initial state from PageController). When
 			// false the Plotly panel is hidden and search skips PCA. Defaults
 			// to true so the panel shows if the flag is ever absent.
-			showVisualization: loadState('astrolabe', 'app-config', {}).showVisualization ?? true,
+			showVisualization: appConfig.showVisualization ?? true,
+			// Per-user effective doc types (admin ∩ user) for the type filter;
+			// empty/absent = show all (backend still intersects server-side).
+			enabledDocTypes: appConfig.enabledDocTypes ?? [],
 			coordinates: [],
 			queryCoords: [],
 			showQueryPoint: true,
@@ -573,7 +578,7 @@ export default {
 			]
 		},
 		docTypeOptions() {
-			return [
+			const all = [
 				{ id: 'note', label: this.t('astrolabe', 'Notes') },
 				{ id: 'file', label: this.t('astrolabe', 'Files') },
 				{ id: 'deck_card', label: this.t('astrolabe', 'Deck Cards') },
@@ -582,6 +587,13 @@ export default {
 				{ id: 'news_item', label: this.t('astrolabe', 'News') },
 				{ id: 'mail_message', label: this.t('astrolabe', 'Mail') },
 			]
+			// Only offer doc types enabled for this user (admin ∩ user). When the
+			// server didn't provide the set (older backend), show all — the search
+			// backend still intersects with the effective set server-side.
+			if (!this.enabledDocTypes || this.enabledDocTypes.length === 0) {
+				return all
+			}
+			return all.filter(opt => this.enabledDocTypes.includes(opt.id))
 		},
 		selectedAlgorithmOption() {
 			return this.algorithmOptions.find(opt => opt.id === this.algorithm) || this.algorithmOptions[0]
@@ -658,6 +670,17 @@ export default {
 		},
 	},
 	watch: {
+		docTypeOptions(opts) {
+			// Drop any selected doc type that is no longer offered (e.g. the
+			// user/admin disabled its source), so an invisible selection can't
+			// silently restrict results. The backend also intersects, so this is
+			// UX hygiene, not a security gate.
+			const valid = new Set(opts.map(o => o.id))
+			const trimmed = this.selectedDocTypes.filter(id => valid.has(id))
+			if (trimmed.length !== this.selectedDocTypes.length) {
+				this.selectedDocTypes = trimmed
+			}
+		},
 		scoreThreshold() {
 			// Debounce so rapid slider drags don't trigger many Plotly.newPlot
 			// calls (each tears down and rebuilds the WebGL scene).

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Controller;
 
+use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
@@ -416,6 +417,49 @@ class ApiController extends Controller {
 			'success' => true,
 			'searchSources' => $this->searchSources->installedSources(),
 			'purge' => $purge,
+		]);
+	}
+
+	/**
+	 * Save the current user's personal search-source narrowing.
+	 *
+	 * Any authenticated user may disable sources for *their own* semantic search,
+	 * within the admin-enabled ceiling (a user can't re-enable an admin-disabled
+	 * source). Unlike the admin endpoint there is no eager purge: shrinking the
+	 * user's effective ``enabled_doc_types`` (exposed per-user via the capability)
+	 * makes the MCP scanner's per-user consent backstop delete that user's points
+	 * on the next sync — see the per-user delete path in vector/scanner.py.
+	 *
+	 * @param list<string> $disabledSources Source app ids the user disables for themselves
+	 */
+	#[NoAdminRequired]
+	public function saveUserSearchSources(array $disabledSources = []): JSONResponse {
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'User not authenticated',
+			], Http::STATUS_UNAUTHORIZED);
+		}
+
+		$normalized = SearchSources::normalizeSourceIds($disabledSources);
+		// Use Application::APP_ID (not $this->appName) so the write key matches
+		// how SearchSources::getUserDisabledSources() reads it back.
+		$this->config->setUserValue(
+			$user->getUID(),
+			Application::APP_ID,
+			SearchSources::USER_SETTING_DISABLED_SEARCH_SOURCES,
+			json_encode($normalized, JSON_THROW_ON_ERROR),
+		);
+
+		$this->logger->info('User search sources saved', [
+			'user_id' => $user->getUID(),
+			'disabled' => $normalized,
+		]);
+
+		return new JSONResponse([
+			'success' => true,
+			'searchSources' => $this->searchSources->userConfigurableSources(),
 		]);
 	}
 

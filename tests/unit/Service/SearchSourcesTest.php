@@ -8,6 +8,7 @@ use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\App\IAppManager;
 use OCP\IAppConfig;
+use OCP\IConfig;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -22,21 +23,37 @@ use PHPUnit\Framework\TestCase;
 final class SearchSourcesTest extends TestCase {
 	private IAppManager&MockObject $appManager;
 	private IAppConfig&MockObject $appConfig;
+	private IConfig&MockObject $config;
 	private IUserSession&MockObject $userSession;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->appManager = $this->createMock(IAppManager::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->config = $this->createMock(IConfig::class);
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn('alice');
 		$this->userSession = $this->createMock(IUserSession::class);
-		$this->userSession->method('getUser')->willReturn($this->createMock(IUser::class));
+		$this->userSession->method('getUser')->willReturn($user);
 	}
 
-	private function withDisabled(string $json): SearchSources {
+	/**
+	 * Build a SearchSources with the given admin (tenant) disabled-set and,
+	 * optionally, the current user's personal disabled-set.
+	 */
+	private function withDisabled(string $json, string $userJson = '[]'): SearchSources {
 		$this->appConfig->method('getValueString')
 			->with('astrolabe', Admin::SETTING_DISABLED_SEARCH_SOURCES, Admin::DEFAULT_DISABLED_SEARCH_SOURCES)
 			->willReturn($json);
-		return new SearchSources($this->appManager, $this->appConfig, $this->userSession);
+		$this->config->method('getUserValue')
+			->with(
+				'alice',
+				'astrolabe',
+				SearchSources::USER_SETTING_DISABLED_SEARCH_SOURCES,
+				SearchSources::USER_DEFAULT_DISABLED_SEARCH_SOURCES,
+			)
+			->willReturn($userJson);
+		return new SearchSources($this->appManager, $this->appConfig, $this->config, $this->userSession);
 	}
 
 	/** Mark every non-core app installed (files is always core). */
@@ -142,5 +159,84 @@ final class SearchSourcesTest extends TestCase {
 			['notes', 'files'],
 			SearchSources::normalizeSourceIds(['notes', 'files', 'notes', 'nope', 42]),
 		);
+	}
+
+	// --- Per-user narrowing -------------------------------------------------
+
+	public function testUserDisabledNarrowsEffectiveDocTypes(): void {
+		$this->allAppsInstalled();
+		// Admin allows everything; the user turns off notes for themselves.
+		$sources = $this->withDisabled('[]', '["notes"]');
+
+		$docTypes = $sources->effectiveEnabledDocTypes();
+		$this->assertNotContains('note', $docTypes);
+		$this->assertContains('file', $docTypes);
+	}
+
+	public function testUserCannotExceedAdminCeiling(): void {
+		$this->allAppsInstalled();
+		// Admin disabled files; the user "enabling" it (absent from user set)
+		// must NOT bring it back — effective excludes file.
+		$sources = $this->withDisabled('["files"]', '[]');
+		$this->assertNotContains('file', $sources->effectiveEnabledDocTypes());
+	}
+
+	public function testInstalledSourcesIsTenantOnlyIgnoringUserNarrowing(): void {
+		$this->allAppsInstalled();
+		// User disabled notes, but the admin (tenant) view is unaffected.
+		$sources = $this->withDisabled('[]', '["notes"]');
+
+		$byApp = [];
+		foreach ($sources->installedSources() as $s) {
+			$byApp[$s['app']] = $s['enabled'];
+		}
+		$this->assertTrue($byApp['notes']);
+	}
+
+	public function testUserConfigurableSourcesAnnotatesTenantAndUser(): void {
+		$this->allAppsInstalled();
+		// Admin disabled deck; user disabled notes.
+		$sources = $this->withDisabled('["deck"]', '["notes"]');
+
+		$byApp = [];
+		foreach ($sources->userConfigurableSources() as $s) {
+			$byApp[$s['app']] = $s;
+		}
+		// Admin-disabled: locked off for the user.
+		$this->assertFalse($byApp['deck']['tenantEnabled']);
+		$this->assertFalse($byApp['deck']['userEnabled']);
+		// User-disabled within an admin-enabled source.
+		$this->assertTrue($byApp['notes']['tenantEnabled']);
+		$this->assertFalse($byApp['notes']['userEnabled']);
+		// Untouched: enabled for both.
+		$this->assertTrue($byApp['files']['tenantEnabled']);
+		$this->assertTrue($byApp['files']['userEnabled']);
+	}
+
+	public function testMalformedUserDisabledConfigTreatedAsEmpty(): void {
+		$this->allAppsInstalled();
+		$sources = $this->withDisabled('[]', 'not json');
+		$this->assertSame([], $sources->getUserDisabledSources());
+	}
+
+	public function testNoSessionUserYieldsAdminCeilingOnly(): void {
+		// A system context (no session user) gets no per-user narrowing — only
+		// the admin ceiling applies. Guards against silently exposing all
+		// sources, or crashing on a null user.
+		$this->allAppsInstalled();
+		$this->appConfig->method('getValueString')->willReturn('["files"]');
+		$noUserSession = $this->createMock(IUserSession::class);
+		$noUserSession->method('getUser')->willReturn(null);
+		$sources = new SearchSources(
+			$this->appManager,
+			$this->appConfig,
+			$this->config,
+			$noUserSession,
+		);
+
+		$this->assertSame([], $sources->getUserDisabledSources());
+		$docTypes = $sources->effectiveEnabledDocTypes();
+		$this->assertNotContains('file', $docTypes); // admin-disabled
+		$this->assertContains('note', $docTypes); // admin-enabled, no user narrowing
 	}
 }

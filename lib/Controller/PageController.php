@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -25,6 +26,7 @@ class PageController extends Controller {
 		IRequest $request,
 		private IAppConfig $appConfig,
 		private IInitialState $initialState,
+		private SearchSources $searchSources,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -43,6 +45,10 @@ class PageController extends Controller {
 				AdminSettings::SETTING_SHOW_VISUALIZATION,
 				AdminSettings::DEFAULT_SHOW_VISUALIZATION,
 			),
+			// Per-user effective doc types (admin ∩ user), so the search page's
+			// type filter only offers sources enabled for this user. The search
+			// backend already intersects requested types with this set.
+			'enabledDocTypes' => $this->searchSources->effectiveEnabledDocTypes(),
 		]);
 
 		return new TemplateResponse(

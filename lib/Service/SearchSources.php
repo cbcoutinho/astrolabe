@@ -8,6 +8,7 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\App\IAppManager;
 use OCP\IAppConfig;
+use OCP\IConfig;
 use OCP\IUserSession;
 
 /**
@@ -45,19 +46,78 @@ class SearchSources {
 		'contacts' => ['docTypes' => ['contact'], 'label' => 'Contacts'],
 	];
 
+	/**
+	 * Per-user config key (IConfig user value) holding the JSON list of source
+	 * app ids the user has disabled for *their own* semantic search. A user may
+	 * only narrow within the admin-enabled set — never re-enable an admin-
+	 * disabled source — so the effective disabled set is the union of the two.
+	 */
+	public const USER_SETTING_DISABLED_SEARCH_SOURCES = 'user_disabled_search_sources';
+	public const USER_DEFAULT_DISABLED_SEARCH_SOURCES = '[]';
+
 	private IAppManager $appManager;
 	private IAppConfig $appConfig;
+	private IConfig $config;
 	private IUserSession $userSession;
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
 		IAppManager $appManager,
 		IAppConfig $appConfig,
+		IConfig $config,
 		IUserSession $userSession,
 	) {
 		$this->appManager = $appManager;
 		$this->appConfig = $appConfig;
+		$this->config = $config;
 		$this->userSession = $userSession;
+	}
+
+	/**
+	 * Current session user id, or null when there is no session user.
+	 */
+	private function currentUserId(): ?string {
+		return $this->userSession->getUser()?->getUID();
+	}
+
+	/**
+	 * The current user's own disabled-source set (their personal narrowing).
+	 *
+	 * Empty when there is no session user (e.g. a system context), so per-user
+	 * narrowing never applies outside an authenticated request. Unknown ids are
+	 * dropped, like the admin set.
+	 *
+	 * @return list<string>
+	 */
+	public function getUserDisabledSources(): array {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return [];
+		}
+		$raw = $this->config->getUserValue(
+			$userId,
+			Application::APP_ID,
+			self::USER_SETTING_DISABLED_SEARCH_SOURCES,
+			self::USER_DEFAULT_DISABLED_SEARCH_SOURCES,
+		);
+		$decoded = json_decode($raw, true);
+		if (!is_array($decoded)) {
+			return [];
+		}
+		return self::normalizeSourceIds($decoded);
+	}
+
+	/**
+	 * Effective disabled set for the current user: admin-disabled ∪ user-disabled.
+	 *
+	 * This is what gates the capability, the search filter, and (via the MCP
+	 * server) indexing for the requesting user.
+	 *
+	 * @return list<string>
+	 */
+	private function effectiveDisabledSources(): array {
+		$combined = array_merge($this->getDisabledSources(), $this->getUserDisabledSources());
+		return array_values(array_unique($combined));
 	}
 
 	/**
@@ -97,15 +157,13 @@ class SearchSources {
 	}
 
 	/**
-	 * Installed sources with their current enabled state, in catalog order.
+	 * Build the installed sources with an ``enabled`` flag against a given
+	 * disabled-set, in catalog order. Not-installed apps are omitted.
 	 *
-	 * Not-installed apps are omitted. ``enabled`` reflects admin consent
-	 * (installed AND not in the disabled-set).
-	 *
+	 * @param list<string> $disabled
 	 * @return list<array{app: string, docTypes: list<string>, label: string, enabled: bool}>
 	 */
-	public function installedSources(): array {
-		$disabled = $this->getDisabledSources();
+	private function buildSources(array $disabled): array {
 		$sources = [];
 		foreach (self::CATALOG as $appId => $meta) {
 			if (!$this->isInstalled($appId)) {
@@ -122,12 +180,27 @@ class SearchSources {
 	}
 
 	/**
-	 * Installed sources together with the flattened enabled doc-type list, in a
-	 * single pass.
+	 * Installed sources with the TENANT enabled state, in catalog order.
 	 *
-	 * Both outputs derive from one ``installedSources()`` sweep (which touches
-	 * IAppManager/IAppConfig), so the capability endpoint can expose both
-	 * without iterating twice and without duplicating the accumulation loop.
+	 * ``enabled`` reflects admin consent only (installed AND not in the admin
+	 * disabled-set) — this is the admin settings view, deliberately NOT narrowed
+	 * by the admin's own per-user choices.
+	 *
+	 * @return list<array{app: string, docTypes: list<string>, label: string, enabled: bool}>
+	 */
+	public function installedSources(): array {
+		return $this->buildSources($this->getDisabledSources());
+	}
+
+	/**
+	 * Installed sources with the EFFECTIVE (per-user) enabled state plus the
+	 * flattened enabled doc-type list.
+	 *
+	 * ``enabled`` here reflects admin consent AND the current user's own
+	 * narrowing (admin-disabled ∪ user-disabled). The OCS capability endpoint
+	 * runs in the authenticated user's context, so exposing this makes
+	 * ``enabled_doc_types`` per-user without any wire-shape change — the MCP
+	 * server consumes it unchanged.
 	 *
 	 * @return array{
 	 *   sources: list<array{app: string, docTypes: list<string>, label: string, enabled: bool}>,
@@ -135,7 +208,7 @@ class SearchSources {
 	 * }
 	 */
 	public function sourcesWithEnabledDocTypes(): array {
-		$sources = $this->installedSources();
+		$sources = $this->buildSources($this->effectiveDisabledSources());
 		$types = [];
 		foreach ($sources as $source) {
 			if ($source['enabled']) {
@@ -151,7 +224,8 @@ class SearchSources {
 	}
 
 	/**
-	 * Doc types of sources that are installed AND admin-approved.
+	 * Doc types of sources that are installed AND enabled for the current user
+	 * (admin-approved AND not narrowed away by the user).
 	 *
 	 * This is the authoritative allow-list applied to search and exposed via
 	 * the capability.
@@ -160,6 +234,37 @@ class SearchSources {
 	 */
 	public function effectiveEnabledDocTypes(): array {
 		return $this->sourcesWithEnabledDocTypes()['enabledDocTypes'];
+	}
+
+	/**
+	 * Installed sources annotated for the personal settings UI: the admin
+	 * ceiling (``tenantEnabled``) plus the user's own choice (``userEnabled``).
+	 *
+	 * A user can only toggle sources the admin has enabled; an admin-disabled
+	 * source is reported with ``tenantEnabled=false`` and ``userEnabled=false``
+	 * so the UI can render it locked.
+	 *
+	 * @return list<array{app: string, docTypes: list<string>, label: string, tenantEnabled: bool, userEnabled: bool}>
+	 */
+	public function userConfigurableSources(): array {
+		$tenantDisabled = $this->getDisabledSources();
+		$userDisabled = $this->getUserDisabledSources();
+		$sources = [];
+		foreach (self::CATALOG as $appId => $meta) {
+			if (!$this->isInstalled($appId)) {
+				continue;
+			}
+			$tenantEnabled = !in_array($appId, $tenantDisabled, true);
+			$sources[] = [
+				'app' => $appId,
+				'docTypes' => $meta['docTypes'],
+				'label' => $meta['label'],
+				'tenantEnabled' => $tenantEnabled,
+				// A user can't enable beyond the admin ceiling.
+				'userEnabled' => $tenantEnabled && !in_array($appId, $userDisabled, true),
+			];
+		}
+		return $sources;
 	}
 
 	/**
