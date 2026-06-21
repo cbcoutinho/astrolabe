@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.32.0 (2026-06-21)
+
+### Feat
+
+- **search**: per-user enable/disable of searchable sources
+
+### Fix
+
+- **search**: address PR #164 round-2 review
+- **search**: address PR #164 round-1 review
+
 ## v0.31.0 (2026-06-20)
 
 ### Feat
