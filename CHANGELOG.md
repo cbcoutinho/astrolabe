@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.33.0 (2026-07-03)
+
+### Feat
+
+- **search**: gate query algorithms on the MCP server's supported_search_types
+
+### Fix
+
+- **ui**: non-clearable algorithm pickers; disable search with no supported type
+- **search**: gate the Unified Search path; tidy assertSupported
+- **search**: correct absent-vs-empty supportedSearchTypes; polish 422 UX
+
 ## v0.32.0 (2026-06-21)
 
 ### Feat
