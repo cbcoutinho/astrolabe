@@ -1,5 +1,5 @@
 <template>
-	<NcContent app-name="astrolabe">
+	<NcContent appName="astrolabe">
 		<NcAppNavigation>
 			<template #list>
 				<NcAppNavigationItem
@@ -58,12 +58,12 @@
 
 					<div class="mcp-search-row">
 						<NcSelect
-							:model-value="selectedAlgorithmOption"
+							:modelValue="selectedAlgorithmOption"
 							:options="algorithmOptions"
 							:placeholder="t('astrolabe', 'Algorithm')"
 							:clearable="false"
 							class="mcp-algorithm-select"
-							@update:model-value="algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : '')" />
+							@update:modelValue="algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : '')" />
 
 						<NcButton
 							variant="primary"
@@ -97,9 +97,9 @@
 									<NcCheckboxRadioSwitch
 										v-for="docType in docTypeOptions"
 										:key="docType.id"
-										:model-value="selectedDocTypes.includes(docType.id)"
+										:modelValue="selectedDocTypes.includes(docType.id)"
 										type="checkbox"
-										@update:model-value="toggleDocType(docType.id, $event)">
+										@update:modelValue="toggleDocType(docType.id, $event)">
 										{{ docType.label }}
 									</NcCheckboxRadioSwitch>
 								</div>
@@ -193,7 +193,7 @@
 				<!-- Loading State -->
 				<div v-if="loading" class="mcp-loading">
 					<NcLoadingIcon :size="32" />
-					<span>{{ t('astrolabe', 'Searching...') }}</span>
+					<span>{{ t('astrolabe', 'Searching…') }}</span>
 				</div>
 
 				<!-- Error State -->
@@ -218,9 +218,9 @@
 						<div class="mcp-viz-header">
 							<h3>{{ t('astrolabe', 'Vector Space Visualization') }}</h3>
 							<NcCheckboxRadioSwitch
-								:model-value="showQueryPoint"
+								:modelValue="showQueryPoint"
 								type="switch"
-								@update:model-value="showQueryPoint = $event; updatePlot()">
+								@update:modelValue="showQueryPoint = $event; updatePlot()">
 								{{ t('astrolabe', 'Show query point') }}
 							</NcCheckboxRadioSwitch>
 						</div>
@@ -301,7 +301,7 @@
 
 				<div v-if="statusLoading" class="mcp-loading">
 					<NcLoadingIcon :size="32" />
-					<span>{{ t('astrolabe', 'Loading status...') }}</span>
+					<span>{{ t('astrolabe', 'Loading status…') }}</span>
 				</div>
 
 				<NcNoteCard v-else-if="statusError" type="error">
@@ -392,18 +392,18 @@
 					<!-- Loading State -->
 					<div v-if="viewerLoading" class="mcp-viewer-loading">
 						<NcLoadingIcon :size="32" />
-						<span>{{ t('astrolabe', 'Loading content...') }}</span>
+						<span>{{ t('astrolabe', 'Loading content…') }}</span>
 					</div>
 
 					<!-- PDF Viewer (canvas only, controls in footer) -->
 					<PDFViewer
 						v-else-if="viewerType === 'pdf'"
-						:file-path="currentPdfPath"
-						:page-number="viewerPage"
-						:highlight-bbox="currentBbox"
-						:bbox-page="currentBboxPage"
-						@prev-page="viewerPage--"
-						@next-page="viewerPage++"
+						:filePath="currentPdfPath"
+						:pageNumber="viewerPage"
+						:highlightBbox="currentBbox"
+						:bboxPage="currentBboxPage"
+						@prevPage="viewerPage--"
+						@nextPage="viewerPage++"
 						@loaded="handlePdfLoaded"
 						@error="handlePdfError" />
 
@@ -441,40 +441,37 @@
 </template>
 
 <script>
-import NcContent from '@nextcloud/vue/components/NcContent'
-import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
-import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
-import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcButton from '@nextcloud/vue/components/NcButton'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
-import NcTextArea from '@nextcloud/vue/components/NcTextArea'
-import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-
-import Magnify from 'vue-material-design-icons/Magnify.vue'
-import ChartBox from 'vue-material-design-icons/ChartBox.vue'
-import Cog from 'vue-material-design-icons/Cog.vue'
-import ChevronDown from 'vue-material-design-icons/ChevronDown.vue'
-import ChevronUp from 'vue-material-design-icons/ChevronUp.vue'
-import ChevronLeft from 'vue-material-design-icons/ChevronLeft.vue'
-import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
-import Refresh from 'vue-material-design-icons/Refresh.vue'
-import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
-import Eye from 'vue-material-design-icons/Eye.vue'
-import Close from 'vue-material-design-icons/Close.vue'
-import FolderSearch from 'vue-material-design-icons/FolderSearch.vue'
-
-import PDFViewer from './components/PDFViewer.vue'
-import MarkdownViewer from './components/MarkdownViewer.vue'
-
 import axios from '@nextcloud/axios'
 import { FilePickerType, getFilePickerBuilder } from '@nextcloud/dialogs'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import Plotly from 'plotly.js-dist-min'
+import NcAppContent from '@nextcloud/vue/components/NcAppContent'
+import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
+import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcContent from '@nextcloud/vue/components/NcContent'
+import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
+import ChartBox from 'vue-material-design-icons/ChartBox.vue'
+import ChevronDown from 'vue-material-design-icons/ChevronDown.vue'
+import ChevronLeft from 'vue-material-design-icons/ChevronLeft.vue'
+import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
+import ChevronUp from 'vue-material-design-icons/ChevronUp.vue'
+import Close from 'vue-material-design-icons/Close.vue'
+import Cog from 'vue-material-design-icons/Cog.vue'
+import Eye from 'vue-material-design-icons/Eye.vue'
+import FolderSearch from 'vue-material-design-icons/FolderSearch.vue'
+import Magnify from 'vue-material-design-icons/Magnify.vue'
+import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
+import Refresh from 'vue-material-design-icons/Refresh.vue'
+import MarkdownViewer from './components/MarkdownViewer.vue'
+import PDFViewer from './components/PDFViewer.vue'
 
 export default {
 	name: 'App',
@@ -506,6 +503,7 @@ export default {
 		Close,
 		FolderSearch,
 	},
+
 	data() {
 		// Read the page's initial state once (loadState reads the DOM each call).
 		const appConfig = loadState('astrolabe', 'app-config', {})
@@ -587,6 +585,7 @@ export default {
 			},
 		}
 	},
+
 	computed: {
 		algorithmOptions() {
 			const all = [
@@ -602,8 +601,9 @@ export default {
 			if (this.supportedSearchTypes === null) {
 				return all
 			}
-			return all.filter(opt => this.supportedSearchTypes.includes(opt.id))
+			return all.filter((opt) => this.supportedSearchTypes.includes(opt.id))
 		},
+
 		docTypeOptions() {
 			const all = [
 				{ id: 'note', label: this.t('astrolabe', 'Notes') },
@@ -620,11 +620,13 @@ export default {
 			if (!this.enabledDocTypes || this.enabledDocTypes.length === 0) {
 				return all
 			}
-			return all.filter(opt => this.enabledDocTypes.includes(opt.id))
+			return all.filter((opt) => this.enabledDocTypes.includes(opt.id))
 		},
+
 		selectedAlgorithmOption() {
-			return this.algorithmOptions.find(opt => opt.id === this.algorithm) || this.algorithmOptions[0]
+			return this.algorithmOptions.find((opt) => opt.id === this.algorithm) || this.algorithmOptions[0]
 		},
+
 		// The path filter only makes sense for file results: file_path is only
 		// indexed for files, so applying it while searching non-file types would
 		// silently return nothing. Applicable when Files is selected or when no
@@ -632,13 +634,14 @@ export default {
 		pathFilterApplicable() {
 			return this.selectedDocTypes.length === 0 || this.selectedDocTypes.includes('file')
 		},
+
 		// ADR-027: active structured filters rendered as closable chips, so the
 		// user always sees what is narrowing their results even with the
 		// advanced panel collapsed.
 		activeFilters() {
 			const chips = []
 			for (const id of this.selectedDocTypes) {
-				const opt = this.docTypeOptions.find(o => o.id === id)
+				const opt = this.docTypeOptions.find((o) => o.id === id)
 				chips.push({
 					key: 'doc:' + id,
 					label: opt ? opt.label : id,
@@ -674,13 +677,16 @@ export default {
 			}
 			return chips
 		},
+
 		scoreThresholdRatio() {
 			return this.scoreThreshold / 100
 		},
+
 		filteredResults() {
 			const threshold = this.scoreThresholdRatio
-			return this.results.filter(r => (r.score || 0) >= threshold)
+			return this.results.filter((r) => (r.score || 0) >= threshold)
 		},
+
 		// Parallel arrays used by renderPlot. The coordinate guard is
 		// defensive against API drift so the plot never sees holes; the
 		// list view (filteredResults) intentionally stays independent so
@@ -696,18 +702,20 @@ export default {
 			}, { results: [], coordinates: [] })
 		},
 	},
+
 	watch: {
 		docTypeOptions(opts) {
 			// Drop any selected doc type that is no longer offered (e.g. the
 			// user/admin disabled its source), so an invisible selection can't
 			// silently restrict results. The backend also intersects, so this is
 			// UX hygiene, not a security gate.
-			const valid = new Set(opts.map(o => o.id))
-			const trimmed = this.selectedDocTypes.filter(id => valid.has(id))
+			const valid = new Set(opts.map((o) => o.id))
+			const trimmed = this.selectedDocTypes.filter((id) => valid.has(id))
 			if (trimmed.length !== this.selectedDocTypes.length) {
 				this.selectedDocTypes = trimmed
 			}
 		},
+
 		scoreThreshold() {
 			// Debounce so rapid slider drags don't trigger many Plotly.newPlot
 			// calls (each tears down and rebuilds the WebGL scene).
@@ -722,6 +730,7 @@ export default {
 			}, 150)
 		},
 	},
+
 	created() {
 		// Non-reactive instance state. Storing these in data() would make
 		// Vue deep-observe a timer ID and a results-snapshot array on every
@@ -729,10 +738,12 @@ export default {
 		this._scoreThresholdTimer = null
 		this._renderedResults = []
 	},
+
 	mounted() {
 		// Check for URL parameters to open chunk viewer
 		this.handleUrlParameters()
 	},
+
 	beforeUnmount() {
 		if (this._scoreThresholdTimer) {
 			clearTimeout(this._scoreThresholdTimer)
@@ -744,6 +755,7 @@ export default {
 			plotDiv.removeAllListeners('plotly_click')
 		}
 	},
+
 	methods: {
 		handleUrlParameters() {
 			// Parse URL parameters
@@ -848,7 +860,7 @@ export default {
 
 		// Remove a single selected folder from the path filter.
 		removeFolder(folder) {
-			this.pathPrefixes = this.pathPrefixes.filter(p => p !== folder)
+			this.pathPrefixes = this.pathPrefixes.filter((p) => p !== folder)
 		},
 
 		// Open the native Nextcloud folder picker and merge the chosen
@@ -870,7 +882,7 @@ export default {
 			const picked = await picker.pick().catch(() => null)
 			const paths = Array.isArray(picked) ? picked : [picked]
 			const cleaned = paths
-				.map(p => (p || '').trim())
+				.map((p) => (p || '').trim())
 				.filter(Boolean)
 			this.pathPrefixes = [...new Set([...this.pathPrefixes, ...cleaned])]
 		},
@@ -998,7 +1010,9 @@ export default {
 		},
 
 		truncateExcerpt(text, maxLength = 150) {
-			if (!text || text.length <= maxLength) return text
+			if (!text || text.length <= maxLength) {
+				return text
+			}
 			return text.substring(0, maxLength).trim() + '...'
 		},
 
@@ -1008,37 +1022,37 @@ export default {
 			const metadata = result.metadata || {}
 
 			switch (docType) {
-			case 'note':
-				return generateUrl(`/apps/notes/#/note/${id}`)
-			case 'file':
-				if (id) {
-					return generateUrl(`/apps/files/files/${id}?dir=/&editing=false&openfile=true`)
-				}
-				return generateUrl('/apps/files/')
-			case 'deck_card':
-				if (metadata.board_id && id) {
-					return generateUrl(`/apps/deck/board/${metadata.board_id}/card/${id}`)
-				}
-				return generateUrl('/apps/deck/')
-			case 'calendar':
-			case 'calendar_event':
-				return generateUrl('/apps/calendar/')
-			case 'news_item':
+				case 'note':
+					return generateUrl(`/apps/notes/#/note/${id}`)
+				case 'file':
+					if (id) {
+						return generateUrl(`/apps/files/files/${id}?dir=/&editing=false&openfile=true`)
+					}
+					return generateUrl('/apps/files/')
+				case 'deck_card':
+					if (metadata.board_id && id) {
+						return generateUrl(`/apps/deck/board/${metadata.board_id}/card/${id}`)
+					}
+					return generateUrl('/apps/deck/')
+				case 'calendar':
+				case 'calendar_event':
+					return generateUrl('/apps/calendar/')
+				case 'news_item':
 				// Use external article URL if available, otherwise fall back to News app
-				if (metadata.url) {
-					return metadata.url
-				}
-				return generateUrl('/apps/news/')
-			case 'mail_message':
+					if (metadata.url) {
+						return metadata.url
+					}
+					return generateUrl('/apps/news/')
+				case 'mail_message':
 				// The Mail app's per-message route is a client-side hash built
 				// from account/mailbox/thread ids that aren't carried in the
 				// indexed metadata, so there's no stable deep link to a single
 				// message — fall back to the Mail app root.
-				return generateUrl('/apps/mail/')
-			case 'contact':
-				return generateUrl('/apps/contacts/')
-			default:
-				return generateUrl('/apps/astrolabe/')
+					return generateUrl('/apps/mail/')
+				case 'contact':
+					return generateUrl('/apps/contacts/')
+				default:
+					return generateUrl('/apps/astrolabe/')
 			}
 		},
 
@@ -1053,7 +1067,9 @@ export default {
 
 		renderPlot() {
 			const container = document.getElementById('viz-plot-container')
-			if (!container) return
+			if (!container) {
+				return
+			}
 
 			const width = container.clientWidth
 			const height = container.clientHeight || 400
@@ -1068,13 +1084,13 @@ export default {
 			// Plotly's pointIndex refers to the rendered trace data.
 			this._renderedResults = results
 
-			const scores = results.map(r => r.score)
+			const scores = results.map((r) => r.score)
 
 			// Trace 1: Document results (always visible)
 			const documentTrace = {
-				x: coordinates.map(c => c[0]),
-				y: coordinates.map(c => c[1]),
-				z: coordinates.map(c => c[2]),
+				x: coordinates.map((c) => c[0]),
+				y: coordinates.map((c) => c[1]),
+				z: coordinates.map((c) => c[2]),
 				mode: 'markers',
 				type: 'scatter3d',
 				name: 'Documents',
@@ -1087,11 +1103,13 @@ export default {
 					y: coordinates[i][1],
 					z: coordinates[i][2],
 				})),
+
 				hovertemplate:
 					'<b>%{customdata.title}</b><br>'
 					+ 'Raw Score: %{customdata.raw_score:.3f} (%{customdata.relative_score:.0%} relative)<br>'
 					+ '(x=%{customdata.x}, y=%{customdata.y}, z=%{customdata.z})'
 					+ '<extra></extra>',
+
 				hoverlabel: {
 					bgcolor: '#0082c9',
 					bordercolor: '#0082c9',
@@ -1100,9 +1118,10 @@ export default {
 						color: 'white',
 					},
 				},
+
 				marker: {
-					size: results.map(r => 4 + (Math.pow(r.score, 2) * 10)),
-					opacity: results.map(r => 0.3 + (r.score * 0.7)),
+					size: results.map((r) => 4 + (Math.pow(r.score, 2) * 10)),
+					opacity: results.map((r) => 0.3 + (r.score * 0.7)),
 					color: scores,
 					colorscale: 'Viridis',
 					showscale: true,
@@ -1113,6 +1132,7 @@ export default {
 						thickness: 20,
 						len: 0.8,
 					},
+
 					cmin: 0,
 					cmax: 1,
 				},
@@ -1131,6 +1151,7 @@ export default {
 					'<b>Search Query</b><br>'
 					+ `(x=${queryCoords[0]}, y=${queryCoords[1]}, z=${queryCoords[2]})`
 					+ '<extra></extra>',
+
 				marker: {
 					size: 10,
 					color: '#ef5350', // Subdued red (Material Design Red 400)
@@ -1152,11 +1173,13 @@ export default {
 					camera: {
 						eye: { x: 1.5, y: 1.5, z: 1.5 },
 					},
+
 					domain: {
 						x: [0, 1],
 						y: [0, 1],
 					},
 				},
+
 				hovermode: 'closest',
 				autosize: true,
 				showlegend: false,
@@ -1500,7 +1523,7 @@ export default {
 	margin-top: 6px;
 	font-size: 12px;
 	color: var(--color-text-maxcontrast);
-	word-break: break-word;
+	overflow-wrap: break-word;
 	font-family: monospace;
 }
 
@@ -1587,7 +1610,7 @@ export default {
 	padding: 16px;
 	background: var(--color-background-hover);
 	border-radius: var(--border-radius-large);
-	border-left: 4px solid var(--color-primary-element);
+	border-inline-start: 4px solid var(--color-primary-element);
 	transition: transform 0.15s, box-shadow 0.15s;
 
 	&:hover {
@@ -1615,31 +1638,37 @@ export default {
 
 // Document type colors
 .mcp-doc-type-note {
-	border-left-color: #1565c0;
+	border-inline-start-color: #1565c0;
 	.mcp-result-type { background: #e3f2fd; color: #1565c0; }
 }
+
 .mcp-doc-type-file {
-	border-left-color: #2e7d32;
+	border-inline-start-color: #2e7d32;
 	.mcp-result-type { background: #e8f5e9; color: #2e7d32; }
 }
+
 .mcp-doc-type-deck_card {
-	border-left-color: #ef6c00;
+	border-inline-start-color: #ef6c00;
 	.mcp-result-type { background: #fff3e0; color: #ef6c00; }
 }
+
 .mcp-doc-type-calendar {
-	border-left-color: #c2185b;
+	border-inline-start-color: #c2185b;
 	.mcp-result-type { background: #fce4ec; color: #c2185b; }
 }
+
 .mcp-doc-type-contact {
-	border-left-color: #7b1fa2;
+	border-inline-start-color: #7b1fa2;
 	.mcp-result-type { background: #f3e5f5; color: #7b1fa2; }
 }
+
 .mcp-doc-type-news_item {
-	border-left-color: #00838f;
+	border-inline-start-color: #00838f;
 	.mcp-result-type { background: #e0f7fa; color: #00838f; }
 }
+
 .mcp-doc-type-mail_message {
-	border-left-color: #5e35b1;
+	border-inline-start-color: #5e35b1;
 	.mcp-result-type { background: #ede7f6; color: #5e35b1; }
 }
 
@@ -1682,7 +1711,7 @@ a.mcp-result-title {
 
 .mcp-external-icon {
 	opacity: 0.5;
-	margin-left: 4px;
+	margin-inline-start: 4px;
 	vertical-align: middle;
 }
 
@@ -1731,9 +1760,9 @@ a.mcp-result-title {
 .app-navigation-entry__settings {
 	height: auto !important;
 	overflow: hidden !important;
-	padding-top: 0 !important;
 	flex: 0 0 auto;
 	padding: 3px;
+	padding-top: 0 !important;
 	margin: 0 3px;
 }
 
@@ -1741,8 +1770,7 @@ a.mcp-result-title {
 .mcp-modal-overlay {
 	position: fixed;
 	top: 0;
-	left: 0;
-	right: 0;
+	inset-inline: 0;
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
 	display: flex;
@@ -1880,6 +1908,6 @@ a.mcp-result-title {
 /* Fix for double margin/padding issue when nested in #content */
 #content-vue {
 	margin-top: 0 !important;
-	margin-left: 0 !important;
+	margin-inline-start: 0 !important;
 }
 </style>

@@ -8,7 +8,9 @@
 			<NcNoteCard type="error">
 				<p><strong>{{ t('astrolabe', 'Cannot connect to MCP server') }}</strong></p>
 				<p>{{ error }}</p>
-				<p class="help-text">{{ t('astrolabe', 'Ensure MCP server is running and accessible. Check config.php for correct mcp_server_url.') }}</p>
+				<p class="help-text">
+					{{ t('astrolabe', 'Ensure MCP server is running and accessible. Check config.php for correct mcp_server_url.') }}
+				</p>
 				<NcButton variant="primary" @click="retryConnection">
 					<template #icon>
 						<Refresh :size="20" />
@@ -55,26 +57,44 @@
 			<NcSettingsSection v-if="vectorSyncEnabled && vectorSyncStatus" :name="t('astrolabe', 'Indexing metrics')">
 				<div class="metrics-grid">
 					<div class="metric-card">
-						<div class="metric-label">{{ t('astrolabe', 'Status') }}</div>
+						<div class="metric-label">
+							{{ t('astrolabe', 'Status') }}
+						</div>
 						<div class="metric-value" :class="`status-${vectorSyncStatus.status}`">
 							{{ vectorSyncStatus.status }}
 						</div>
 					</div>
 					<div class="metric-card">
-						<div class="metric-label">{{ t('astrolabe', 'Indexed Documents') }}</div>
-						<div class="metric-value">{{ formatNumber(vectorSyncStatus.indexed_documents) }}</div>
+						<div class="metric-label">
+							{{ t('astrolabe', 'Indexed Documents') }}
+						</div>
+						<div class="metric-value">
+							{{ formatNumber(vectorSyncStatus.indexed_documents) }}
+						</div>
 					</div>
 					<div class="metric-card">
-						<div class="metric-label">{{ t('astrolabe', 'Indexed Chunks') }}</div>
-						<div class="metric-value">{{ formatNumber(vectorSyncStatus.indexed_chunks) }}</div>
+						<div class="metric-label">
+							{{ t('astrolabe', 'Indexed Chunks') }}
+						</div>
+						<div class="metric-value">
+							{{ formatNumber(vectorSyncStatus.indexed_chunks) }}
+						</div>
 					</div>
 					<div class="metric-card">
-						<div class="metric-label">{{ t('astrolabe', 'Pending Documents') }}</div>
-						<div class="metric-value">{{ formatNumber(vectorSyncStatus.pending_documents) }}</div>
+						<div class="metric-label">
+							{{ t('astrolabe', 'Pending Documents') }}
+						</div>
+						<div class="metric-value">
+							{{ formatNumber(vectorSyncStatus.pending_documents) }}
+						</div>
 					</div>
 					<div class="metric-card">
-						<div class="metric-label">{{ t('astrolabe', 'Processing Rate') }}</div>
-						<div class="metric-value">{{ formatNumber(vectorSyncStatus.documents_per_second, 1) }} docs/sec</div>
+						<div class="metric-label">
+							{{ t('astrolabe', 'Processing Rate') }}
+						</div>
+						<div class="metric-value">
+							{{ formatNumber(vectorSyncStatus.documents_per_second, 1) }} docs/sec
+						</div>
 					</div>
 				</div>
 				<NcButton variant="secondary" @click="refreshStatus">
@@ -92,7 +112,7 @@
 				:description="t('astrolabe', 'Configure real-time synchronization for Nextcloud apps using webhooks. Webhooks provide instant updates to the MCP server when content changes.')">
 				<div v-if="webhooksLoading" class="loading-indicator">
 					<NcLoadingIcon :size="32" />
-					<p>{{ t('astrolabe', 'Loading webhook presets...') }}</p>
+					<p>{{ t('astrolabe', 'Loading webhook presets…') }}</p>
 				</div>
 
 				<NcNoteCard v-else-if="webhooksProvisioningRequired" type="warning">
@@ -127,7 +147,9 @@
 									{{ preset.enabled ? t('astrolabe', 'Enabled') : t('astrolabe', 'Disabled') }}
 								</span>
 							</div>
-							<p class="preset-description">{{ preset.description }}</p>
+							<p class="preset-description">
+								{{ preset.description }}
+							</p>
 							<div class="preset-meta">
 								<span class="preset-app">{{ t('astrolabe', 'App') }}: {{ preset.app }}</span>
 								<span class="preset-events">{{ preset.events.length }} {{ t('astrolabe', 'events') }}</span>
@@ -137,7 +159,7 @@
 									:variant="preset.enabled ? 'secondary' : 'primary'"
 									:disabled="preset.toggling"
 									@click="toggleWebhookPreset(preset)">
-									{{ preset.toggling ? t('astrolabe', 'Please wait...') : (preset.enabled ? t('astrolabe', 'Disable') : t('astrolabe', 'Enable')) }}
+									{{ preset.toggling ? t('astrolabe', 'Please wait…') : (preset.enabled ? t('astrolabe', 'Disable') : t('astrolabe', 'Enable')) }}
 								</NcButton>
 							</div>
 						</div>
@@ -177,10 +199,10 @@
 				<div v-else class="settings-form">
 					<div v-for="source in searchSources" :key="source.app" class="source-row">
 						<NcCheckboxRadioSwitch
-							:model-value="source.enabled"
+							:modelValue="source.enabled"
 							type="switch"
 							:disabled="savingSources"
-							@update:model-value="onToggleSource(source, $event)">
+							@update:modelValue="onToggleSource(source, $event)">
 							{{ sourceLabel(source) }}
 						</NcCheckboxRadioSwitch>
 					</div>
@@ -197,10 +219,10 @@
 				:description="t('astrolabe', 'Configure the default search parameters for the AI Search provider in Nextcloud unified search.')">
 				<div class="settings-form">
 					<NcCheckboxRadioSwitch
-						:model-value="settings.showVisualization"
+						:modelValue="settings.showVisualization"
 						type="switch"
 						class="form-field"
-						@update:model-value="settings.showVisualization = $event">
+						@update:modelValue="settings.showVisualization = $event">
 						{{ t('astrolabe', 'Show vector space visualization') }}
 					</NcCheckboxRadioSwitch>
 					<p class="help-text">
@@ -208,22 +230,22 @@
 					</p>
 
 					<NcSelect
-						:model-value="selectedAlgorithmOption"
+						:modelValue="selectedAlgorithmOption"
 						:options="algorithmOptions"
-						:input-label="t('astrolabe', 'Search Algorithm')"
+						:inputLabel="t('astrolabe', 'Search Algorithm')"
 						:clearable="false"
 						class="form-field"
-						@update:model-value="settings.algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : 'hybrid')" />
+						@update:modelValue="settings.algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : 'hybrid')" />
 					<p class="help-text">
 						{{ t('astrolabe', 'Hybrid combines semantic understanding with keyword matching. Semantic finds conceptually similar content. BM25 matches exact keywords.') }}
 					</p>
 
 					<NcSelect
-						:model-value="selectedFusionOption"
+						:modelValue="selectedFusionOption"
 						:options="fusionOptions"
-						:input-label="t('astrolabe', 'Fusion Method')"
+						:inputLabel="t('astrolabe', 'Fusion Method')"
 						class="form-field"
-						@update:model-value="settings.fusion = $event ? $event.id : 'rrf'" />
+						@update:modelValue="settings.fusion = $event ? $event.id : 'rrf'" />
 					<p class="help-text">
 						{{ t('astrolabe', 'Only applies to hybrid search. RRF balances results well for most queries. DBSF may work better when keyword matches are over/under-weighted.') }}
 					</p>
@@ -236,7 +258,7 @@
 							min="0"
 							max="100"
 							step="5"
-							class="score-slider" />
+							class="score-slider">
 						<p class="help-text">
 							{{ t('astrolabe', 'Filter out results below this relevance score. Set to 0 to show all results.') }}
 						</p>
@@ -256,7 +278,7 @@
 
 					<div class="form-actions">
 						<NcButton variant="primary" :disabled="saving" @click="saveSettings">
-							{{ saving ? t('astrolabe', 'Saving...') : t('astrolabe', 'Save Settings') }}
+							{{ saving ? t('astrolabe', 'Saving…') : t('astrolabe', 'Save Settings') }}
 						</NcButton>
 					</div>
 				</div>
@@ -264,7 +286,7 @@
 
 			<!-- User provisioning -->
 			<NcSettingsSection :name="t('astrolabe', 'User provisioning')">
-				<UserProvisioning :initial-allow-self-provision="allowUserSelfProvision" />
+				<UserProvisioning :initialAllowSelfProvision="allowUserSelfProvision" />
 			</NcSettingsSection>
 
 			<!-- Documentation -->
@@ -295,26 +317,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { loadState } from '@nextcloud/initial-state'
-import { generateUrl } from '@nextcloud/router'
-import { translate as t } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess, showWarning } from '@nextcloud/dialogs'
-
+import { loadState } from '@nextcloud/initial-state'
+import { translate as t } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
 import {
-	NcSettingsSection,
-	NcLoadingIcon,
-	NcNoteCard,
 	NcButton,
-	NcSelect,
-	NcTextField,
 	NcCheckboxRadioSwitch,
 	NcDialog,
+	NcLoadingIcon,
+	NcNoteCard,
+	NcSelect,
+	NcSettingsSection,
+	NcTextField,
 } from '@nextcloud/vue'
-
+import { computed, onMounted, ref } from 'vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
-
 import UserProvisioning from './UserProvisioning.vue'
 
 // Reactive state
@@ -352,11 +371,9 @@ const savingSources = ref(false)
 const confirmDialogOpen = ref(false)
 const pendingSource = ref(null)
 
-const confirmMessage = computed(() =>
-	pendingSource.value
-		? t('astrolabe', 'Disabling "{source}" deletes its already-indexed documents and stops further indexing. Re-enabling later requires a full re-index. Continue?', { source: sourceLabel(pendingSource.value) })
-		: '',
-)
+const confirmMessage = computed(() => pendingSource.value
+	? t('astrolabe', 'Disabling "{source}" deletes its already-indexed documents and stops further indexing. Re-enabling later requires a full re-index. Continue?', { source: sourceLabel(pendingSource.value) })
+	: '')
 
 const confirmButtons = computed(() => [
 	{
@@ -385,7 +402,7 @@ const algorithmOptions = computed(() => {
 	if (!Array.isArray(supported)) {
 		return all
 	}
-	return all.filter(opt => supported.includes(opt.id))
+	return all.filter((opt) => supported.includes(opt.id))
 })
 
 const fusionOptions = computed(() => [
@@ -394,13 +411,9 @@ const fusionOptions = computed(() => [
 ])
 
 // Computed properties for NcSelect (converts between stored ID and option object)
-const selectedAlgorithmOption = computed(() =>
-	algorithmOptions.value.find(opt => opt.id === settings.value.algorithm) || algorithmOptions.value[0],
-)
+const selectedAlgorithmOption = computed(() => algorithmOptions.value.find((opt) => opt.id === settings.value.algorithm) || algorithmOptions.value[0])
 
-const selectedFusionOption = computed(() =>
-	fusionOptions.value.find(opt => opt.id === settings.value.fusion) || fusionOptions.value[0],
-)
+const selectedFusionOption = computed(() => fusionOptions.value.find((opt) => opt.id === settings.value.fusion) || fusionOptions.value[0])
 
 // Methods
 async function loadServerStatus() {
@@ -499,7 +512,7 @@ function sourceLabel(source) {
 function onToggleSource(source, value) {
 	if (value) {
 		// Snapshot BEFORE the optimistic mutation so a failed save can revert.
-		const snapshot = searchSources.value.map(s => ({ ...s }))
+		const snapshot = searchSources.value.map((s) => ({ ...s }))
 		source.enabled = true
 		persistSources(snapshot)
 	} else {
@@ -529,7 +542,7 @@ function confirmDisable() {
 	// dialog's close/callback event ordering.
 	const src = pendingSource.value
 	// Snapshot BEFORE the optimistic mutation so a failed save can revert.
-	const snapshot = searchSources.value.map(s => ({ ...s }))
+	const snapshot = searchSources.value.map((s) => ({ ...s }))
 	confirmDialogOpen.value = false
 	pendingSource.value = null
 	if (src) {
@@ -544,8 +557,8 @@ function confirmDisable() {
 async function persistSources(snapshot) {
 	savingSources.value = true
 	const disabledSources = searchSources.value
-		.filter(s => !s.enabled)
-		.map(s => s.app)
+		.filter((s) => !s.enabled)
+		.map((s) => s.app)
 
 	try {
 		const response = await axios.post(
@@ -589,7 +602,7 @@ async function loadWebhookPresets() {
 		if (response.data.success) {
 			// Convert presets object to array with IDs
 			const presetsObj = response.data.presets
-			webhookPresets.value = Object.keys(presetsObj).map(id => ({
+			webhookPresets.value = Object.keys(presetsObj).map((id) => ({
 				id,
 				...presetsObj[id],
 				toggling: false,
@@ -660,7 +673,9 @@ function formatUptime(seconds) {
 }
 
 function formatNumber(value, decimals = 0) {
-	if (value === undefined || value === null) return '0'
+	if (value === undefined || value === null) {
+		return '0'
+	}
 	return Number(value).toLocaleString(undefined, {
 		minimumFractionDigits: decimals,
 		maximumFractionDigits: decimals,
@@ -918,7 +933,7 @@ onMounted(async () => {
 
 	ul {
 		margin: 8px 0 0 0;
-		padding-left: 20px;
+		padding-inline-start: 20px;
 
 		li {
 			margin: 4px 0;

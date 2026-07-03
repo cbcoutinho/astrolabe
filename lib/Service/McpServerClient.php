@@ -245,7 +245,6 @@ class McpServerClient {
 		);
 	}
 
-
 	/**
 	 * Get vector sync status (indexing metrics).
 	 *
@@ -465,7 +464,6 @@ class McpServerClient {
 		$publicUrl = (string)$this->config->getSystemValue('mcp_server_public_url', '');
 		return $publicUrl !== '' ? $publicUrl : $this->baseUrl;
 	}
-
 
 	/**
 	 * List all registered webhooks for a user.

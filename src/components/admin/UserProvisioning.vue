@@ -6,10 +6,10 @@
 
 		<div class="self-provision-toggle">
 			<NcCheckboxRadioSwitch
-				:model-value="allowSelfProvision"
+				:modelValue="allowSelfProvision"
 				:disabled="togglingSelfProvision"
 				type="switch"
-				@update:model-value="onToggleSelfProvision">
+				@update:modelValue="onToggleSelfProvision">
 				{{ t('astrolabe', 'Allow users to self-provision background indexing') }}
 			</NcCheckboxRadioSwitch>
 			<p class="help-text">
@@ -19,7 +19,7 @@
 
 		<div v-if="loading" class="loading-indicator">
 			<NcLoadingIcon :size="32" />
-			<p>{{ t('astrolabe', 'Loading users...') }}</p>
+			<p>{{ t('astrolabe', 'Loading users…') }}</p>
 		</div>
 
 		<NcNoteCard v-else-if="error" type="error">
@@ -37,7 +37,9 @@
 						<th>{{ t('astrolabe', 'User') }}</th>
 						<th>{{ t('astrolabe', 'Status') }}</th>
 						<th>{{ t('astrolabe', 'Provisioned at') }}</th>
-						<th class="actions-col">{{ t('astrolabe', 'Actions') }}</th>
+						<th class="actions-col">
+							{{ t('astrolabe', 'Actions') }}
+						</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -60,14 +62,14 @@
 								variant="secondary"
 								:disabled="user.busy"
 								@click="deprovision(user)">
-								{{ user.busy ? t('astrolabe', 'Please wait...') : t('astrolabe', 'Deprovision') }}
+								{{ user.busy ? t('astrolabe', 'Please wait…') : t('astrolabe', 'Deprovision') }}
 							</NcButton>
 							<NcButton
 								v-else
 								variant="primary"
 								:disabled="user.busy"
 								@click="provision(user)">
-								{{ user.busy ? t('astrolabe', 'Please wait...') : t('astrolabe', 'Provision') }}
+								{{ user.busy ? t('astrolabe', 'Please wait…') : t('astrolabe', 'Provision') }}
 							</NcButton>
 						</td>
 					</tr>
@@ -85,19 +87,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { generateUrl } from '@nextcloud/router'
-import { translate as t } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess, showWarning } from '@nextcloud/dialogs'
-
+import { translate as t } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
 import {
-	NcLoadingIcon,
-	NcNoteCard,
 	NcButton,
 	NcCheckboxRadioSwitch,
+	NcLoadingIcon,
+	NcNoteCard,
 } from '@nextcloud/vue'
-
+import { onMounted, ref } from 'vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 
 const props = defineProps({
@@ -123,7 +123,7 @@ async function loadUsers() {
 	try {
 		const response = await axios.get(generateUrl(`${baseUrl}/users`))
 		if (response.data.success) {
-			users.value = (response.data.users || []).map(u => ({ ...u, busy: false }))
+			users.value = (response.data.users || []).map((u) => ({ ...u, busy: false }))
 			capped.value = response.data.capped ?? false
 			allowSelfProvision.value = response.data.self_provision_allowed ?? allowSelfProvision.value
 		} else {
@@ -253,7 +253,7 @@ onMounted(loadUsers)
 
 	th,
 	td {
-		text-align: left;
+		text-align: start;
 		padding: 10px 12px;
 		border-bottom: 1px solid var(--color-border);
 		vertical-align: middle;
@@ -266,7 +266,7 @@ onMounted(loadUsers)
 	}
 
 	.actions-col {
-		text-align: right;
+		text-align: end;
 		white-space: nowrap;
 	}
 

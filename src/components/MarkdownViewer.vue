@@ -4,8 +4,8 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
 	content: {
@@ -56,7 +56,6 @@ watch(() => props.content, (newContent) => {
 	font-size: 14px;
 	line-height: 1.6;
 	color: var(--color-main-text);
-	word-wrap: break-word;
 	overflow-wrap: break-word;
 
 	// Typography
@@ -85,7 +84,7 @@ watch(() => props.content, (newContent) => {
 	:deep(ul), :deep(ol) {
 		margin-top: 0;
 		margin-bottom: 16px;
-		padding-left: 2em;
+		padding-inline-start: 2em;
 	}
 
 	:deep(li) {
@@ -118,7 +117,7 @@ watch(() => props.content, (newContent) => {
 	:deep(blockquote) {
 		margin: 0 0 16px 0;
 		padding: 0 16px;
-		border-left: 4px solid var(--color-primary-element);
+		border-inline-start: 4px solid var(--color-primary-element);
 		color: var(--color-text-maxcontrast);
 
 		p:last-child {
@@ -146,7 +145,7 @@ watch(() => props.content, (newContent) => {
 	:deep(th), :deep(td) {
 		padding: 8px 12px;
 		border: 1px solid var(--color-border);
-		text-align: left;
+		text-align: start;
 	}
 
 	:deep(th) {
