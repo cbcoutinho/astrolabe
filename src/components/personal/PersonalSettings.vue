@@ -78,10 +78,10 @@
 			:description="t('astrolabe', 'Choose which of your apps are indexed and searched for you. You can only narrow within what your administrator has enabled; turning one off removes that content from your index on the next sync.')">
 			<div v-for="source in searchSources" :key="source.app" class="source-row">
 				<NcCheckboxRadioSwitch
-					:model-value="source.userEnabled"
+					:modelValue="source.userEnabled"
 					type="switch"
 					:disabled="!source.tenantEnabled || savingSources"
-					@update:model-value="onToggleSource(source, $event)">
+					@update:modelValue="onToggleSource(source, $event)">
 					{{ source.label }}
 					<span v-if="!source.tenantEnabled" class="help-text">
 						({{ t('astrolabe', 'disabled by administrator') }})
@@ -112,15 +112,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { loadState } from '@nextcloud/initial-state'
-import { generateUrl } from '@nextcloud/router'
-import { translate as t } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '@nextcloud/dialogs'
-
-import { NcSettingsSection, NcButton, NcNoteCard, NcCheckboxRadioSwitch } from '@nextcloud/vue'
-
+import { loadState } from '@nextcloud/initial-state'
+import { translate as t } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
+import { NcButton, NcCheckboxRadioSwitch, NcNoteCard, NcSettingsSection } from '@nextcloud/vue'
+import { ref } from 'vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import Delete from 'vue-material-design-icons/Delete.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
@@ -216,7 +214,7 @@ async function renameNewestAppToken(name) {
 // session password, so offer a one-click logout to re-authenticate.
 function promptReLogin() {
 	const message = t('astrolabe', 'Your Nextcloud session needs to be refreshed before background indexing can be enabled. This usually happens when you are signed in via a "remember me" cookie. Log out and sign back in, then enable it again?')
-	// eslint-disable-next-line no-alert
+
 	if (confirm(message)) {
 		window.location.href = OC.generateUrl('/logout') + '?requesttoken=' + encodeURIComponent(OC.requestToken)
 	}
@@ -258,7 +256,6 @@ async function enable() {
 }
 
 async function disable() {
-	// eslint-disable-next-line no-alert
 	if (!confirm(t('astrolabe', 'Disable background indexing? The MCP server will lose access to your Nextcloud files.'))) {
 		return
 	}
@@ -290,13 +287,13 @@ async function disable() {
 // error. No purge call — the MCP scanner removes this user's points for the
 // disabled source on its next sync (the per-user consent backstop).
 async function onToggleSource(source, value) {
-	const snapshot = searchSources.value.map(s => ({ ...s }))
+	const snapshot = searchSources.value.map((s) => ({ ...s }))
 	source.userEnabled = value
 	savingSources.value = true
 	try {
 		const disabledSources = searchSources.value
-			.filter(s => s.tenantEnabled && !s.userEnabled)
-			.map(s => s.app)
+			.filter((s) => s.tenantEnabled && !s.userEnabled)
+			.map((s) => s.app)
 		const response = await axios.post(
 			generateUrl('/apps/astrolabe/api/user/search-sources'),
 			{ disabledSources },

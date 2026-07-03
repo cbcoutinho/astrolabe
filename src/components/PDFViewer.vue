@@ -2,7 +2,7 @@
 	<div class="pdf-viewer">
 		<div v-if="loading" class="loading-indicator">
 			<NcLoadingIcon :size="64" />
-			<p>{{ t('astrolabe', 'Loading PDF...') }}</p>
+			<p>{{ t('astrolabe', 'Loading PDF…') }}</p>
 		</div>
 		<div v-else-if="error" class="error-message">
 			<AlertCircle :size="48" />
@@ -12,7 +12,7 @@
 			<img
 				:src="`data:image/png;base64,${imageData}`"
 				class="pdf-page-image"
-				alt="PDF page" />
+				alt="PDF page">
 			<div
 				v-for="(rect, i) in (pageNumber === bboxPage ? highlightBbox : [])"
 				:key="i"
@@ -23,6 +23,10 @@
 </template>
 
 <script setup>
+import axios from '@nextcloud/axios'
+import { translate as t } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
+import { NcLoadingIcon } from '@nextcloud/vue'
 /**
  * PDFViewer - Server-side PDF rendering component.
  *
@@ -33,11 +37,7 @@
  * The server uses PyMuPDF to render PDF pages to PNG images, which are
  * returned as base64-encoded data.
  */
-import { ref, watch, onMounted } from 'vue'
-import axios from '@nextcloud/axios'
-import { generateUrl } from '@nextcloud/router'
-import { translate as t } from '@nextcloud/l10n'
-import { NcLoadingIcon } from '@nextcloud/vue'
+import { onMounted, ref, watch } from 'vue'
 import AlertCircle from 'vue-material-design-icons/AlertCircle.vue'
 
 const props = defineProps({
@@ -59,7 +59,7 @@ const props = defineProps({
 	highlightBbox: {
 		type: Array,
 		default: () => [],
-		validator: (v) => v.every(r => Array.isArray(r) && r.length === 4 && r.every(n => typeof n === 'number')),
+		validator: (v) => v.every((r) => Array.isArray(r) && r.length === 4 && r.every((n) => typeof n === 'number')),
 	},
 	// Page the highlightBbox belongs to. The overlay only renders when
 	// pageNumber === bboxPage so highlights don't bleed across navigation.
@@ -69,7 +69,7 @@ const props = defineProps({
 	},
 })
 
-const emit = defineEmits(['loaded', 'error', 'page-rendered'])
+const emit = defineEmits(['loaded', 'error', 'pageRendered'])
 
 // Reactive state
 const loading = ref(true)
@@ -107,7 +107,7 @@ async function loadPage() {
 
 		// Emit loaded event - App.vue uses this for navigation controls
 		emit('loaded', { totalPages: data.total_pages })
-		emit('page-rendered', { pageNumber: props.pageNumber })
+		emit('pageRendered', { pageNumber: props.pageNumber })
 
 		loading.value = false
 	} catch (err) {
@@ -135,7 +135,7 @@ async function loadPage() {
 }
 
 function highlightStyle(rect) {
-	const [x0, y0, x1, y1] = rect.map(v => Math.max(0, Math.min(1, v)))
+	const [x0, y0, x1, y1] = rect.map((v) => Math.max(0, Math.min(1, v)))
 	return {
 		left: `${x0 * 100}%`,
 		top: `${y0 * 100}%`,
