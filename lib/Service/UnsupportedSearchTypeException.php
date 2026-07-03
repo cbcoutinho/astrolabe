@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace OCA\Astrolabe\Exception;
+namespace OCA\Astrolabe\Service;
 
 /**
  * A search algorithm was requested that the MCP server does not advertise as

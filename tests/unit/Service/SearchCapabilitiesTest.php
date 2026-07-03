@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Service;
 
-use OCA\Astrolabe\Exception\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\SearchCapabilities;
+use OCA\Astrolabe\Service\UnsupportedSearchTypeException;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\MockObject\MockObject;

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service;
 
-use OCA\Astrolabe\Exception\UnsupportedSearchTypeException;
 use OCP\ICacheFactory;
 
 /**

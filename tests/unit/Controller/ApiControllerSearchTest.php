@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
-use OCA\Astrolabe\Exception\UnsupportedSearchTypeException;
+use OCA\Astrolabe\Service\UnsupportedSearchTypeException;
 use OCP\AppFramework\Http;
 
 /**
@@ -53,7 +53,9 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
 		$data = $response->getData();
 		$this->assertFalse($data['success']);
-		$this->assertSame('unsupported_search_type', $data['error']);
+		// Human-readable message (shown verbatim in the UI) + machine-readable code.
+		$this->assertSame('unsupported_search_type', $data['code']);
+		$this->assertStringContainsString('semantic', $data['error']);
 		$this->assertSame('semantic', $data['requested']);
 		$this->assertSame(['bm25'], $data['supported_search_types']);
 	}

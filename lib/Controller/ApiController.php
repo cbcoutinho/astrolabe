@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\AppInfo\Application;
-use OCA\Astrolabe\Exception\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
 use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
+use OCA\Astrolabe\Service\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\AppFramework\Controller;
@@ -83,6 +83,25 @@ class ApiController extends Controller {
 	}
 
 	/**
+	 * Uniform 422 for an algorithm the MCP server does not advertise (ADR-030).
+	 *
+	 * ``error`` is the exception's human-readable sentence — consistent with the
+	 * other errors in this controller, which the UI renders verbatim in an
+	 * NcNoteCard — while ``code`` carries the machine-readable token and
+	 * ``supported_search_types`` the advertised set for programmatic handling.
+	 * Shared by search() and saveSearchSettings() so the payload can't drift.
+	 */
+	private function unsupportedSearchTypeResponse(UnsupportedSearchTypeException $e): JSONResponse {
+		return new JSONResponse([
+			'success' => false,
+			'error' => $e->getMessage(),
+			'code' => 'unsupported_search_type',
+			'requested' => $e->getRequested(),
+			'supported_search_types' => $e->getSupported(),
+		], Http::STATUS_UNPROCESSABLE_ENTITY);
+	}
+
+	/**
 	 * Execute semantic search via MCP server.
 	 *
 	 * AJAX endpoint for vector search UI in app page.
@@ -145,12 +164,7 @@ class ApiController extends Controller {
 		try {
 			$this->searchCapabilities->assertSupported($algorithm);
 		} catch (UnsupportedSearchTypeException $e) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'unsupported_search_type',
-				'requested' => $e->getRequested(),
-				'supported_search_types' => $e->getSupported(),
-			], Http::STATUS_UNPROCESSABLE_ENTITY);
+			return $this->unsupportedSearchTypeResponse($e);
 		}
 
 		// Enforce limit bounds
@@ -330,12 +344,7 @@ class ApiController extends Controller {
 		try {
 			$this->searchCapabilities->assertSupported($algorithm);
 		} catch (UnsupportedSearchTypeException $e) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'unsupported_search_type',
-				'requested' => $e->getRequested(),
-				'supported_search_types' => $e->getSupported(),
-			], Http::STATUS_UNPROCESSABLE_ENTITY);
+			return $this->unsupportedSearchTypeResponse($e);
 		}
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_ALGORITHM, $algorithm);
 

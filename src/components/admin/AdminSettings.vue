@@ -377,10 +377,11 @@ const algorithmOptions = computed(() => {
 		{ id: 'bm25', label: t('astrolabe', 'Keyword (BM25) Only') },
 	]
 	// Only offer query types the MCP server advertises (ADR-030). A keyword-only
-	// server hides Semantic/Hybrid. Absent (older backend or status not loaded
-	// yet) ⇒ show all; the backend rejects an unsupported save (422).
+	// server hides Semantic/Hybrid. Not an array (status not loaded yet or older
+	// backend) ⇒ show all; the backend rejects an unsupported save (422). An
+	// explicit `[]` (vector sync off) ⇒ offer nothing, not everything.
 	const supported = serverStatus.value?.supported_search_types
-	if (!Array.isArray(supported) || supported.length === 0) {
+	if (!Array.isArray(supported)) {
 		return all
 	}
 	return all.filter(opt => supported.includes(opt.id))
