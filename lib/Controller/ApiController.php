@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Exception\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
+use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
@@ -40,6 +42,7 @@ class ApiController extends Controller {
 		private IConfig $config,
 		private IAppConfig $appConfig,
 		private SearchSources $searchSources,
+		private SearchCapabilities $searchCapabilities,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -133,10 +136,21 @@ class ApiController extends Controller {
 			return $accessToken;
 		}
 
-		// Validate algorithm
-		$validAlgorithms = ['semantic', 'bm25', 'hybrid'];
-		if (!in_array($algorithm, $validAlgorithms)) {
-			$algorithm = 'hybrid';
+		// Gate the requested algorithm on what the MCP server actually advertises
+		// (ADR-030). The UI hides unsupported options, but a direct or stale
+		// client can still ask for e.g. "semantic" against a keyword-only server
+		// — reject it here rather than silently coercing to "hybrid" (which would
+		// return BM25 results dressed up as a semantic answer). Mirrors the
+		// server's own 422 backstop.
+		try {
+			$this->searchCapabilities->assertSupported($algorithm);
+		} catch (UnsupportedSearchTypeException $e) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'unsupported_search_type',
+				'requested' => $e->getRequested(),
+				'supported_search_types' => $e->getSupported(),
+			], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 
 		// Enforce limit bounds
@@ -308,9 +322,20 @@ class ApiController extends Controller {
 	): JSONResponse {
 		// Parameters are populated by the framework from the JSON request body
 		// (no need to read php://input directly).
-		$validAlgorithms = ['hybrid', 'semantic', 'bm25'];
-		if (!in_array($algorithm, $validAlgorithms, true)) {
-			$algorithm = AdminSettings::DEFAULT_SEARCH_ALGORITHM;
+		// Admins may only persist an algorithm the MCP server can actually serve
+		// (ADR-030). The admin UI hides unsupported options, but reject an
+		// out-of-band save (e.g. a keyword-only server) rather than silently
+		// coercing to the default, so the stored config never drifts from what
+		// the server advertises.
+		try {
+			$this->searchCapabilities->assertSupported($algorithm);
+		} catch (UnsupportedSearchTypeException $e) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'unsupported_search_type',
+				'requested' => $e->getRequested(),
+				'supported_search_types' => $e->getSupported(),
+			], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_ALGORITHM, $algorithm);
 

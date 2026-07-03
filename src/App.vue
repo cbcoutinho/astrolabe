@@ -508,11 +508,23 @@ export default {
 	data() {
 		// Read the page's initial state once (loadState reads the DOM each call).
 		const appConfig = loadState('astrolabe', 'app-config', {})
+		// Query algorithms the MCP server advertises (ADR-030). Empty/absent ⇒
+		// treat as "all" (older backend); the picker + default fall back to the
+		// full set and the server's 422 stays the backstop.
+		const supportedSearchTypes = appConfig.supportedSearchTypes ?? []
+		// Default to hybrid when the server offers it (or when unknown), else the
+		// first advertised type — so the initially-selected algorithm is always
+		// one the server can serve (keyword-only ⇒ bm25).
+		const defaultAlgorithm = (supportedSearchTypes.length === 0 || supportedSearchTypes.includes('hybrid'))
+			? 'hybrid'
+			: supportedSearchTypes[0]
 		return {
 			activeSection: 'search',
 			// Search state
 			query: '',
-			algorithm: 'hybrid',
+			algorithm: defaultAlgorithm,
+			// Query types the server can serve; gates algorithmOptions below.
+			supportedSearchTypes,
 			showAdvanced: false,
 			selectedDocTypes: [],
 			// ADR-027 modified-date range filter. Bound to native
@@ -571,11 +583,19 @@ export default {
 	},
 	computed: {
 		algorithmOptions() {
-			return [
+			const all = [
 				{ id: 'hybrid', label: this.t('astrolabe', 'Hybrid') },
 				{ id: 'semantic', label: this.t('astrolabe', 'Semantic') },
 				{ id: 'bm25', label: this.t('astrolabe', 'Keyword (BM25)') },
 			]
+			// Only offer query types the MCP server advertises (ADR-030): a
+			// keyword-only server hides Semantic and Hybrid. When the server
+			// didn't advertise the set (older backend), show all — the backend
+			// still rejects an unsupported algorithm (422) server-side.
+			if (!this.supportedSearchTypes || this.supportedSearchTypes.length === 0) {
+				return all
+			}
+			return all.filter(opt => this.supportedSearchTypes.includes(opt.id))
 		},
 		docTypeOptions() {
 			const all = [

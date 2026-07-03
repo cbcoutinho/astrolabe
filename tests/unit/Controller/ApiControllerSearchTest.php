@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
+use OCA\Astrolabe\Exception\UnsupportedSearchTypeException;
 use OCP\AppFramework\Http;
 
 /**
@@ -35,6 +36,26 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		$this->assertFalse($response->getData()['success']);
+	}
+
+	public function testRejectsUnsupportedAlgorithmWith422(): void {
+		// ADR-030: on a keyword-only server the picker hides Semantic, but a
+		// direct/stale client can still ask for it. The guard rejects it with 422
+		// (mirroring the MCP server's backstop) and never calls the MCP client.
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('assertSupported')
+			->with('semantic')
+			->willThrowException(new UnsupportedSearchTypeException('semantic', ['bm25']));
+		$this->client->expects($this->never())->method('search');
+
+		$response = $this->controller->search(query: 'anything', algorithm: 'semantic');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$data = $response->getData();
+		$this->assertFalse($data['success']);
+		$this->assertSame('unsupported_search_type', $data['error']);
+		$this->assertSame('semantic', $data['requested']);
+		$this->assertSame(['bm25'], $data['supported_search_types']);
 	}
 
 	public function testForwardsRfc3339BoundsToClient(): void {

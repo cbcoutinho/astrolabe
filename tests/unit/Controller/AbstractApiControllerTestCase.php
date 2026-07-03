@@ -7,6 +7,7 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 use OCA\Astrolabe\Controller\ApiController;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
+use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
 use OCP\IAppConfig;
 use OCP\IConfig;
@@ -33,6 +34,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 	protected IConfig&MockObject $config;
 	protected IAppConfig&MockObject $appConfig;
 	protected SearchSources&MockObject $searchSources;
+	protected SearchCapabilities&MockObject $searchCapabilities;
 	protected ApiController $controller;
 
 	protected function setUp(): void {
@@ -51,6 +53,12 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		// that exercise the consent gate override this per case.
 		$this->searchSources->method('effectiveEnabledDocTypes')
 			->willReturn(['note', 'file', 'deck_card', 'calendar', 'contact', 'news_item', 'mail_message']);
+		$this->searchCapabilities = $this->createMock(SearchCapabilities::class);
+		// Default: the MCP server supports every algorithm, so search tests see
+		// the pre-feature behaviour. The default void mock of assertSupported()
+		// never throws; tests exercising the keyword-only gate override it.
+		$this->searchCapabilities->method('getSupportedSearchTypes')
+			->willReturn(['semantic', 'bm25', 'hybrid']);
 
 		$this->controller = new ApiController(
 			'astrolabe',
@@ -62,6 +70,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			$this->config,
 			$this->appConfig,
 			$this->searchSources,
+			$this->searchCapabilities,
 		);
 	}
 
