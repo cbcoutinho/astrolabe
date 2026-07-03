@@ -211,8 +211,9 @@
 						:model-value="selectedAlgorithmOption"
 						:options="algorithmOptions"
 						:input-label="t('astrolabe', 'Search Algorithm')"
+						:clearable="false"
 						class="form-field"
-						@update:model-value="settings.algorithm = $event ? $event.id : 'hybrid'" />
+						@update:model-value="settings.algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : 'hybrid')" />
 					<p class="help-text">
 						{{ t('astrolabe', 'Hybrid combines semantic understanding with keyword matching. Semantic finds conceptually similar content. BM25 matches exact keywords.') }}
 					</p>
@@ -370,11 +371,22 @@ const confirmButtons = computed(() => [
 ])
 
 // Computed properties
-const algorithmOptions = computed(() => [
-	{ id: 'hybrid', label: t('astrolabe', 'Hybrid (Recommended)') },
-	{ id: 'semantic', label: t('astrolabe', 'Semantic Only') },
-	{ id: 'bm25', label: t('astrolabe', 'Keyword (BM25) Only') },
-])
+const algorithmOptions = computed(() => {
+	const all = [
+		{ id: 'hybrid', label: t('astrolabe', 'Hybrid (Recommended)') },
+		{ id: 'semantic', label: t('astrolabe', 'Semantic Only') },
+		{ id: 'bm25', label: t('astrolabe', 'Keyword (BM25) Only') },
+	]
+	// Only offer query types the MCP server advertises (ADR-030). A keyword-only
+	// server hides Semantic/Hybrid. Not an array (status not loaded yet or older
+	// backend) ⇒ show all; the backend rejects an unsupported save (422). An
+	// explicit `[]` (vector sync off) ⇒ offer nothing, not everything.
+	const supported = serverStatus.value?.supported_search_types
+	if (!Array.isArray(supported)) {
+		return all
+	}
+	return all.filter(opt => supported.includes(opt.id))
+})
 
 const fusionOptions = computed(() => [
 	{ id: 'rrf', label: t('astrolabe', 'RRF - Reciprocal Rank Fusion (Recommended)') },
@@ -402,6 +414,15 @@ async function loadServerStatus() {
 		if (statusResponse.data.success) {
 			serverStatus.value = statusResponse.data.status
 			vectorSyncEnabled.value = statusResponse.data.status?.vector_sync_enabled ?? false
+
+			// Keep the selected algorithm in step with what the server can serve
+			// (ADR-030): if the stored algorithm is no longer advertised (e.g. the
+			// server switched to keyword-only), fall back to a supported type so
+			// Save can't submit — and 422 on — an unsupported value.
+			const supported = statusResponse.data.status?.supported_search_types
+			if (Array.isArray(supported) && supported.length > 0 && !supported.includes(settings.value.algorithm)) {
+				settings.value.algorithm = supported.includes('hybrid') ? 'hybrid' : supported[0]
+			}
 		}
 
 		// Fetch vector sync status only if enabled (non-fatal)

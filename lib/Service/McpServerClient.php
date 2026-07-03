@@ -219,10 +219,18 @@ class McpServerClient {
 	 *   version?: string,
 	 *   auth_mode?: string,
 	 *   vector_sync_enabled?: bool,
+	 *   webhooks_enabled?: bool,
+	 *   supported_search_types?: list<string>,
 	 *   uptime_seconds?: int,
 	 *   management_api_version?: string,
 	 *   error?: string
 	 * }
+	 *
+	 * The `supported_search_types` array (ADR-030) advertises which query
+	 * algorithms this server can serve — `["semantic","bm25","hybrid"]` in
+	 * hybrid mode, `["bm25"]` in keyword mode, `[]` when vector sync is off.
+	 * Consumed by {@see \OCA\Astrolabe\Service\SearchCapabilities} to gate the
+	 * algorithm picker and reject unsupported requests.
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */

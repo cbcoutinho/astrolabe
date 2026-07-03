@@ -187,6 +187,7 @@ final class ApiControllerSearchSourcesTest extends AbstractApiControllerTestCase
 			$this->config,
 			$this->appConfig,
 			$searchSources,
+			$this->searchCapabilities,
 		);
 	}
 

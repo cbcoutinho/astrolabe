@@ -84,8 +84,10 @@ final class McpServerClientPactTest extends TestCase {
 			->setMethod('GET')
 			->setPath('/api/v1/status');
 
-		// The five fields McpServerClient::getStatus() relies on; matched by type
-		// so the contract pins the shape, not the MCP server's exact values.
+		// The fields McpServerClient::getStatus() relies on; matched by type so the
+		// contract pins the shape, not the MCP server's exact values.
+		// ``supported_search_types`` (ADR-030) is the query-type vocabulary the
+		// UI gates its algorithm picker on and SearchCapabilities enforces.
 		$response = (new ProviderResponse())
 			->setStatus(200)
 			->addHeader('Content-Type', 'application/json')
@@ -95,6 +97,7 @@ final class McpServerClientPactTest extends TestCase {
 				'vector_sync_enabled' => $matcher->boolean(false),
 				'uptime_seconds' => $matcher->integer(123),
 				'management_api_version' => $matcher->like('1.0'),
+				'supported_search_types' => $matcher->eachLike('semantic'),
 			]);
 
 		$builder = new InteractionBuilder($config);
@@ -114,6 +117,59 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertFalse($status['vector_sync_enabled'] ?? null);
 		$this->assertSame(123, $status['uptime_seconds'] ?? null);
 		$this->assertSame('1.0', $status['management_api_version'] ?? null);
+		$this->assertSame(['semantic'], $status['supported_search_types'] ?? null);
+	}
+
+	/**
+	 * Strict gating contract (ADR-030): when the MCP server runs keyword-only
+	 * (SEARCH_MODE=keyword, advertising ``supported_search_types: ["bm25"]``), an
+	 * explicit ``semantic`` search request is rejected with HTTP 422
+	 * ``unsupported_search_type`` rather than silently coerced to BM25.
+	 *
+	 * astrolabe gates the request client-side from ``/api/v1/status`` (see
+	 * SearchCapabilities) and hides the option in its UI, but this pins the
+	 * server-side backstop the client relies on. The provider state names the
+	 * precondition the MCP server sets up (a keyword-only instance); it matches
+	 * the handler registered on the provider side.
+	 */
+	public function testSearchRejectsUnsupportedAlgorithmInKeywordMode(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/vector-viz/search')
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => $matcher->like('leadership award'),
+				// The field under test — pinned exactly; the rest are incidental.
+				'algorithm' => 'semantic',
+				'limit' => $matcher->like(10),
+				'include_pca' => $matcher->boolean(true),
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(422)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'error' => 'unsupported_search_type',
+				'requested' => 'semantic',
+				'supported_search_types' => $matcher->eachLike('bm25'),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('the server advertises keyword-only search support')
+			->uponReceiving('a semantic search request when the server is in keyword mode')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->search('leadership award', 'semantic');
+
+		// The client maps the non-2xx status to a structured error array; the
+		// contract's job is to pin the request shape + the 422 response body.
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertArrayHasKey('error', $result);
 	}
 
 	/**

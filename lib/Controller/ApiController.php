@@ -8,7 +8,9 @@ use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
+use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
+use OCA\Astrolabe\Service\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\AppFramework\Controller;
@@ -40,6 +42,7 @@ class ApiController extends Controller {
 		private IConfig $config,
 		private IAppConfig $appConfig,
 		private SearchSources $searchSources,
+		private SearchCapabilities $searchCapabilities,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -77,6 +80,25 @@ class ApiController extends Controller {
 				'error' => $e->getMessage(),
 			], Http::STATUS_SERVICE_UNAVAILABLE);
 		}
+	}
+
+	/**
+	 * Uniform 422 for an algorithm the MCP server does not advertise (ADR-030).
+	 *
+	 * ``error`` is the exception's human-readable sentence — consistent with the
+	 * other errors in this controller, which the UI renders verbatim in an
+	 * NcNoteCard — while ``code`` carries the machine-readable token and
+	 * ``supported_search_types`` the advertised set for programmatic handling.
+	 * Shared by search() and saveSearchSettings() so the payload can't drift.
+	 */
+	private function unsupportedSearchTypeResponse(UnsupportedSearchTypeException $e): JSONResponse {
+		return new JSONResponse([
+			'success' => false,
+			'error' => $e->getMessage(),
+			'code' => 'unsupported_search_type',
+			'requested' => $e->getRequested(),
+			'supported_search_types' => $e->getSupported(),
+		], Http::STATUS_UNPROCESSABLE_ENTITY);
 	}
 
 	/**
@@ -128,15 +150,20 @@ class ApiController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
+		// Gate the requested algorithm on what the MCP server advertises (ADR-030)
+		// *before* minting a token or hitting the MCP server, so a direct or stale
+		// client asking for e.g. "semantic" against a keyword-only server fails
+		// fast with a 422 rather than silently coercing to "hybrid" (BM25 results
+		// dressed up as a semantic answer). Mirrors the server's own 422 backstop.
+		try {
+			$this->searchCapabilities->assertSupported($algorithm);
+		} catch (UnsupportedSearchTypeException $e) {
+			return $this->unsupportedSearchTypeResponse($e);
+		}
+
 		$accessToken = $this->tokenForCurrentUser();
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
-		}
-
-		// Validate algorithm
-		$validAlgorithms = ['semantic', 'bm25', 'hybrid'];
-		if (!in_array($algorithm, $validAlgorithms)) {
-			$algorithm = 'hybrid';
 		}
 
 		// Enforce limit bounds
@@ -308,9 +335,15 @@ class ApiController extends Controller {
 	): JSONResponse {
 		// Parameters are populated by the framework from the JSON request body
 		// (no need to read php://input directly).
-		$validAlgorithms = ['hybrid', 'semantic', 'bm25'];
-		if (!in_array($algorithm, $validAlgorithms, true)) {
-			$algorithm = AdminSettings::DEFAULT_SEARCH_ALGORITHM;
+		// Admins may only persist an algorithm the MCP server can actually serve
+		// (ADR-030). The admin UI hides unsupported options, but reject an
+		// out-of-band save (e.g. a keyword-only server) rather than silently
+		// coercing to the default, so the stored config never drifts from what
+		// the server advertises.
+		try {
+			$this->searchCapabilities->assertSupported($algorithm);
+		} catch (UnsupportedSearchTypeException $e) {
+			return $this->unsupportedSearchTypeResponse($e);
 		}
 		$this->config->setAppValue($this->appName, AdminSettings::SETTING_SEARCH_ALGORITHM, $algorithm);
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\AppFramework\Controller;
@@ -27,6 +28,7 @@ class PageController extends Controller {
 		private IAppConfig $appConfig,
 		private IInitialState $initialState,
 		private SearchSources $searchSources,
+		private SearchCapabilities $searchCapabilities,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -49,6 +51,11 @@ class PageController extends Controller {
 			// type filter only offers sources enabled for this user. The search
 			// backend already intersects requested types with this set.
 			'enabledDocTypes' => $this->searchSources->effectiveEnabledDocTypes(),
+			// Query algorithms the MCP server can actually serve (ADR-030), so
+			// the algorithm picker hides semantic/hybrid when the server runs
+			// keyword-only. The search backend rejects unsupported requests (422)
+			// as the backstop.
+			'supportedSearchTypes' => $this->searchCapabilities->getSupportedSearchTypes(),
 		]);
 
 		return new TemplateResponse(

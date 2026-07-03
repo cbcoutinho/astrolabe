@@ -61,12 +61,13 @@
 							:model-value="selectedAlgorithmOption"
 							:options="algorithmOptions"
 							:placeholder="t('astrolabe', 'Algorithm')"
+							:clearable="false"
 							class="mcp-algorithm-select"
-							@update:model-value="algorithm = $event ? $event.id : 'hybrid'" />
+							@update:model-value="algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : '')" />
 
 						<NcButton
 							variant="primary"
-							:disabled="!query.trim() || loading"
+							:disabled="!query.trim() || loading || !algorithm"
 							@click="performSearch">
 							<template #icon>
 								<Magnify :size="20" />
@@ -508,11 +509,28 @@ export default {
 	data() {
 		// Read the page's initial state once (loadState reads the DOM each call).
 		const appConfig = loadState('astrolabe', 'app-config', {})
+		// Query algorithms the MCP server advertises (ADR-030). Distinguish three
+		// states: `null` = the field was absent (older backend / unknown) ⇒ treat
+		// permissively as "all"; a populated array ⇒ gate to it; an explicit `[]`
+		// (vector sync off) ⇒ nothing is available. Collapsing `[]` into "all"
+		// would offer Hybrid on a server that supports nothing, so every search
+		// would hit the 422 backstop.
+		const supportedSearchTypes = Array.isArray(appConfig.supportedSearchTypes)
+			? appConfig.supportedSearchTypes
+			: null
+		// Default to hybrid when the server offers it (or when unknown), else the
+		// first advertised type, else '' when nothing is available — so the
+		// initially-selected algorithm is always one the server can serve.
+		const defaultAlgorithm = (supportedSearchTypes === null || supportedSearchTypes.includes('hybrid'))
+			? 'hybrid'
+			: (supportedSearchTypes[0] ?? '')
 		return {
 			activeSection: 'search',
 			// Search state
 			query: '',
-			algorithm: 'hybrid',
+			algorithm: defaultAlgorithm,
+			// Query types the server can serve; gates algorithmOptions below.
+			supportedSearchTypes,
 			showAdvanced: false,
 			selectedDocTypes: [],
 			// ADR-027 modified-date range filter. Bound to native
@@ -571,11 +589,20 @@ export default {
 	},
 	computed: {
 		algorithmOptions() {
-			return [
+			const all = [
 				{ id: 'hybrid', label: this.t('astrolabe', 'Hybrid') },
 				{ id: 'semantic', label: this.t('astrolabe', 'Semantic') },
 				{ id: 'bm25', label: this.t('astrolabe', 'Keyword (BM25)') },
 			]
+			// Only offer query types the MCP server advertises (ADR-030): a
+			// keyword-only server hides Semantic and Hybrid. `null` = the server
+			// didn't advertise the set (older backend) ⇒ show all (the backend
+			// still rejects an unsupported algorithm 422-side); an explicit `[]`
+			// (vector sync off) ⇒ offer nothing, not everything.
+			if (this.supportedSearchTypes === null) {
+				return all
+			}
+			return all.filter(opt => this.supportedSearchTypes.includes(opt.id))
 		},
 		docTypeOptions() {
 			const all = [
