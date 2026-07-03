@@ -80,15 +80,6 @@ final class SearchCapabilitiesTest extends TestCase {
 		$this->assertSame(['bm25'], $this->subject()->getSupportedSearchTypes());
 	}
 
-	public function testSupportsReflectsAdvertisedSet(): void {
-		$this->client->method('getStatus')->willReturn([
-			'supported_search_types' => ['bm25'],
-		]);
-		$subject = $this->subject();
-		$this->assertTrue($subject->supports('bm25'));
-		$this->assertFalse($subject->supports('semantic'));
-	}
-
 	public function testAssertSupportedThrowsWithAdvertisedSet(): void {
 		$this->client->method('getStatus')->willReturn([
 			'supported_search_types' => ['bm25'],

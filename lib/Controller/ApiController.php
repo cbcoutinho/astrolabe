@@ -150,21 +150,20 @@ class ApiController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		$accessToken = $this->tokenForCurrentUser();
-		if ($accessToken instanceof JSONResponse) {
-			return $accessToken;
-		}
-
-		// Gate the requested algorithm on what the MCP server actually advertises
-		// (ADR-030). The UI hides unsupported options, but a direct or stale
-		// client can still ask for e.g. "semantic" against a keyword-only server
-		// — reject it here rather than silently coercing to "hybrid" (which would
-		// return BM25 results dressed up as a semantic answer). Mirrors the
-		// server's own 422 backstop.
+		// Gate the requested algorithm on what the MCP server advertises (ADR-030)
+		// *before* minting a token or hitting the MCP server, so a direct or stale
+		// client asking for e.g. "semantic" against a keyword-only server fails
+		// fast with a 422 rather than silently coercing to "hybrid" (BM25 results
+		// dressed up as a semantic answer). Mirrors the server's own 422 backstop.
 		try {
 			$this->searchCapabilities->assertSupported($algorithm);
 		} catch (UnsupportedSearchTypeException $e) {
 			return $this->unsupportedSearchTypeResponse($e);
+		}
+
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
 		}
 
 		// Enforce limit bounds

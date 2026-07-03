@@ -78,20 +78,17 @@ class SearchCapabilities {
 	}
 
 	/**
-	 * Whether the MCP server advertises support for the given algorithm.
-	 */
-	public function supports(string $algorithm): bool {
-		return in_array($algorithm, $this->getSupportedSearchTypes(), true);
-	}
-
-	/**
 	 * Assert the algorithm is one the server can serve, else throw.
 	 *
 	 * @throws UnsupportedSearchTypeException
 	 */
 	public function assertSupported(string $algorithm): void {
-		if (!$this->supports($algorithm)) {
-			throw new UnsupportedSearchTypeException($algorithm, $this->getSupportedSearchTypes());
+		// Fetch once and reuse: calling getSupportedSearchTypes() again for the
+		// exception would re-evaluate against a possibly-expired cache, so the
+		// thrown set could disagree with the set we actually gated on.
+		$supported = $this->getSupportedSearchTypes();
+		if (!in_array($algorithm, $supported, true)) {
+			throw new UnsupportedSearchTypeException($algorithm, $supported);
 		}
 	}
 }
