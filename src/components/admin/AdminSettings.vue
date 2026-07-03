@@ -211,8 +211,9 @@
 						:model-value="selectedAlgorithmOption"
 						:options="algorithmOptions"
 						:input-label="t('astrolabe', 'Search Algorithm')"
+						:clearable="false"
 						class="form-field"
-						@update:model-value="settings.algorithm = $event ? $event.id : 'hybrid'" />
+						@update:model-value="settings.algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : 'hybrid')" />
 					<p class="help-text">
 						{{ t('astrolabe', 'Hybrid combines semantic understanding with keyword matching. Semantic finds conceptually similar content. BM25 matches exact keywords.') }}
 					</p>

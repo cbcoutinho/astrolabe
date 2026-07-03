@@ -61,12 +61,13 @@
 							:model-value="selectedAlgorithmOption"
 							:options="algorithmOptions"
 							:placeholder="t('astrolabe', 'Algorithm')"
+							:clearable="false"
 							class="mcp-algorithm-select"
-							@update:model-value="algorithm = $event ? $event.id : 'hybrid'" />
+							@update:model-value="algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : '')" />
 
 						<NcButton
 							variant="primary"
-							:disabled="!query.trim() || loading"
+							:disabled="!query.trim() || loading || !algorithm"
 							@click="performSearch">
 							<template #icon>
 								<Magnify :size="20" />
