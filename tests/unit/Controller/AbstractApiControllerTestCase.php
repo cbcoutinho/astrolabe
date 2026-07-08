@@ -9,6 +9,7 @@ use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
+use OCP\App\IAppManager;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IRequest;
@@ -35,6 +36,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 	protected IAppConfig&MockObject $appConfig;
 	protected SearchSources&MockObject $searchSources;
 	protected SearchCapabilities&MockObject $searchCapabilities;
+	protected IAppManager&MockObject $appManager;
 	protected ApiController $controller;
 
 	protected function setUp(): void {
@@ -59,6 +61,10 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		// never throws; tests exercising the keyword-only gate override it.
 		$this->searchCapabilities->method('getSupportedSearchTypes')
 			->willReturn(['semantic', 'bm25', 'hybrid']);
+		$this->appManager = $this->createMock(IAppManager::class);
+		// Default: the core "files" app is installed, so the always-available
+		// files/notes presets surface. Tests that assert on other apps override.
+		$this->appManager->method('getInstalledApps')->willReturn(['files']);
 
 		$this->controller = new ApiController(
 			'astrolabe',
@@ -71,6 +77,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			$this->appConfig,
 			$this->searchSources,
 			$this->searchCapabilities,
+			$this->appManager,
 		);
 	}
 

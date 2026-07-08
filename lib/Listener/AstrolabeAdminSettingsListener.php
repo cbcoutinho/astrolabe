@@ -20,6 +20,16 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		'mcp_server_url',
 		'mcp_server_public_url',
 		'astrolabe_client_id',
+		'mcp_webhook_secret',
+	];
+
+	/**
+	 * Fields holding a secret: never echoed back on Get, and an empty value on
+	 * Set means "leave the stored value unchanged" (so the admin needn't re-enter
+	 * the secret on every save).
+	 */
+	private const SECRET_FIELDS = [
+		'mcp_webhook_secret',
 	];
 
 	public function __construct(
@@ -55,6 +65,13 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 			return;
 		}
 
+		// Never echo a stored secret back to the browser; the admin UI shows a
+		// "configured" indicator (via Admin::getForm initial state) instead.
+		if (in_array($fieldId, self::SECRET_FIELDS, true)) {
+			$event->setValue('');
+			return;
+		}
+
 		$event->setValue($this->config->getSystemValue($fieldId, ''));
 	}
 
@@ -65,8 +82,17 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 			return;
 		}
 
+		$value = (string)$event->getValue();
+
+		// Empty submission for a secret field means "keep the current value" — the
+		// field is rendered blank on Get, so a blank save must not clobber it.
+		if ($value === '' && in_array($fieldId, self::SECRET_FIELDS, true)) {
+			$event->stopPropagation();
+			return;
+		}
+
 		try {
-			$this->config->setSystemValue($fieldId, (string)$event->getValue());
+			$this->config->setSystemValue($fieldId, $value);
 			$this->logger->info('Astrolabe admin setting updated', [
 				'field' => $fieldId,
 				'app' => Application::APP_ID,

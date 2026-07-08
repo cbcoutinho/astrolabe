@@ -76,6 +76,38 @@ final class McpServerClientPactTest extends TestCase {
 		);
 	}
 
+	/**
+	 * As clientFor(), but also configures the shared webhook secret so
+	 * McpServerClient::sendSyncEvent() authenticates to the ingress instead of
+	 * short-circuiting (it refuses to POST an unauthenticated payload).
+	 */
+	private function clientForWithWebhookSecret(MockServerConfig $config, string $secret): McpServerClient {
+		$ncConfig = $this->createMock(IConfig::class);
+		$ncConfig->method('getSystemValue')
+			->willReturnCallback(function (string $key, $default) use ($config, $secret) {
+				if ($key === 'mcp_server_url') {
+					return (string)$config->getBaseUri();
+				}
+				if ($key === 'mcp_webhook_secret') {
+					return $secret;
+				}
+				return $default;
+			});
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('getAppVersion')->willReturn('0.0.0');
+
+		$factory = new HttpFactory();
+		return new McpServerClient(
+			new GuzzleClient(['http_errors' => false]),
+			$factory,
+			$factory,
+			$ncConfig,
+			$this->createMock(LoggerInterface::class),
+			$appManager,
+		);
+	}
+
 	public function testGetStatusHonoursTheManagementContract(): void {
 		$matcher = new Matcher();
 		$config = $this->mockServerConfig();
@@ -223,5 +255,71 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
 		$this->assertArrayNotHasKey('error', $result);
 		$this->assertSame(4, $result['purged']['file'] ?? null);
+	}
+
+	/**
+	 * Native-sync delivery contract: astrolabe's own listeners POST the Nextcloud
+	 * webhook envelope to the MCP server's ingress ``POST /webhooks/nextcloud``
+	 * (guarded by the shared WEBHOOK_SECRET), replacing the previous
+	 * "register webhooks via the MCP server" indirection. This pins the request
+	 * shape the MCP server's webhook_parser.py reads — ``event`` (with ``class``
+	 * and the serialized node), ``user.uid``, ``time`` — plus the bearer-secret
+	 * header and the ``{status}`` acknowledgement the delivery job checks.
+	 *
+	 * Provider verification of this authenticated ingress is the deferred
+	 * follow-up (ADR-029); the published pact rides the broker's pending flow.
+	 */
+	public function testSendSyncEventHonoursTheIngressContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/webhooks/nextcloud')
+			->addHeader('Authorization', $matcher->regex('Bearer test-secret', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'event' => [
+					'node' => [
+						'id' => $matcher->integer(42),
+						'path' => $matcher->like('/admin/files/Notes/todo.md'),
+					],
+					'class' => $matcher->like('OCP\\Files\\Events\\Node\\NodeWrittenEvent'),
+				],
+				'user' => [
+					'uid' => $matcher->like('admin'),
+					'displayName' => $matcher->like('admin'),
+				],
+				'time' => $matcher->integer(1720000000),
+			]);
+
+		// The ingress acknowledges receipt fast (queued/ignored); the delivery job
+		// only checks for a non-error result, so the contract pins ``status``.
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'status' => $matcher->like('queued'),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->uponReceiving('a native sync event for an indexed note')
+			->with($request)
+			->willRespondWith($response);
+
+		$envelope = [
+			'event' => [
+				'node' => ['id' => 42, 'path' => '/admin/files/Notes/todo.md'],
+				'class' => 'OCP\\Files\\Events\\Node\\NodeWrittenEvent',
+			],
+			'user' => ['uid' => 'admin', 'displayName' => 'admin'],
+			'time' => 1720000000,
+		];
+		$result = $this->clientForWithWebhookSecret($config, 'test-secret')->sendSyncEvent($envelope);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertArrayNotHasKey('error', $result);
+		$this->assertSame('queued', $result['status'] ?? null);
 	}
 }

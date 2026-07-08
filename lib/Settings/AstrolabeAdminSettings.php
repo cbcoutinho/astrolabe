@@ -67,6 +67,19 @@ class AstrolabeAdminSettings implements IDeclarativeSettingsForm {
 					'placeholder' => $this->l->t('Enter OIDC client ID'),
 					'default' => '',
 				],
+				[
+					'id' => 'mcp_webhook_secret',
+					'title' => $this->l->t('Webhook shared secret'),
+					'description' => $this->l->t(
+						'Shared secret Astrolabe sends when delivering change events to the '
+						. "MCP server's webhook ingress. Must match the MCP server's "
+						. 'WEBHOOK_SECRET. Leave blank to keep the current value unchanged; '
+						. 'the stored value is never displayed here.'
+					),
+					'type' => DeclarativeSettingsTypes::PASSWORD,
+					'placeholder' => $this->l->t('Enter webhook secret'),
+					'default' => '',
+				],
 			],
 		];
 	}

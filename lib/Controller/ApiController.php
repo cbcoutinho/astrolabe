@@ -13,6 +13,7 @@ use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Service\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
+use OCP\App\IAppManager;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -43,6 +44,7 @@ class ApiController extends Controller {
 		private IAppConfig $appConfig,
 		private SearchSources $searchSources,
 		private SearchCapabilities $searchCapabilities,
+		private IAppManager $appManager,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -497,73 +499,33 @@ class ApiController extends Controller {
 	}
 
 	/**
-	 * List webhook presets and which are currently enabled. Admin-only.
+	 * List sync presets and which are currently enabled. Admin-only.
 	 *
-	 * The admin's session-derived JWT is used to talk to the MCP server;
-	 * there is no longer a separate "must enable semantic search first"
-	 * gate — being a logged-in Nextcloud admin is enough.
+	 * Native sync (ADR-…): Astrolabe's own event listeners deliver change events
+	 * to the MCP server, so enabling a preset is a local decision — which presets
+	 * are on is stored in app-config, and installed-app filtering happens locally
+	 * via IAppManager. No MCP round-trip or token is needed here.
 	 */
 	public function getWebhookPresets(): JSONResponse {
-		$accessToken = $this->tokenForCurrentUser();
-		if ($accessToken instanceof JSONResponse) {
-			return $accessToken;
-		}
-
-		$installedAppsResult = $this->client->getInstalledApps($accessToken);
-		if (isset($installedAppsResult['error'])) {
-			return $this->mcpErrorResponse($installedAppsResult);
-		}
-		$installedApps = $installedAppsResult['apps'] ?? [];
-
-		$webhooksResult = $this->client->listWebhooks($accessToken);
-		if (isset($webhooksResult['error'])) {
-			return $this->mcpErrorResponse($webhooksResult);
-		}
-		$registeredWebhooks = $webhooksResult['webhooks'] ?? [];
-
+		$installedApps = $this->appManager->getInstalledApps();
 		$presets = WebhookPresets::filterPresetsByInstalledApps($installedApps);
+		$enabled = $this->enabledSyncPresets();
 
-		// Mark each preset enabled iff all of its (event, filter) pairs
-		// match a registered webhook. Both criteria are required because
-		// Notes and Files both fire FILE_EVENT_* — only the filter
-		// distinguishes them.
 		$presetsWithStatus = [];
 		foreach ($presets as $presetId => $preset) {
-			$allEventsRegistered = true;
-			foreach ($preset['events'] as $presetEvent) {
-				$eventMatched = false;
-				foreach ($registeredWebhooks as $webhook) {
-					if ($webhook['event'] !== $presetEvent['event']) {
-						continue;
-					}
-					$presetFilter = !empty($presetEvent['filter']) ? $presetEvent['filter'] : null;
-					$webhookFilter = !empty($webhook['eventFilter']) ? $webhook['eventFilter'] : null;
-					if (json_encode($presetFilter) === json_encode($webhookFilter)) {
-						$eventMatched = true;
-						break;
-					}
-				}
-				if (!$eventMatched) {
-					$allEventsRegistered = false;
-					break;
-				}
-			}
-			$presetsWithStatus[$presetId] = array_merge($preset, ['enabled' => $allEventsRegistered]);
+			$presetsWithStatus[$presetId] = array_merge($preset, [
+				'enabled' => in_array($presetId, $enabled, true),
+			]);
 		}
 
 		return new JSONResponse(['success' => true, 'presets' => $presetsWithStatus]);
 	}
 
 	/**
-	 * Enable a webhook preset by registering each of its events with
-	 * the MCP server. Admin-only.
+	 * Enable a sync preset: add it to the enabled-presets app-config so the
+	 * native listener (subscribed at boot) starts delivering its events. Admin-only.
 	 */
 	public function enableWebhookPreset(string $presetId): JSONResponse {
-		$accessToken = $this->tokenForCurrentUser();
-		if ($accessToken instanceof JSONResponse) {
-			return $accessToken;
-		}
-
 		$preset = WebhookPresets::getPreset($presetId);
 		if ($preset === null) {
 			return new JSONResponse([
@@ -572,64 +534,25 @@ class ApiController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		$mcpServerUrl = $this->client->getServerUrl();
-		$callbackUri = $mcpServerUrl . '/webhooks/nextcloud';
-
-		$registered = [];
-		$errors = [];
-		foreach ($preset['events'] as $eventConfig) {
-			$result = $this->client->createWebhook(
-				$eventConfig['event'],
-				$callbackUri,
-				!empty($eventConfig['filter']) ? $eventConfig['filter'] : null,
-				$accessToken,
-			);
-
-			if (isset($result['error'])) {
-				// Bail out immediately on provisioning-required — every
-				// subsequent createWebhook would fail identically.
-				if (!empty($result['provisioning_required'])) {
-					return $this->mcpErrorResponse($result);
-				}
-				$errors[] = [
-					'event' => $eventConfig['event'],
-					'error' => $result['error'],
-				];
-			} else {
-				$registered[] = $result;
-			}
+		$enabled = $this->enabledSyncPresets();
+		if (!in_array($presetId, $enabled, true)) {
+			$enabled[] = $presetId;
+			$this->saveEnabledSyncPresets($enabled);
 		}
 
-		if (!empty($errors)) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'Failed to register some webhooks',
-				'registered' => $registered,
-				'errors' => $errors,
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
-		}
-
-		$this->logger->info("Enabled webhook preset $presetId", [
-			'preset_id' => $presetId,
-			'webhooks_registered' => count($registered),
-		]);
+		$this->logger->info("Enabled sync preset $presetId", ['preset_id' => $presetId]);
 
 		return new JSONResponse([
 			'success' => true,
 			'message' => "Enabled {$preset['name']}",
-			'webhooks' => $registered,
 		]);
 	}
 
 	/**
-	 * Disable a webhook preset by deleting its registered events. Admin-only.
+	 * Disable a sync preset: remove it from the enabled-presets app-config so the
+	 * native listener stops delivering its events. Admin-only.
 	 */
 	public function disableWebhookPreset(string $presetId): JSONResponse {
-		$accessToken = $this->tokenForCurrentUser();
-		if ($accessToken instanceof JSONResponse) {
-			return $accessToken;
-		}
-
 		$preset = WebhookPresets::getPreset($presetId);
 		if ($preset === null) {
 			return new JSONResponse([
@@ -638,67 +561,56 @@ class ApiController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		$webhooksResult = $this->client->listWebhooks($accessToken);
-		if (isset($webhooksResult['error'])) {
-			return $this->mcpErrorResponse($webhooksResult);
-		}
-		$registeredWebhooks = $webhooksResult['webhooks'] ?? [];
-
-		// Match BOTH event type AND filter so we don't blow away webhooks
-		// belonging to a different preset that happens to share an event
-		// type (Notes vs Files both use FILE_EVENT_*).
-		$webhooksToDelete = [];
-		foreach ($registeredWebhooks as $webhook) {
-			foreach ($preset['events'] as $presetEvent) {
-				if ($webhook['event'] !== $presetEvent['event']) {
-					continue;
-				}
-				$presetFilter = !empty($presetEvent['filter']) ? $presetEvent['filter'] : null;
-				$webhookFilter = !empty($webhook['eventFilter']) ? $webhook['eventFilter'] : null;
-				if (json_encode($presetFilter) === json_encode($webhookFilter)) {
-					$webhooksToDelete[] = $webhook;
-					break;
-				}
-			}
+		$enabled = $this->enabledSyncPresets();
+		$filtered = array_values(array_filter($enabled, static fn (string $id): bool => $id !== $presetId));
+		if ($filtered !== $enabled) {
+			$this->saveEnabledSyncPresets($filtered);
 		}
 
-		$deleted = [];
-		$errors = [];
-		foreach ($webhooksToDelete as $webhook) {
-			$result = $this->client->deleteWebhook($webhook['id'], $accessToken);
-			if (isset($result['error'])) {
-				if (!empty($result['provisioning_required'])) {
-					return $this->mcpErrorResponse($result);
-				}
-				$errors[] = [
-					'webhook_id' => $webhook['id'],
-					'event' => $webhook['event'],
-					'error' => $result['error'],
-				];
-			} else {
-				$deleted[] = $webhook['id'];
-			}
-		}
-
-		if (!empty($errors)) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => 'Failed to delete some webhooks',
-				'deleted' => $deleted,
-				'errors' => $errors,
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
-		}
-
-		$this->logger->info("Disabled webhook preset $presetId", [
-			'preset_id' => $presetId,
-			'webhooks_deleted' => count($deleted),
-		]);
+		$this->logger->info("Disabled sync preset $presetId", ['preset_id' => $presetId]);
 
 		return new JSONResponse([
 			'success' => true,
 			'message' => "Disabled {$preset['name']}",
-			'deleted' => $deleted,
 		]);
+	}
+
+	/**
+	 * The preset ids the admin has enabled for native sync (JSON list app-config).
+	 *
+	 * @return list<string>
+	 */
+	private function enabledSyncPresets(): array {
+		$decoded = json_decode(
+			$this->appConfig->getValueString(
+				Application::APP_ID,
+				AdminSettings::SETTING_ENABLED_SYNC_PRESETS,
+				AdminSettings::DEFAULT_ENABLED_SYNC_PRESETS,
+			),
+			true,
+		);
+		if (!is_array($decoded)) {
+			return [];
+		}
+		$ids = [];
+		/** @var mixed $id */
+		foreach ($decoded as $id) {
+			if (is_string($id)) {
+				$ids[] = $id;
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * @param list<string> $presetIds
+	 */
+	private function saveEnabledSyncPresets(array $presetIds): void {
+		$this->appConfig->setValueString(
+			Application::APP_ID,
+			AdminSettings::SETTING_ENABLED_SYNC_PRESETS,
+			json_encode(array_values(array_unique($presetIds)), JSON_THROW_ON_ERROR),
+		);
 	}
 
 	/**
@@ -761,28 +673,5 @@ class ApiController extends Controller {
 		}
 
 		return new JSONResponse($result);
-	}
-
-	/**
-	 * Translate an MCP client error result into a JSONResponse.
-	 *
-	 * The MCP server returns 428 (Precondition Required) when the user
-	 * has not completed Login Flow v2 background-indexing provisioning.
-	 * Surface that as a structured response so the admin UI can render a
-	 * "complete authorization" CTA instead of an opaque error.
-	 */
-	private function mcpErrorResponse(array $result): JSONResponse {
-		if (!empty($result['provisioning_required'])) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => $result['error'] ?? 'Nextcloud access not provisioned',
-				'provisioning_required' => true,
-			], Http::STATUS_PRECONDITION_REQUIRED);
-		}
-
-		return new JSONResponse([
-			'success' => false,
-			'error' => $result['error'] ?? 'Unknown error',
-		], Http::STATUS_INTERNAL_SERVER_ERROR);
 	}
 }

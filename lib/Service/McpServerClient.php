@@ -27,6 +27,7 @@ class McpServerClient {
 	private LoggerInterface $logger;
 	private string $baseUrl;
 	private string $userAgent;
+	private string $webhookSecret;
 
 	public function __construct(
 		ClientInterface $httpClient,
@@ -49,6 +50,11 @@ class McpServerClient {
 		// User-Agent identifies this app + version to the MCP server, so backend
 		// access logs can see which Astrolabe release is calling them.
 		$this->userAgent = 'Nextcloud-Astrolabe/' . $appManager->getAppVersion('astrolabe');
+
+		// Shared secret for the webhook ingress (POST /webhooks/nextcloud). Must
+		// equal the MCP server's WEBHOOK_SECRET. Empty ⇒ sendSyncEvent refuses to
+		// deliver (never posts an unauthenticated payload).
+		$this->webhookSecret = (string)$this->config->getSystemValue('mcp_webhook_secret', '');
 	}
 
 	/**
@@ -444,6 +450,7 @@ class McpServerClient {
 	 * Get the configured MCP server internal URL (for API calls).
 	 *
 	 * @return string The internal base URL
+	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition (see ApiController migration); slated for removal once native default is proven.
 	 */
 	public function getServerUrl(): string {
 		return $this->baseUrl;
@@ -484,6 +491,7 @@ class McpServerClient {
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition; slated for removal once native default is proven.
 	 */
 	public function listWebhooks(string $token): array {
 		return $this->sendAndDecode(
@@ -518,6 +526,7 @@ class McpServerClient {
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition; slated for removal once native default is proven.
 	 */
 	public function createWebhook(
 		string $event,
@@ -592,6 +601,7 @@ class McpServerClient {
 	 * @param int $webhookId Webhook ID to delete
 	 * @param string $token OAuth bearer token
 	 * @return array{success?: bool, error?: string, provisioning_required?: true}
+	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition; slated for removal once native default is proven.
 	 */
 	public function deleteWebhook(int $webhookId, string $token): array {
 		try {
@@ -641,7 +651,6 @@ class McpServerClient {
 	/**
 	 * Get list of installed Nextcloud apps.
 	 *
-	 * Used to filter webhook presets based on available apps.
 	 * Requires OAuth bearer token for authentication.
 	 *
 	 * @param string $token OAuth bearer token
@@ -652,6 +661,7 @@ class McpServerClient {
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition; slated for removal once native default is proven.
 	 */
 	public function getInstalledApps(string $token): array {
 		return $this->sendAndDecode(
@@ -662,6 +672,51 @@ class McpServerClient {
 				]),
 			),
 			'Failed to get installed apps',
+			usesErrorDetection: true,
+		);
+	}
+
+	/**
+	 * Deliver a Nextcloud change event to the MCP server's webhook ingress.
+	 *
+	 * Native Astrolabe listeners ({@see \OCA\Astrolabe\Listener\SyncEventListener})
+	 * reproduce the exact envelope Nextcloud's webhook engine would POST to
+	 * ``{base}/webhooks/nextcloud`` and deliver it here, so the MCP server needs no
+	 * changes for the events it already parses. Authenticated with the shared
+	 * webhook secret (must equal the server's WEBHOOK_SECRET). When the secret is
+	 * unset we refuse to send rather than POST an unauthenticated payload — the MCP
+	 * polling scanner remains the backstop.
+	 *
+	 * @param array<string, mixed> $envelope ``{event: {...serialized, class}, user: {uid, displayName}, time: int}``
+	 * @return array{status?: string, error?: string}
+	 *
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 * @psalm-suppress MixedAssignment $event is read from an untyped envelope, narrowed below.
+	 */
+	public function sendSyncEvent(array $envelope): array {
+		if ($this->webhookSecret === '') {
+			return ['error' => 'MCP webhook secret not configured'];
+		}
+
+		$event = $envelope['event'] ?? null;
+		$eventClass = 'unknown';
+		if (is_array($event) && isset($event['class']) && is_string($event['class'])) {
+			$eventClass = $event['class'];
+		}
+
+		return $this->sendAndDecode(
+			fn (): ResponseInterface => $this->send('POST',
+				$this->baseUrl . '/webhooks/nextcloud',
+				$this->withUserAgent([
+					'headers' => [
+						'Authorization' => 'Bearer ' . $this->webhookSecret,
+						'Content-Type' => 'application/json',
+					],
+					'json' => $envelope,
+				]),
+			),
+			'Failed to deliver sync event',
+			['event_class' => $eventClass],
 			usesErrorDetection: true,
 		);
 	}

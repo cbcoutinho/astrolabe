@@ -82,6 +82,11 @@ services:
       TOKEN_ENCRYPTION_KEY: "W6NuJUhEl2eWBvWsVAa5XRZMMvpQ7Aubr3yI55F7oKw="
       TOKEN_STORAGE_DB: /app/data/tokens.db
       ENABLE_SEMANTIC_SEARCH: "true"
+      # Shared secret for the webhook ingress (/webhooks/nextcloud). Astrolabe's
+      # native sync listeners authenticate with this; it must match the
+      # mcp_webhook_secret set on the Nextcloud side in
+      # app-hooks/post-installation/25-configure-mcp-server.sh. TEST-ONLY value.
+      WEBHOOK_SECRET: "astrolabe-e2e-webhook-secret"
       VECTOR_SYNC_SCAN_INTERVAL: "5"
       VECTOR_SYNC_USER_POLL_INTERVAL: "5"
       VECTOR_SYNC_PROCESSOR_WORKERS: "2"

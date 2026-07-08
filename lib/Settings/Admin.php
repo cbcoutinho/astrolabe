@@ -50,6 +50,19 @@ class Admin implements ISettings {
 	public const SETTING_DISABLED_SEARCH_SOURCES = 'disabled_search_sources';
 	public const DEFAULT_DISABLED_SEARCH_SOURCES = '[]';
 
+	// Native sync listeners: when enabled, Astrolabe's own event listeners deliver
+	// change events straight to the MCP server's webhook ingress (see
+	// SyncEventListener) instead of registering webhooks with Nextcloud's
+	// webhook_listeners app via the MCP server. Master switch, bool via IAppConfig.
+	public const SETTING_NATIVE_SYNC_ENABLED = 'native_sync_enabled';
+	public const DEFAULT_NATIVE_SYNC_ENABLED = true;
+
+	// Sync presets (see WebhookPresets) the admin has turned on, stored as a JSON
+	// array of preset ids. Replaces the old "which webhooks are registered on the
+	// MCP server" state. Default empty ⇒ no native listeners fire.
+	public const SETTING_ENABLED_SYNC_PRESETS = 'enabled_sync_presets';
+	public const DEFAULT_ENABLED_SYNC_PRESETS = '[]';
+
 	private $config;
 	private $appConfig;
 	private $initialState;
@@ -111,6 +124,16 @@ class Admin implements ISettings {
 			self::DEFAULT_ALLOW_USER_SELF_PROVISION,
 		);
 
+		// Native sync-listener state for the "Webhook management" panel. The secret
+		// itself is never exposed — only whether one is configured — so the UI can
+		// warn when delivery would be impossible.
+		$nativeSyncEnabled = $this->appConfig->getValueBool(
+			Application::APP_ID,
+			self::SETTING_NATIVE_SYNC_ENABLED,
+			self::DEFAULT_NATIVE_SYNC_ENABLED,
+		);
+		$webhookSecretConfigured = $this->config->getSystemValue('mcp_webhook_secret', '') !== '';
+
 		// Installed search sources with their current admin-consent state.
 		// Only installed apps are listed — admins consent to what they actually
 		// have. Uninstalled apps are excluded entirely.
@@ -126,6 +149,8 @@ class Admin implements ISettings {
 			'searchSettings' => $searchSettings,
 			'searchSources' => $searchSources,
 			'allowUserSelfProvision' => $allowUserSelfProvision,
+			'nativeSyncEnabled' => $nativeSyncEnabled,
+			'webhookSecretConfigured' => $webhookSecretConfigured,
 		]);
 
 		$parameters = [];

@@ -47,3 +47,10 @@ php /var/www/html/occ oidc:create \
 php /var/www/html/occ config:system:set astrolabe_client_id --value="$CLIENT_ID"
 
 echo "Astrolabe OIDC client registered: $CLIENT_ID"
+
+# Shared secret for native sync delivery to the MCP webhook ingress. Must match
+# the WEBHOOK_SECRET set on the mcp service in docker-compose.yml. Without it,
+# McpServerClient::sendSyncEvent() refuses to deliver and the ingress is unmounted.
+WEBHOOK_SECRET_VALUE="astrolabe-e2e-webhook-secret"
+echo "Configuring Astrolabe webhook shared secret"
+php /var/www/html/occ config:system:set mcp_webhook_secret --value="$WEBHOOK_SECRET_VALUE"
