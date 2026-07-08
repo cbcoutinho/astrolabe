@@ -114,11 +114,19 @@ final class SyncEventListener implements IEventListener {
 	/**
 	 * Resolve the uid + display name the document belongs to.
 	 *
-	 * Prefers the **node owner** over the acting session user: file events can
+	 * Prefers the **node owner** over the acting session user for node-carrying
+	 * events (`AbstractNodeEvent`/`AbstractNodesEvent` — Files/Notes): these can
 	 * fire in a background/cron/WebDAV context with no session, and when an admin
 	 * edits another user's file the document (and the MCP per-user app-password
 	 * used to index it) belongs to the owner, not the actor. Falls back to the
 	 * session user, then to the ``/{uid}/files/...`` path segment.
+	 *
+	 * **Non-node events (SystemTag `MapperEvent`, Deck, etc.) have no `Node`, so
+	 * they use the acting session user.** That's correct for the normal in-session
+	 * case (a user tagging a file, editing a card); a tag/card change fired purely
+	 * from a background/cron/`occ` context with no session would find no user and
+	 * be skipped — an accepted limitation (owner-resolution for those types is a
+	 * follow-up), since those events overwhelmingly originate in a user request.
 	 *
 	 * @return array{uid: string, displayName: string}|null
 	 */
