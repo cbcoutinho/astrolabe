@@ -73,7 +73,9 @@ class AstrolabeAdminSettings implements IDeclarativeSettingsForm {
 					'description' => $this->l->t(
 						'Shared secret Astrolabe sends when delivering change events to the '
 						. "MCP server's webhook ingress. Must match the MCP server's "
-						. 'WEBHOOK_SECRET. Leave blank to keep the current value unchanged; '
+						. 'WEBHOOK_SECRET. Use an https:// MCP Server URL — the secret is sent '
+						. 'as a bearer token, so an http:// endpoint would transmit it '
+						. 'unencrypted. Leave blank to keep the current value unchanged; '
 						. 'the stored value is never displayed here.'
 					),
 					'type' => DeclarativeSettingsTypes::PASSWORD,
