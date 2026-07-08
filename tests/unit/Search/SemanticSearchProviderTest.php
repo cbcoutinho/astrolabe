@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Search;
 
 use OCA\Astrolabe\Search\SemanticSearchProvider;
+use OCA\Astrolabe\Service\Access\CalendarAccessVerifier;
+use OCA\Astrolabe\Service\Access\DeckAccessVerifier;
+use OCA\Astrolabe\Service\Access\DocumentAccessService;
+use OCA\Astrolabe\Service\Access\FileAccessVerifier;
+use OCA\Astrolabe\Service\Access\MailAccessVerifier;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\Files\IMimeTypeDetector;
+use OCP\Files\IRootFolder;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -20,6 +26,7 @@ use OCP\IUser;
 use OCP\Search\ISearchQuery;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -65,6 +72,18 @@ final class SemanticSearchProviderTest extends TestCase {
 		$l10n = $this->createMock(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 
+		// Real DocumentAccessService (final) wired to mocked leaf deps. These
+		// tests return empty result sets, so the access filter never runs on real
+		// items; default SearchSources::isInstalled=false ⇒ DELEGATE if it did.
+		$logger = $this->createMock(LoggerInterface::class);
+		$documentAccess = new DocumentAccessService(
+			new FileAccessVerifier($this->createMock(IRootFolder::class), $logger),
+			new DeckAccessVerifier($this->createMock(ContainerInterface::class), $logger),
+			new MailAccessVerifier($this->createMock(ContainerInterface::class), $logger),
+			new CalendarAccessVerifier(),
+			$this->searchSources,
+		);
+
 		return new SemanticSearchProvider(
 			$this->client,
 			$tokenMinter,
@@ -73,9 +92,10 @@ final class SemanticSearchProviderTest extends TestCase {
 			$this->createMock(IURLGenerator::class),
 			$this->createMock(IMimeTypeDetector::class),
 			$this->createMock(IPreview::class),
-			$this->createMock(LoggerInterface::class),
+			$logger,
 			$cacheFactory,
 			$this->searchSources,
+			$documentAccess,
 		);
 	}
 

@@ -24,7 +24,10 @@ namespace OCA\Astrolabe\Service\Access;
 final class CalendarAccessVerifier implements AccessVerifierInterface {
 	#[\Override]
 	public function docTypes(): array {
-		return ['calendar', 'calendar_event'];
+		// Only 'calendar' — matches SearchSources::CATALOG. (The registry gates on
+		// SearchSources::sourceForDocType before consulting this map, so listing a
+		// doc type the catalog doesn't know would be dead anyway.)
+		return ['calendar'];
 	}
 
 	#[\Override]

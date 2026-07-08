@@ -22,8 +22,8 @@ final class CalendarAccessVerifierTest extends TestCase {
 		$this->verifier = new CalendarAccessVerifier();
 	}
 
-	public function testHandlesCalendarDocTypes(): void {
-		$this->assertSame(['calendar', 'calendar_event'], $this->verifier->docTypes());
+	public function testHandlesCalendarDocType(): void {
+		$this->assertSame(['calendar'], $this->verifier->docTypes());
 	}
 
 	public function testAlwaysDelegates(): void {
