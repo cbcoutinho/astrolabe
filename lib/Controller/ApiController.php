@@ -585,25 +585,13 @@ class ApiController extends Controller {
 	 * @return list<string>
 	 */
 	private function enabledSyncPresets(): array {
-		$decoded = json_decode(
+		return WebhookPresets::decodeEnabledPresetIds(
 			$this->appConfig->getValueString(
 				Application::APP_ID,
 				AdminSettings::SETTING_ENABLED_SYNC_PRESETS,
 				AdminSettings::DEFAULT_ENABLED_SYNC_PRESETS,
 			),
-			true,
 		);
-		if (!is_array($decoded)) {
-			return [];
-		}
-		$ids = [];
-		/** @var mixed $id */
-		foreach ($decoded as $id) {
-			if (is_string($id)) {
-				$ids[] = $id;
-			}
-		}
-		return $ids;
 	}
 
 	/**

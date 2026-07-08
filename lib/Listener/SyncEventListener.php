@@ -106,21 +106,9 @@ final class SyncEventListener implements IEventListener {
 	 * @return list<string>
 	 */
 	private function enabledPresets(): array {
-		$decoded = json_decode(
+		return WebhookPresets::decodeEnabledPresetIds(
 			$this->appConfig->getValueString(Application::APP_ID, Admin::SETTING_ENABLED_SYNC_PRESETS, Admin::DEFAULT_ENABLED_SYNC_PRESETS),
-			true,
 		);
-		if (!is_array($decoded)) {
-			return [];
-		}
-		$ids = [];
-		/** @var mixed $id */
-		foreach ($decoded as $id) {
-			if (is_string($id)) {
-				$ids[] = $id;
-			}
-		}
-		return $ids;
 	}
 
 	/**

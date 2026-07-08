@@ -82,20 +82,12 @@ class Application extends App implements IBootstrap {
 				return;
 			}
 
-			$decoded = json_decode(
+			$enabledPresets = WebhookPresets::decodeEnabledPresetIds(
 				$appConfig->getValueString(self::APP_ID, Admin::SETTING_ENABLED_SYNC_PRESETS, Admin::DEFAULT_ENABLED_SYNC_PRESETS),
-				true,
 			);
-			if (!is_array($decoded)) {
-				return;
-			}
 
 			$eventClasses = [];
-			/** @var mixed $presetId */
-			foreach ($decoded as $presetId) {
-				if (!is_string($presetId)) {
-					continue;
-				}
+			foreach ($enabledPresets as $presetId) {
 				foreach (WebhookPresets::getPresetEvents($presetId) as $eventClass) {
 					$eventClasses[$eventClass] = true;
 				}
