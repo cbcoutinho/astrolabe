@@ -7,16 +7,25 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\AppFramework\Http;
+use OCP\IUser;
 
 /**
  * Controller-level tests for the sync-preset admin endpoints after the native
- * sync migration: presets are listed from locally installed apps + the
- * enabled-presets app-config, and enable/disable mutate that app-config. No MCP
- * round-trip, token, or 428 provisioning path is involved anymore.
+ * sync migration: presets are listed from the apps enabled for the current user
+ * + the enabled-presets app-config, and enable/disable mutate that app-config.
+ * No MCP round-trip, token, or 428 provisioning path is involved anymore.
  */
 final class ApiControllerWebhookPresetsTest extends AbstractApiControllerTestCase {
+	/** A session user (present but does not imply an MCP token is minted). */
+	private function withUser(string $uid = 'admin'): void {
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn($uid);
+		$this->userSession->method('getUser')->willReturn($user);
+	}
+
 	public function testGetWebhookPresetsNeedsNoTokenAndMarksEnabledFromConfig(): void {
-		// Deliberately NOT authenticated: the endpoint must not mint a token.
+		// A session user is present, but the endpoint must not mint an MCP token.
+		$this->withUser();
 		$this->tokenMinter->expects($this->never())->method('mintForUser');
 		$this->appConfig->method('getValueString')->willReturn('["files_sync"]');
 
@@ -30,6 +39,7 @@ final class ApiControllerWebhookPresetsTest extends AbstractApiControllerTestCas
 	}
 
 	public function testGetWebhookPresetsMarksDisabledWhenNotInConfig(): void {
+		$this->withUser();
 		$this->appConfig->method('getValueString')->willReturn('[]');
 
 		$data = $this->controller->getWebhookPresets()->getData();
@@ -38,8 +48,9 @@ final class ApiControllerWebhookPresetsTest extends AbstractApiControllerTestCas
 	}
 
 	public function testUninstalledAppPresetIsNotListed(): void {
-		// Base fixture installs only "files"; the Notes preset (app "notes") must
+		// Base fixture enables only "files"; the Notes preset (app "notes") must
 		// be filtered out entirely.
+		$this->withUser();
 		$this->appConfig->method('getValueString')->willReturn('[]');
 
 		$data = $this->controller->getWebhookPresets()->getData();

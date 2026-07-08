@@ -507,7 +507,11 @@ class ApiController extends Controller {
 	 * via IAppManager. No MCP round-trip or token is needed here.
 	 */
 	public function getWebhookPresets(): JSONResponse {
-		$installedApps = $this->appManager->getInstalledApps();
+		// Filter presets to apps enabled for the current admin. Use the per-user
+		// (non-deprecated) accessor — matching SearchSources::isInstalled's
+		// isEnabledForUser semantics — rather than the deprecated getInstalledApps().
+		$user = $this->userSession->getUser();
+		$installedApps = $user !== null ? $this->appManager->getEnabledAppsForUser($user) : [];
 		$presets = WebhookPresets::filterPresetsByInstalledApps($installedApps);
 		$enabled = $this->enabledSyncPresets();
 

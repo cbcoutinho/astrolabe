@@ -62,8 +62,11 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		$this->searchCapabilities->method('getSupportedSearchTypes')
 			->willReturn(['semantic', 'bm25', 'hybrid']);
 		$this->appManager = $this->createMock(IAppManager::class);
-		// Default: the core "files" app is installed, so the always-available
-		// files/notes presets surface. Tests that assert on other apps override.
+		// Default: the core "files" app is enabled for the user, so the
+		// always-available files/notes presets surface. Tests that assert on other
+		// apps override. getWebhookPresets() uses the per-user (non-deprecated)
+		// accessor; getInstalledApps is stubbed too for any other caller.
+		$this->appManager->method('getEnabledAppsForUser')->willReturn(['files']);
 		$this->appManager->method('getInstalledApps')->willReturn(['files']);
 
 		$this->controller = new ApiController(
