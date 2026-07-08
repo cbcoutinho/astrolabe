@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Service\Access\AccessDecision;
+use OCA\Astrolabe\Service\Access\DocumentAccessService;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
@@ -43,8 +45,110 @@ class ApiController extends Controller {
 		private IAppConfig $appConfig,
 		private SearchSources $searchSources,
 		private SearchCapabilities $searchCapabilities,
+		private DocumentAccessService $documentAccess,
 	) {
 		parent::__construct($appName, $request);
+	}
+
+	/**
+	 * Uniform 403 for a document the current user no longer has access to.
+	 *
+	 * Returned by the content-fetch endpoints when the local access check
+	 * (DocumentAccessService) denies — e.g. a file that was shared at index time
+	 * but has since been unshared. ``code`` is machine-readable so the frontend
+	 * can show a graceful "access revoked" message instead of a generic error.
+	 */
+	private function accessDeniedResponse(): JSONResponse {
+		return new JSONResponse([
+			'success' => false,
+			'error' => 'You no longer have access to this document.',
+			'code' => 'access_denied',
+		], Http::STATUS_FORBIDDEN);
+	}
+
+	/**
+	 * Build the normalized document shape DocumentAccessService expects from the
+	 * content endpoints' scalar params (only non-null identifiers are included).
+	 *
+	 * @param array<string, int|string|null> $identifiers
+	 * @return array{doc_type: string, id: string, metadata: array<string, int|string>}
+	 */
+	private function docForAccessCheck(string $docType, string $id, array $identifiers): array {
+		$metadata = [];
+		foreach ($identifiers as $key => $value) {
+			if ($value !== null && $value !== '') {
+				$metadata[$key] = $value;
+			}
+		}
+		return ['doc_type' => $docType, 'id' => $id, 'metadata' => $metadata];
+	}
+
+	/**
+	 * Drop search results the current user can no longer access, keeping the
+	 * parallel ``coordinates_3d`` array index-aligned so the 3D plot stays
+	 * consistent. Only DENIED results are dropped; ALLOWED and DELEGATE (types we
+	 * don't verify locally, left to the MCP backstop) are kept.
+	 *
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 * @psalm-suppress MixedAssignment iterating MCP result items whose element types are dynamic
+	 */
+	private function filterInaccessibleResults(string $uid, array $result): array {
+		$rawResults = $result['results'] ?? null;
+		if (!is_array($rawResults)) {
+			return $result;
+		}
+		$results = array_values($rawResults);
+
+		$rawCoords = $result['coordinates_3d'] ?? null;
+		$coords = is_array($rawCoords) ? array_values($rawCoords) : [];
+		$hasAlignedCoords = count($coords) === count($results);
+
+		$keptResults = [];
+		$keptCoords = [];
+		foreach ($results as $i => $item) {
+			$doc = is_array($item)
+				? $this->docFromResult($item)
+				: ['doc_type' => '', 'id' => null, 'metadata' => []];
+			if ($this->documentAccess->check($uid, $doc) === AccessDecision::DENIED) {
+				continue;
+			}
+			$keptResults[] = $item;
+			if ($hasAlignedCoords) {
+				$keptCoords[] = $coords[$i];
+			}
+		}
+
+		$result['results'] = $keptResults;
+		if ($hasAlignedCoords) {
+			$result['coordinates_3d'] = $keptCoords;
+		}
+		return $result;
+	}
+
+	/**
+	 * Normalize an MCP search-result item into the DocumentAccessService shape,
+	 * folding common top-level identifier keys into metadata.
+	 *
+	 * @param array<array-key, mixed> $item
+	 * @return array{doc_type: string, id: mixed, metadata: array<string, mixed>}
+	 * @psalm-suppress MixedAssignment result item fields are dynamic (MCP JSON)
+	 */
+	private function docFromResult(array $item): array {
+		$rawMetadata = $item['metadata'] ?? [];
+		/** @var array<string, mixed> $metadata */
+		$metadata = is_array($rawMetadata) ? $rawMetadata : [];
+		foreach (['board_id', 'mailbox_id', 'calendar_uri', 'calendar_id', 'path'] as $key) {
+			if (!isset($metadata[$key]) && isset($item[$key])) {
+				$metadata[$key] = $item[$key];
+			}
+		}
+		$rawType = $item['doc_type'] ?? null;
+		return [
+			'doc_type' => is_string($rawType) ? $rawType : '',
+			'id' => $item['id'] ?? null,
+			'metadata' => $metadata,
+		];
 	}
 
 	/**
@@ -246,6 +350,14 @@ class ApiController extends Controller {
 				'success' => false,
 				'error' => $result['error'],
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+
+		// Drop any results the user can no longer access (staleness window),
+		// keeping coordinates_3d index-aligned. The MCP server already owner-
+		// prefilters, so this is the authoritative real-time check on top.
+		$user = $this->userSession->getUser();
+		if ($user !== null) {
+			$result = $this->filterInaccessibleResults($user->getUID(), $result);
 		}
 
 		$response = [
@@ -712,7 +824,29 @@ class ApiController extends Controller {
 		int $end,
 		?int $chunk_index = null,
 		?int $total_chunks = null,
+		?int $board_id = null,
+		?int $mailbox_id = null,
+		?string $calendar_uri = null,
+		?string $path = null,
 	): JSONResponse {
+		// Local, authoritative access check BEFORE minting a token or calling the
+		// MCP server. Guards the staleness window (access revoked since indexing)
+		// and stale deep-links that reopen this endpoint directly, bypassing a
+		// fresh search. Types we can't verify locally DELEGATE to the MCP backstop.
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new JSONResponse(['success' => false, 'error' => 'User not authenticated'], Http::STATUS_UNAUTHORIZED);
+		}
+		$doc = $this->docForAccessCheck($doc_type, $doc_id, [
+			'board_id' => $board_id,
+			'mailbox_id' => $mailbox_id,
+			'calendar_uri' => $calendar_uri,
+			'path' => $path,
+		]);
+		if ($this->documentAccess->check($user->getUID(), $doc) === AccessDecision::DENIED) {
+			return $this->accessDeniedResponse();
+		}
+
 		$accessToken = $this->tokenForCurrentUser();
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
@@ -746,7 +880,19 @@ class ApiController extends Controller {
 		string $file_path,
 		int $page = 1,
 		float $scale = 2.0,
+		?int $doc_id = null,
 	): JSONResponse {
+		// PDF previews are always file-backed; verify access locally (by fileId
+		// when the caller supplies it, else by path) before minting a token.
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new JSONResponse(['success' => false, 'error' => 'User not authenticated'], Http::STATUS_UNAUTHORIZED);
+		}
+		$doc = $this->docForAccessCheck('file', $doc_id !== null ? (string)$doc_id : '', ['path' => $file_path]);
+		if ($this->documentAccess->check($user->getUID(), $doc) === AccessDecision::DENIED) {
+			return $this->accessDeniedResponse();
+		}
+
 		$accessToken = $this->tokenForCurrentUser();
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;

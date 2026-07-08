@@ -268,6 +268,22 @@ class SearchSources {
 	}
 
 	/**
+	 * The source app id that owns a given doc type, or null if unknown.
+	 *
+	 * Reverse of {@see self::CATALOG}. Lets callers (e.g. the access-check
+	 * registry) map a result's doc type back to its source app so the same
+	 * installed-apps gate used for indexing/search applies uniformly.
+	 */
+	public static function sourceForDocType(string $docType): ?string {
+		foreach (self::CATALOG as $appId => $meta) {
+			if (in_array($docType, $meta['docTypes'], true)) {
+				return $appId;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Flatten the catalog doc types for a list of (valid) source app ids.
 	 *
 	 * @param list<string> $sourceIds

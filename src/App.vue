@@ -399,6 +399,7 @@
 					<PDFViewer
 						v-else-if="viewerType === 'pdf'"
 						:filePath="currentPdfPath"
+						:docId="currentPdfDocId"
 						:pageNumber="viewerPage"
 						:highlightBbox="currentBbox"
 						:bboxPage="currentBboxPage"
@@ -575,6 +576,7 @@ export default {
 			viewerPage: 1,
 			pdfTotalPages: 0,
 			currentPdfPath: '',
+			currentPdfDocId: null,
 			currentBbox: [],
 			currentBboxPage: null,
 			currentResult: null, // Store the current result for document linking
@@ -1249,6 +1251,22 @@ export default {
 				if (result.total_chunks !== undefined && result.total_chunks !== null) {
 					params.total_chunks = result.total_chunks
 				}
+				// Identifiers the astrolabe-side access check needs for non-file
+				// doc types (files/notes are keyed by doc_id). Absent values just
+				// fall through to the MCP server's verify-on-read backstop.
+				const meta = result.metadata || {}
+				if (meta.board_id !== undefined && meta.board_id !== null) {
+					params.board_id = meta.board_id
+				}
+				if (meta.mailbox_id !== undefined && meta.mailbox_id !== null) {
+					params.mailbox_id = meta.mailbox_id
+				}
+				if (meta.calendar_uri) {
+					params.calendar_uri = meta.calendar_uri
+				}
+				if (meta.path) {
+					params.path = meta.path
+				}
 
 				const response = await axios.get(url, { params })
 
@@ -1257,6 +1275,8 @@ export default {
 					if (result.doc_type === 'file' && response.data.page_number) {
 						this.viewerType = 'pdf'
 						this.currentPdfPath = result.metadata?.path || ''
+						// result.id is the Nextcloud fileId for file doc types.
+						this.currentPdfDocId = Number.isInteger(result.id) ? result.id : (parseInt(result.id, 10) || null)
 						this.viewerPage = response.data.page_number
 						this.currentBbox = response.data.chunk_bbox || []
 						this.currentBboxPage = response.data.page_number
@@ -1273,7 +1293,13 @@ export default {
 					this.closeViewer()
 				}
 			} catch (err) {
-				console.error('Error loading chunk:', err)
+				// 403 = access revoked since indexing (the staleness the local
+				// check guards). Surface a friendly message instead of a stack trace.
+				if (err.response && err.response.status === 403) {
+					this.error = this.t('astrolabe', 'You no longer have access to this document.')
+				} else {
+					console.error('Error loading chunk:', err)
+				}
 				this.closeViewer()
 			} finally {
 				this.viewerLoading = false

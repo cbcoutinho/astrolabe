@@ -9,6 +9,21 @@ declare(strict_types=1);
  * depend on internal Nextcloud interfaces.
  */
 
+namespace OC\Hooks {
+	// OCP\Files\IRootFolder extends this server-internal interface, which is
+	// absent from the nextcloud/ocp package. Define a minimal stub so PHPUnit
+	// can build a mock of IRootFolder for file-access tests.
+	if (!interface_exists(Emitter::class)) {
+		interface Emitter {
+			public function listen($scope, $method, callable $callback);
+
+			public function removeListener($scope = null, $method = null, ?callable $callback = null);
+
+			public function emit($scope, $method, array $arguments = []);
+		}
+	}
+}
+
 namespace OC\Authentication\Token {
 	if (!interface_exists(IProvider::class)) {
 		// Subset of the server-internal token provider Astrolabe uses for

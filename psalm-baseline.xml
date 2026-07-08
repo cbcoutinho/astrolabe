@@ -20,9 +20,6 @@
       <code><![CDATA[setAppValue]]></code>
     </DeprecatedMethod>
     <InvalidArrayOffset>
-      <code><![CDATA[$result['coordinates_3d']]]></code>
-      <code><![CDATA[$result['pca_variance']]]></code>
-      <code><![CDATA[$result['query_coords']]]></code>
       <code><![CDATA[$webhook['eventFilter']]]></code>
     </InvalidArrayOffset>
     <MixedArgument>

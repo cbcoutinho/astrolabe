@@ -24,5 +24,7 @@
 		<file name="tests/psalm-stubs/oidc-events.phpstub"/>
 		<!-- Server-internal token provider (no public API for admin provisioning). -->
 		<file name="tests/psalm-stubs/oc-token-provider.phpstub"/>
+		<!-- Server-internal hook interface that OCP\Files\IRootFolder extends. -->
+		<file name="tests/psalm-stubs/oc-hooks-emitter.phpstub"/>
 	</stubs>
 </psalm>
