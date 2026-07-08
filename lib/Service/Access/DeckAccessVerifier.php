@@ -4,36 +4,26 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service\Access;
 
-use Psr\Container\ContainerInterface;
-use Psr\Log\LoggerInterface;
-
 /**
- * Access verifier for Deck cards.
+ * Access verifier scaffold for Deck cards.
  *
- * Resolves Deck's own {@see \OCA\Deck\Service\PermissionService} lazily (by FQCN
- * string, so Astrolabe carries no compile-time dependency on Deck) and asks it
- * whether the user has READ on the card's board. The registry only dispatches
- * here when the Deck app is installed, but resolution is still guarded so any
- * failure degrades to DELEGATE (fall back to the MCP backstop) rather than error.
+ * Currently a **conservative no-op that always DELEGATEs** to the MCP
+ * verify-on-read backstop. A sound local check must confirm the requested card
+ * (`doc_id`) actually belongs to a board the user can READ — but the only board
+ * identifier available here is `board_id` from the (client-supplied, on the
+ * deep-link/content-fetch path) doc metadata, which is **not** cross-checked
+ * against `doc_id`. Checking READ on a caller-supplied `board_id` alone would
+ * let a user pair a private card's `doc_id` with a board they legitimately have
+ * access to and get a false-ALLOW.
+ *
+ * Doing this correctly requires resolving the card's *real* board server-side
+ * from `doc_id` (via Deck's own `CardService`/`PermissionService::checkPermission`
+ * against the card mapper) — which depends on the confirmed `doc_id`/card-id
+ * contract the MCP-side Deck verifier owns. Until that lands (coordinated
+ * follow-up, Deck board 11), delegate to the MCP backstop, which already does
+ * the membership check via `get_card(board_id, stack_id, card_id)`.
  */
 final class DeckAccessVerifier implements AccessVerifierInterface {
-	/**
-	 * Index of the READ permission in PermissionService::getPermissions()'s
-	 * result — mirrors `\OCA\Deck\Db\Acl::PERMISSION_READ`, verified against
-	 * nextcloud/deck as `= 0`. Hardcoded so this class never references a Deck
-	 * class that may be absent at load time; if a future Deck release ever
-	 * reorders these constants, update this to match (there is no compile-time
-	 * link to catch it, so the value is pinned here deliberately).
-	 */
-	private const PERMISSION_READ = 0;
-
-	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
-	public function __construct(
-		private ContainerInterface $container,
-		private LoggerInterface $logger,
-	) {
-	}
-
 	#[\Override]
 	public function docTypes(): array {
 		return ['deck_card'];
@@ -41,29 +31,6 @@ final class DeckAccessVerifier implements AccessVerifierInterface {
 
 	#[\Override]
 	public function verify(string $uid, array $doc): AccessDecision {
-		$metadata = $doc['metadata'] ?? [];
-		$boardId = isset($metadata['board_id']) && is_numeric($metadata['board_id'])
-			? (int)$metadata['board_id']
-			: 0;
-		if ($boardId <= 0) {
-			return AccessDecision::DELEGATE;
-		}
-
-		try {
-			/** @psalm-suppress MixedAssignment resolved by FQCN string; typed loosely on purpose */
-			$service = $this->container->get('OCA\\Deck\\Service\\PermissionService');
-			if (!is_object($service) || !method_exists($service, 'getPermissions')) {
-				return AccessDecision::DELEGATE;
-			}
-			/**
-			 * @psalm-suppress MixedMethodCall, MixedAssignment cross-app service, resolved dynamically
-			 * @var array<int, bool> $permissions
-			 */
-			$permissions = $service->getPermissions($boardId, $uid);
-			return !empty($permissions[self::PERMISSION_READ]) ? AccessDecision::ALLOWED : AccessDecision::DENIED;
-		} catch (\Throwable $e) {
-			$this->logger->debug('Deck access check could not decide; delegating', ['board_id' => $boardId, 'error' => $e->getMessage()]);
-			return AccessDecision::DELEGATE;
-		}
+		return AccessDecision::DELEGATE;
 	}
 }

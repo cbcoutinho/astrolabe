@@ -16,7 +16,6 @@ use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -40,8 +39,8 @@ final class DocumentAccessServiceTest extends TestCase {
 
 		$this->service = new DocumentAccessService(
 			new FileAccessVerifier($this->rootFolder, $logger),
-			new DeckAccessVerifier($this->createMock(ContainerInterface::class), $logger),
-			new MailAccessVerifier($this->createMock(ContainerInterface::class), $logger),
+			new DeckAccessVerifier(),
+			new MailAccessVerifier(),
 			new CalendarAccessVerifier(),
 			$this->searchSources,
 		);

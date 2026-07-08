@@ -23,7 +23,6 @@ use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -82,8 +81,8 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		$this->rootFolder->method('getUserFolder')->willReturn($this->userFolder);
 		$this->documentAccess = new DocumentAccessService(
 			new FileAccessVerifier($this->rootFolder, $this->logger),
-			new DeckAccessVerifier($this->createMock(ContainerInterface::class), $this->logger),
-			new MailAccessVerifier($this->createMock(ContainerInterface::class), $this->logger),
+			new DeckAccessVerifier(),
+			new MailAccessVerifier(),
 			new CalendarAccessVerifier(),
 			$this->searchSources,
 		);

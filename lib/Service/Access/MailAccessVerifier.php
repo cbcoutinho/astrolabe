@@ -4,27 +4,23 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service\Access;
 
-use Psr\Container\ContainerInterface;
-use Psr\Log\LoggerInterface;
-
 /**
- * Access verifier for Mail messages.
+ * Access verifier scaffold for Mail messages.
  *
- * Mail has no sharing model — a mailbox belongs to exactly one account, which
- * belongs to exactly one user — so access reduces to ownership. Resolves Mail's
- * {@see \OCA\Mail\Contracts\IMailManager} lazily (by FQCN string) and calls
- * ``getMailbox($uid, $mailboxId)``, which throws when the mailbox isn't owned by
- * the user. A "not found / not yours" error (ClientException) is a definitive
- * DENY; any other failure (or a missing identifier) is DELEGATE.
+ * Currently a **conservative no-op that always DELEGATEs** to the MCP
+ * verify-on-read backstop. The previous implementation checked mailbox ownership
+ * from a (client-supplied, on the content-fetch path) `mailbox_id` but never
+ * confirmed the requested message (`doc_id`) actually lives in that mailbox — so
+ * a user could pair another user's message `doc_id` with a mailbox they own and
+ * get a false-ALLOW.
+ *
+ * A sound local check must resolve the message by `doc_id` and confirm it belongs
+ * to the user (e.g. `IMailManager::getMessage($uid, $messageId)`), which depends
+ * on the confirmed `doc_id`/message-id contract the MCP-side Mail verifier owns.
+ * Until that lands (coordinated follow-up, Deck board 11), delegate to the MCP
+ * backstop, which already does the membership check.
  */
 final class MailAccessVerifier implements AccessVerifierInterface {
-	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
-	public function __construct(
-		private ContainerInterface $container,
-		private LoggerInterface $logger,
-	) {
-	}
-
 	#[\Override]
 	public function docTypes(): array {
 		return ['mail_message'];
@@ -32,36 +28,6 @@ final class MailAccessVerifier implements AccessVerifierInterface {
 
 	#[\Override]
 	public function verify(string $uid, array $doc): AccessDecision {
-		$metadata = $doc['metadata'] ?? [];
-		$mailboxId = isset($metadata['mailbox_id']) && is_numeric($metadata['mailbox_id'])
-			? (int)$metadata['mailbox_id']
-			: 0;
-		if ($mailboxId <= 0) {
-			return AccessDecision::DELEGATE;
-		}
-
-		try {
-			/** @psalm-suppress MixedAssignment resolved by FQCN string; typed loosely on purpose */
-			$manager = $this->container->get('OCA\\Mail\\Contracts\\IMailManager');
-		} catch (\Throwable $e) {
-			$this->logger->debug('Mail manager unavailable; delegating', ['error' => $e->getMessage()]);
-			return AccessDecision::DELEGATE;
-		}
-		if (!is_object($manager) || !method_exists($manager, 'getMailbox')) {
-			return AccessDecision::DELEGATE;
-		}
-
-		try {
-			/** @psalm-suppress MixedMethodCall cross-app contract, resolved dynamically */
-			$manager->getMailbox($uid, $mailboxId);
-			return AccessDecision::ALLOWED;
-		} catch (\Throwable $e) {
-			// getMailbox throws ClientException when the mailbox isn't the user's
-			// — a definitive deny. Match the short class name exactly (not a
-			// substring) so an unrelated exception can't accidentally read as a
-			// deny; anything else is transient ⇒ delegate.
-			$isClientError = (new \ReflectionClass($e))->getShortName() === 'ClientException';
-			return $isClientError ? AccessDecision::DENIED : AccessDecision::DELEGATE;
-		}
+		return AccessDecision::DELEGATE;
 	}
 }

@@ -26,7 +26,6 @@ use OCP\IUser;
 use OCP\Search\ISearchQuery;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -78,8 +77,8 @@ final class SemanticSearchProviderTest extends TestCase {
 		$logger = $this->createMock(LoggerInterface::class);
 		$documentAccess = new DocumentAccessService(
 			new FileAccessVerifier($this->createMock(IRootFolder::class), $logger),
-			new DeckAccessVerifier($this->createMock(ContainerInterface::class), $logger),
-			new MailAccessVerifier($this->createMock(ContainerInterface::class), $logger),
+			new DeckAccessVerifier(),
+			new MailAccessVerifier(),
 			new CalendarAccessVerifier(),
 			$this->searchSources,
 		);

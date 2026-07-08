@@ -123,6 +123,12 @@ class ApiController extends Controller {
 		if ($hasAlignedCoords) {
 			$result['coordinates_3d'] = $keptCoords;
 		}
+		// Keep the reported count consistent with what's actually returned after a
+		// drop (clamp, don't inflate): the unfiltered MCP total would otherwise
+		// exceed the rendered results.
+		if (count($keptResults) < count($results) && isset($result['total_documents']) && is_int($result['total_documents'])) {
+			$result['total_documents'] = min($result['total_documents'], count($keptResults));
+		}
 		return $result;
 	}
 
