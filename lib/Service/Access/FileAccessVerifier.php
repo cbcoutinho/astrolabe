@@ -37,21 +37,32 @@ final class FileAccessVerifier implements AccessVerifierInterface {
 		/** @var mixed $id */
 		$id = $doc['id'] ?? null;
 		$fileId = is_numeric($id) ? (int)$id : 0;
-		if ($fileId > 0) {
-			return $this->canAccessFile($uid, $fileId);
-		}
 
-		// Fall back to the WebDAV path when no usable fileId is present (e.g. the
-		// pdf-preview endpoint, which is keyed by file_path).
 		$metadata = $doc['metadata'] ?? [];
 		$path = isset($metadata['path']) && is_string($metadata['path'])
 			? $metadata['path']
 			: null;
-		if ($path !== null && $path !== '') {
-			return $this->canAccessPath($uid, $path);
-		}
 
-		return AccessDecision::DENIED;
+		// Check every identifier supplied. Callers may pass a fileId, a WebDAV
+		// path, or both — and different endpoints forward different ones
+		// downstream (chunk-context uses doc_id, pdf-preview uses file_path). If
+		// both are present they must BOTH resolve for the user: otherwise a caller
+		// could pair an owned fileId with someone else's path (or vice-versa) and
+		// have the check pass while the content served is keyed on the unverified
+		// identifier. Any DENIED ⇒ DENIED; at least one identifier is required.
+		$decisions = [];
+		if ($fileId > 0) {
+			$decisions[] = $this->canAccessFile($uid, $fileId);
+		}
+		if ($path !== null && $path !== '') {
+			$decisions[] = $this->canAccessPath($uid, $path);
+		}
+		if ($decisions === []) {
+			return AccessDecision::DENIED;
+		}
+		return in_array(AccessDecision::DENIED, $decisions, true)
+			? AccessDecision::DENIED
+			: AccessDecision::ALLOWED;
 	}
 
 	public function canAccessFile(string $uid, int $fileId): AccessDecision {

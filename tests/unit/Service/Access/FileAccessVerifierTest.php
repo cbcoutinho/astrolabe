@@ -86,4 +86,27 @@ final class FileAccessVerifierTest extends TestCase {
 		$this->userFolder->expects($this->once())->method('get')->with('Notes/todo.md')->willReturn($this->createMock(Node::class));
 		$this->assertSame(AccessDecision::ALLOWED, $this->verifier->canAccessPath('alice', '/alice/files/Notes/todo.md'));
 	}
+
+	public function testBothIdAndPathAllowedResolvesAllowed(): void {
+		$this->userFolder->method('getById')->with(42)->willReturn([$this->createMock(Node::class)]);
+		$this->userFolder->method('get')->willReturn($this->createMock(Node::class));
+		$doc = ['doc_type' => 'file', 'id' => 42, 'metadata' => ['path' => '/alice/files/report.pdf']];
+		$this->assertSame(AccessDecision::ALLOWED, $this->verifier->verify('alice', $doc));
+	}
+
+	public function testOwnedIdWithForeignPathIsDenied(): void {
+		// The pdf-preview mismatch: caller pairs a fileId they own with someone
+		// else's path (the identifier actually served). Both must resolve ⇒ deny.
+		$this->userFolder->method('getById')->with(42)->willReturn([$this->createMock(Node::class)]);
+		$this->userFolder->method('get')->willThrowException(new NotFoundException());
+		$doc = ['doc_type' => 'file', 'id' => 42, 'metadata' => ['path' => '/alice/files/someone-elses.pdf']];
+		$this->assertSame(AccessDecision::DENIED, $this->verifier->verify('alice', $doc));
+	}
+
+	public function testForeignIdWithOwnedPathIsDenied(): void {
+		$this->userFolder->method('getById')->with(99)->willReturn([]); // not accessible
+		$this->userFolder->method('get')->willReturn($this->createMock(Node::class));
+		$doc = ['doc_type' => 'file', 'id' => 99, 'metadata' => ['path' => '/alice/files/mine.pdf']];
+		$this->assertSame(AccessDecision::DENIED, $this->verifier->verify('alice', $doc));
+	}
 }
