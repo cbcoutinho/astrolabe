@@ -19,8 +19,11 @@ use Psr\Log\LoggerInterface;
 final class DeckAccessVerifier implements AccessVerifierInterface {
 	/**
 	 * Index of the READ permission in PermissionService::getPermissions()'s
-	 * result — mirrors \OCA\Deck\Db\Acl::PERMISSION_READ (0). Hardcoded so this
-	 * class never references a Deck class that may be absent at load time.
+	 * result — mirrors `\OCA\Deck\Db\Acl::PERMISSION_READ`, verified against
+	 * nextcloud/deck as `= 0`. Hardcoded so this class never references a Deck
+	 * class that may be absent at load time; if a future Deck release ever
+	 * reorders these constants, update this to match (there is no compile-time
+	 * link to catch it, so the value is pinned here deliberately).
 	 */
 	private const PERMISSION_READ = 0;
 

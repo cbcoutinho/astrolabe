@@ -332,6 +332,12 @@ class SemanticSearchProvider implements IProvider {
 			if (isset($result['board_id'])) {
 				$params['board_id'] = $result['board_id'];
 			}
+			// mailbox_id lets a mail deep-link get the same astrolabe-side access
+			// re-check as a live result (board_id above does this for deck).
+			if (isset($result['mailbox_id'])) {
+				/** @psalm-suppress MixedAssignment $result is an untyped MCP result row */
+				$params['mailbox_id'] = $result['mailbox_id'];
+			}
 
 			// Encode parameters for URL
 			$queryString = http_build_query($params);

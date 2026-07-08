@@ -14,7 +14,6 @@ use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
-use OCP\Calendar\IManager;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IAppConfig;
@@ -85,7 +84,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			new FileAccessVerifier($this->rootFolder, $this->logger),
 			new DeckAccessVerifier($this->createMock(ContainerInterface::class), $this->logger),
 			new MailAccessVerifier($this->createMock(ContainerInterface::class), $this->logger),
-			new CalendarAccessVerifier($this->createMock(IManager::class), $this->logger),
+			new CalendarAccessVerifier(),
 			$this->searchSources,
 		);
 

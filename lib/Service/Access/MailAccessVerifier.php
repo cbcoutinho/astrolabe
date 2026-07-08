@@ -57,8 +57,10 @@ final class MailAccessVerifier implements AccessVerifierInterface {
 			return AccessDecision::ALLOWED;
 		} catch (\Throwable $e) {
 			// getMailbox throws ClientException when the mailbox isn't the user's
-			// — a definitive deny. Anything else is transient ⇒ delegate.
-			$isClientError = str_contains((new \ReflectionClass($e))->getShortName(), 'ClientException');
+			// — a definitive deny. Match the short class name exactly (not a
+			// substring) so an unrelated exception can't accidentally read as a
+			// deny; anything else is transient ⇒ delegate.
+			$isClientError = (new \ReflectionClass($e))->getShortName() === 'ClientException';
 			return $isClientError ? AccessDecision::DENIED : AccessDecision::DELEGATE;
 		}
 	}

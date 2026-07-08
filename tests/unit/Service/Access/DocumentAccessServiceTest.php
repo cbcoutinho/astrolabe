@@ -11,7 +11,6 @@ use OCA\Astrolabe\Service\Access\DocumentAccessService;
 use OCA\Astrolabe\Service\Access\FileAccessVerifier;
 use OCA\Astrolabe\Service\Access\MailAccessVerifier;
 use OCA\Astrolabe\Service\SearchSources;
-use OCP\Calendar\IManager;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
@@ -43,7 +42,7 @@ final class DocumentAccessServiceTest extends TestCase {
 			new FileAccessVerifier($this->rootFolder, $logger),
 			new DeckAccessVerifier($this->createMock(ContainerInterface::class), $logger),
 			new MailAccessVerifier($this->createMock(ContainerInterface::class), $logger),
-			new CalendarAccessVerifier($this->createMock(IManager::class), $logger),
+			new CalendarAccessVerifier(),
 			$this->searchSources,
 		);
 	}

@@ -796,9 +796,20 @@ export default {
 				if (totalChunks !== null) {
 					result.total_chunks = parseInt(totalChunks, 10)
 				}
+				// Access-check identifiers, so a stale deep-link gets the same
+				// local re-check as a live search result for every doc type
+				// (missing ones just fall through to the MCP backstop).
 				const boardId = urlParams.get('board_id')
 				if (boardId) {
 					result.metadata.board_id = boardId
+				}
+				const mailboxId = urlParams.get('mailbox_id')
+				if (mailboxId) {
+					result.metadata.mailbox_id = mailboxId
+				}
+				const calendarUri = urlParams.get('calendar_uri')
+				if (calendarUri) {
+					result.metadata.calendar_uri = calendarUri
 				}
 
 				// Open the chunk viewer
