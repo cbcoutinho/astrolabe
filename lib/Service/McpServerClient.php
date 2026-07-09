@@ -232,11 +232,12 @@ class McpServerClient {
 	 *   error?: string
 	 * }
 	 *
-	 * The `supported_search_types` array (ADR-030) advertises which query
-	 * algorithms this server can serve — `["semantic","bm25","hybrid"]` in
-	 * hybrid mode, `["bm25"]` in keyword mode, `[]` when vector sync is off.
-	 * Consumed by {@see \OCA\Astrolabe\Service\SearchCapabilities} to gate the
-	 * algorithm picker and reject unsupported requests.
+	 * The `supported_search_types` array advertises which query algorithms this
+	 * server can serve — `["semantic","bm25","hybrid"]` when vector sync is on
+	 * (all three; keyword-vs-hybrid is a per-document choice, not a server mode),
+	 * `[]` when vector sync is off. Consumed by
+	 * {@see \OCA\Astrolabe\Service\SearchCapabilities} to gate the algorithm
+	 * picker and reject unsupported requests.
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */

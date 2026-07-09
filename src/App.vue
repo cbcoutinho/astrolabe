@@ -508,7 +508,7 @@ export default {
 	data() {
 		// Read the page's initial state once (loadState reads the DOM each call).
 		const appConfig = loadState('astrolabe', 'app-config', {})
-		// Query algorithms the MCP server advertises (ADR-030). Distinguish three
+		// Query algorithms the MCP server advertises. Distinguish three
 		// states: `null` = the field was absent (older backend / unknown) ⇒ treat
 		// permissively as "all"; a populated array ⇒ gate to it; an explicit `[]`
 		// (vector sync off) ⇒ nothing is available. Collapsing `[]` into "all"
@@ -595,11 +595,11 @@ export default {
 				{ id: 'semantic', label: this.t('astrolabe', 'Semantic') },
 				{ id: 'bm25', label: this.t('astrolabe', 'Keyword (BM25)') },
 			]
-			// Only offer query types the MCP server advertises (ADR-030): a
-			// keyword-only server hides Semantic and Hybrid. `null` = the server
-			// didn't advertise the set (older backend) ⇒ show all (the backend
-			// still rejects an unsupported algorithm 422-side); an explicit `[]`
-			// (vector sync off) ⇒ offer nothing, not everything.
+			// Only offer query types the MCP server advertises: an explicit `[]`
+			// (vector sync off) hides all three; otherwise offer the advertised
+			// set (all three when sync is on). `null` = the server didn't advertise
+			// the set (older backend) ⇒ show all (the backend still rejects an
+			// unsupported algorithm 422-side).
 			if (this.supportedSearchTypes === null) {
 				return all
 			}

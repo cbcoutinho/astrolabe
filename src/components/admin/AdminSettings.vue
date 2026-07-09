@@ -394,10 +394,10 @@ const algorithmOptions = computed(() => {
 		{ id: 'semantic', label: t('astrolabe', 'Semantic Only') },
 		{ id: 'bm25', label: t('astrolabe', 'Keyword (BM25) Only') },
 	]
-	// Only offer query types the MCP server advertises (ADR-030). A keyword-only
-	// server hides Semantic/Hybrid. Not an array (status not loaded yet or older
-	// backend) ⇒ show all; the backend rejects an unsupported save (422). An
-	// explicit `[]` (vector sync off) ⇒ offer nothing, not everything.
+	// Only offer query types the MCP server advertises. An explicit `[]` (vector
+	// sync off) hides all three; otherwise offer the advertised set (all three
+	// when sync is on). Not an array (status not loaded yet or older backend) ⇒
+	// show all; the backend rejects an unsupported save (422).
 	const supported = serverStatus.value?.supported_search_types
 	if (!Array.isArray(supported)) {
 		return all
@@ -428,10 +428,10 @@ async function loadServerStatus() {
 			serverStatus.value = statusResponse.data.status
 			vectorSyncEnabled.value = statusResponse.data.status?.vector_sync_enabled ?? false
 
-			// Keep the selected algorithm in step with what the server can serve
-			// (ADR-030): if the stored algorithm is no longer advertised (e.g. the
-			// server switched to keyword-only), fall back to a supported type so
-			// Save can't submit — and 422 on — an unsupported value.
+			// Keep the selected algorithm in step with what the server can serve:
+			// if the stored algorithm is no longer advertised (e.g. vector sync was
+			// turned off), fall back to a supported type so Save can't submit — and
+			// 422 on — an unsupported value.
 			const supported = statusResponse.data.status?.supported_search_types
 			if (Array.isArray(supported) && supported.length > 0 && !supported.includes(settings.value.algorithm)) {
 				settings.value.algorithm = supported.includes('hybrid') ? 'hybrid' : supported[0]

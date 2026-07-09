@@ -6,8 +6,8 @@ namespace OCA\Astrolabe\Service;
 
 /**
  * A search algorithm was requested that the MCP server does not advertise as
- * supported (ADR-030) — e.g. "semantic" while the server runs SEARCH_MODE=keyword
- * and only offers ["bm25"].
+ * supported — e.g. any algorithm while the server has vector sync disabled and
+ * advertises [] (nothing is searchable).
  *
  * Astrolabe reads the advertised set from GET /api/v1/status and gates requests
  * with {@see \OCA\Astrolabe\Service\SearchCapabilities}. The MCP server enforces

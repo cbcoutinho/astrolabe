@@ -7,14 +7,15 @@ namespace OCA\Astrolabe\Service;
 use OCP\ICacheFactory;
 
 /**
- * Reads the MCP server's advertised `supported_search_types` (ADR-030) and gates
+ * Reads the MCP server's advertised `supported_search_types` and gates
  * search-algorithm requests against it.
  *
  * The server advertises which query types it can actually serve on
  * GET /api/v1/status:
- *   - SEARCH_MODE=hybrid   → ["semantic", "bm25", "hybrid"]
- *   - SEARCH_MODE=keyword  → ["bm25"] (no embedding endpoint; dense is off)
- *   - vector sync disabled → []
+ *   - vector sync enabled  → ["semantic", "bm25", "hybrid"] (all three; the
+ *     keyword-vs-hybrid choice is per-document, driven by the `keyword-index`
+ *     tag, not a server-wide mode)
+ *   - vector sync disabled → [] (nothing is searchable)
  *
  * This service is the client-side guard so astrolabe never sends — nor offers in
  * its UI — a query type the server can't serve. The MCP server enforces the same
