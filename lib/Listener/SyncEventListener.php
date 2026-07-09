@@ -67,36 +67,49 @@ final class SyncEventListener implements IEventListener {
 			return;
 		}
 
-		$eventData = $event->getWebhookSerializable();
-		$eventData['class'] = $event::class;
-		$envelope = [
-			'event' => $eventData,
-			'user' => $user,
-			'time' => time(),
-		];
+		// Build the envelope and enqueue delivery. This runs synchronously on the
+		// triggering file/tag operation's request, so it must never throw: a bug
+		// in envelope-building or a transient IJobList::add() failure would
+		// otherwise turn a routine file save into a 500 — the exact failure the
+		// async QueuedJob design exists to prevent. Fail closed: log and drop the
+		// event (the MCP polling scanner reconciles anything not delivered).
+		try {
+			$eventData = $event->getWebhookSerializable();
+			$eventData['class'] = $event::class;
+			$envelope = [
+				'event' => $eventData,
+				'user' => $user,
+				'time' => time(),
+			];
 
-		// Enqueue at most one delivery for this fired event even when several
-		// enabled presets cover the same event class (e.g. Notes + All-Files both
-		// listen for NodeWrittenEvent): the payload is identical, so a second
-		// delivery would be redundant. Deliver on the first matching filter.
-		foreach ($enabledPresets as $presetId) {
-			$preset = WebhookPresets::getPreset($presetId);
-			if ($preset === null || !isset($preset['events']) || !is_array($preset['events'])) {
-				continue;
-			}
-			/** @var mixed $presetEvent */
-			foreach ($preset['events'] as $presetEvent) {
-				if (!is_array($presetEvent) || ($presetEvent['event'] ?? null) !== $event::class) {
+			// Enqueue at most one delivery for this fired event even when several
+			// enabled presets cover the same event class (e.g. Notes + All-Files both
+			// listen for NodeWrittenEvent): the payload is identical, so a second
+			// delivery would be redundant. Deliver on the first matching filter.
+			foreach ($enabledPresets as $presetId) {
+				$preset = WebhookPresets::getPreset($presetId);
+				if ($preset === null || !isset($preset['events']) || !is_array($preset['events'])) {
 					continue;
 				}
-				/** @psalm-suppress MixedAssignment preset filter is an untyped array literal */
-				$rawFilter = $presetEvent['filter'] ?? [];
-				$filter = is_array($rawFilter) ? $rawFilter : [];
-				if (WebhookEventFilter::matches($filter, $envelope)) {
-					$this->jobList->add(SyncEventDeliveryJob::class, [$envelope, bin2hex(random_bytes(5))]);
-					return;
+				/** @var mixed $presetEvent */
+				foreach ($preset['events'] as $presetEvent) {
+					if (!is_array($presetEvent) || ($presetEvent['event'] ?? null) !== $event::class) {
+						continue;
+					}
+					/** @psalm-suppress MixedAssignment preset filter is an untyped array literal */
+					$rawFilter = $presetEvent['filter'] ?? [];
+					$filter = is_array($rawFilter) ? $rawFilter : [];
+					if (WebhookEventFilter::matches($filter, $envelope)) {
+						$this->jobList->add(SyncEventDeliveryJob::class, [$envelope, bin2hex(random_bytes(5))]);
+						return;
+					}
 				}
 			}
+		} catch (\Throwable $e) {
+			$this->logger->warning('Failed to enqueue sync event; dropping (scanner will reconcile)', [
+				'event_class' => $event::class,
+				'error' => $e->getMessage(),
+			]);
 		}
 	}
 

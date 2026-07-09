@@ -83,6 +83,17 @@ final class SyncEventListenerTest extends TestCase {
 		$this->makeListener(true, [])->handle($this->writtenEvent(self::NOTE_PATH, 'admin'));
 	}
 
+	public function testEnqueueFailureIsSwallowedNotPropagated(): void {
+		// A failure enqueuing the delivery job must NOT bubble up into the
+		// triggering file operation (that would turn a file save into a 500).
+		$this->jobList->method('add')->willThrowException(new \RuntimeException('job store down'));
+		$this->logger->expects($this->once())->method('warning');
+
+		// The absence of an exception here IS the assertion.
+		$this->makeListener(true, ['notes_sync'])->handle($this->writtenEvent(self::NOTE_PATH, 'admin'));
+		$this->addToAssertionCount(1);
+	}
+
 	public function testEnqueuesWhenNotesFilterMatches(): void {
 		$captured = null;
 		$this->jobList->expects($this->once())
