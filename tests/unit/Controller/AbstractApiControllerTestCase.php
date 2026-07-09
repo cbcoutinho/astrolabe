@@ -5,10 +5,17 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
 use OCA\Astrolabe\Controller\ApiController;
+use OCA\Astrolabe\Service\Access\CalendarAccessVerifier;
+use OCA\Astrolabe\Service\Access\DeckAccessVerifier;
+use OCA\Astrolabe\Service\Access\DocumentAccessService;
+use OCA\Astrolabe\Service\Access\FileAccessVerifier;
+use OCA\Astrolabe\Service\Access\MailAccessVerifier;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
+use OCP\Files\Folder;
+use OCP\Files\IRootFolder;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IRequest;
@@ -35,6 +42,9 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 	protected IAppConfig&MockObject $appConfig;
 	protected SearchSources&MockObject $searchSources;
 	protected SearchCapabilities&MockObject $searchCapabilities;
+	protected IRootFolder&MockObject $rootFolder;
+	protected Folder&MockObject $userFolder;
+	protected DocumentAccessService $documentAccess;
 	protected ApiController $controller;
 
 	protected function setUp(): void {
@@ -60,6 +70,23 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		$this->searchCapabilities->method('getSupportedSearchTypes')
 			->willReturn(['semantic', 'bm25', 'hybrid']);
 
+		// Real DocumentAccessService wired to mocked leaf deps (it's final, so it
+		// can't be mocked). By default SearchSources::isInstalled() returns false
+		// (the createMock bool default), so every access check DELEGATEs and
+		// nothing is dropped — existing tests see the pre-feature behaviour.
+		// Access tests drive decisions via $this->searchSources->isInstalled and
+		// $this->userFolder->getById.
+		$this->rootFolder = $this->createMock(IRootFolder::class);
+		$this->userFolder = $this->createMock(Folder::class);
+		$this->rootFolder->method('getUserFolder')->willReturn($this->userFolder);
+		$this->documentAccess = new DocumentAccessService(
+			new FileAccessVerifier($this->rootFolder, $this->logger),
+			new DeckAccessVerifier(),
+			new MailAccessVerifier(),
+			new CalendarAccessVerifier(),
+			$this->searchSources,
+		);
+
 		$this->controller = new ApiController(
 			'astrolabe',
 			$request,
@@ -71,6 +98,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			$this->appConfig,
 			$this->searchSources,
 			$this->searchCapabilities,
+			$this->documentAccess,
 		);
 	}
 

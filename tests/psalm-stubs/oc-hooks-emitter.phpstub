@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Psalm stub for the Nextcloud server-internal `OC\Hooks\Emitter`.
+ *
+ * `OCP\Files\IRootFolder` extends this internal interface, which is not shipped
+ * in the `nextcloud/ocp` package. Without a declaration psalm reports
+ * MissingDependency for any class that injects IRootFolder. This stub only
+ * declares the interface so IRootFolder resolves; Astrolabe never calls these
+ * hook methods directly.
+ */
+
+namespace OC\Hooks;
+
+interface Emitter {
+	public function listen(string $scope, string $method, callable $callback): void;
+
+	public function removeListener(?string $scope = null, ?string $method = null, ?callable $callback = null): void;
+
+	public function emit(string $scope, string $method, array $arguments = []): void;
+}
