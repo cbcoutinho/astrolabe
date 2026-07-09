@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.35.0 (2026-07-09)
+
+### Feat
+
+- deliver sync events via native listeners instead of MCP-registered webhooks
+
+### Fix
+
+- never let SyncEventListener enqueue failures break the file operation
+- use non-deprecated getEnabledAppsForUser in getWebhookPresets
+
+### Refactor
+
+- dedupe enabled-sync-preset decoding into WebhookPresets helper
+
 ## v0.34.0 (2026-07-09)
 
 ### Feat
