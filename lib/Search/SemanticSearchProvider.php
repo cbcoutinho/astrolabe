@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Search;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Service\Access\AccessDecision;
+use OCA\Astrolabe\Service\Access\DocumentAccessService;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
@@ -52,6 +54,7 @@ class SemanticSearchProvider implements IProvider {
 		private LoggerInterface $logger,
 		private ICacheFactory $cacheFactory,
 		private SearchSources $searchSources,
+		private DocumentAccessService $documentAccess,
 	) {
 	}
 
@@ -197,9 +200,17 @@ class SemanticSearchProvider implements IProvider {
 			return SearchResult::complete($this->getName(), []);
 		}
 
-		// Transform results to SearchResultEntry objects
+		// Transform results to SearchResultEntry objects, dropping any the user
+		// can no longer access. The MCP server already owner-prefilters, but a
+		// share revoked since indexing would otherwise surface a stale title/
+		// snippet in the global search bar until the next scanner purge; this is
+		// the same authoritative real-time check the in-app search list applies.
+		// Types we don't verify locally return DELEGATE and are kept (MCP backstop).
 		$entries = [];
 		foreach ($results['results'] ?? [] as $result) {
+			if ($this->documentAccess->check($userId, $this->accessDoc($result)) === AccessDecision::DENIED) {
+				continue;
+			}
 			$entries[] = $this->transformResult($result);
 		}
 
@@ -300,6 +311,30 @@ class SemanticSearchProvider implements IProvider {
 	 * Links to Astrolabe app with query parameters that trigger the chunk modal,
 	 * allowing users to preview the chunk before navigating to the full document.
 	 */
+	/**
+	 * Build the DocumentAccessService document shape from a unified-search result
+	 * row. Identifiers live at the top level of the row here (unlike the viz
+	 * result shape, where they're nested under ``metadata``).
+	 *
+	 * @param array<string, mixed> $result
+	 * @return array{doc_type: string, id: mixed, metadata: array<string, mixed>}
+	 * @psalm-suppress MixedAssignment result fields are dynamic (MCP JSON)
+	 */
+	private function accessDoc(array $result): array {
+		$metadata = [];
+		foreach (['board_id', 'mailbox_id', 'calendar_uri', 'calendar_id', 'path'] as $key) {
+			if (isset($result[$key])) {
+				$metadata[$key] = $result[$key];
+			}
+		}
+		$rawType = $result['doc_type'] ?? null;
+		return [
+			'doc_type' => is_string($rawType) ? $rawType : '',
+			'id' => $result['id'] ?? null,
+			'metadata' => $metadata,
+		];
+	}
+
 	private function buildResourceUrl(array $result): string {
 		// Build base URL to Astrolabe app
 		$baseUrl = $this->urlGenerator->linkToRoute(Application::APP_ID . '.page.index');
@@ -331,6 +366,12 @@ class SemanticSearchProvider implements IProvider {
 			}
 			if (isset($result['board_id'])) {
 				$params['board_id'] = $result['board_id'];
+			}
+			// mailbox_id lets a mail deep-link get the same astrolabe-side access
+			// re-check as a live result (board_id above does this for deck).
+			if (isset($result['mailbox_id'])) {
+				/** @psalm-suppress MixedAssignment $result is an untyped MCP result row */
+				$params['mailbox_id'] = $result['mailbox_id'];
 			}
 
 			// Encode parameters for URL

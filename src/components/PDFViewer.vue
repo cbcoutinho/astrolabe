@@ -45,6 +45,12 @@ const props = defineProps({
 		type: String,
 		required: true,
 	},
+	// Nextcloud fileId, when known. Sent alongside file_path so the backend can
+	// run the astrolabe-side access check by id (falls back to path otherwise).
+	docId: {
+		type: Number,
+		default: null,
+	},
 	pageNumber: {
 		type: Number,
 		default: 1,
@@ -91,6 +97,9 @@ async function loadPage() {
 			file_path: props.filePath,
 			page: props.pageNumber,
 			scale: props.scale,
+		}
+		if (props.docId !== null && props.docId !== undefined) {
+			params.doc_id = props.docId
 		}
 
 		const response = await axios.get(url, { params })

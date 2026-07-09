@@ -239,4 +239,27 @@ final class SearchSourcesTest extends TestCase {
 		$this->assertNotContains('file', $docTypes); // admin-disabled
 		$this->assertContains('note', $docTypes); // admin-enabled, no user narrowing
 	}
+
+	/**
+	 * @dataProvider provideDocTypeSources
+	 */
+	public function testSourceForDocType(string $docType, ?string $expectedApp): void {
+		$this->assertSame($expectedApp, SearchSources::sourceForDocType($docType));
+	}
+
+	/**
+	 * @return array<string, array{string, string|null}>
+	 */
+	public static function provideDocTypeSources(): array {
+		return [
+			'file' => ['file', 'files'],
+			'note' => ['note', 'notes'],
+			'deck_card' => ['deck_card', 'deck'],
+			'mail_message' => ['mail_message', 'mail'],
+			'calendar' => ['calendar', 'calendar'],
+			'contact' => ['contact', 'contacts'],
+			'news_item' => ['news_item', 'news'],
+			'unknown' => ['nope', null],
+		];
+	}
 }
