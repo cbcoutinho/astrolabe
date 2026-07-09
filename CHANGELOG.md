@@ -25,6 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.34.0 (2026-07-09)
+
+### Feat
+
+- check document access on the astrolabe side via a pluggable verifier registry
+
+### Fix
+
+- FileAccessVerifier requires every supplied identifier to resolve
+- make deck/mail verifiers DELEGATE — don't trust client-supplied container ids
+- filter unified-search results + drop dead calendar_event doc type
+
+### Refactor
+
+- address access-verifier review — safer calendar, tighter checks
+
 ## v0.33.1 (2026-07-05)
 
 ### Fix
