@@ -195,6 +195,30 @@ class WebhookPresets {
 	}
 
 	/**
+	 * Decode the admin's enabled-preset id list from its JSON app-config value.
+	 *
+	 * Shared by the boot-time listener subscription, the runtime listener, and
+	 * the admin controller so the decode-and-filter-strings routine can't drift
+	 * across those three call sites.
+	 *
+	 * @return list<string>
+	 * @psalm-suppress MixedAssignment decoded JSON values are mixed by nature
+	 */
+	public static function decodeEnabledPresetIds(string $json): array {
+		$decoded = json_decode($json, true);
+		if (!is_array($decoded)) {
+			return [];
+		}
+		$ids = [];
+		foreach ($decoded as $id) {
+			if (is_string($id)) {
+				$ids[] = $id;
+			}
+		}
+		return $ids;
+	}
+
+	/**
 	 * Get list of event class names for a preset.
 	 *
 	 * @param string $presetId Preset identifier

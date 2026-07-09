@@ -267,4 +267,93 @@ final class McpServerClientTest extends TestCase {
 
 		$this->assertTrue($result['provisioning_required'] ?? false);
 	}
+
+	// =========================================================================
+	// sendSyncEvent() — native listener delivery to the webhook ingress
+	// =========================================================================
+
+	/**
+	 * Build a client whose config also returns a webhook secret, so the
+	 * constructor picks it up (the shared setUp() client has none configured).
+	 */
+	private function clientWithWebhookSecret(string $secret): McpServerClient {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValue')
+			->willReturnCallback(function (string $key, $default) use ($secret) {
+				if ($key === 'mcp_server_url') {
+					return 'http://mcp-server:8000'; // NOSONAR
+				}
+				if ($key === 'mcp_webhook_secret') {
+					return $secret;
+				}
+				return $default;
+			});
+		$factory = new HttpFactory();
+		return new McpServerClient($this->httpClient, $factory, $factory, $config, $this->logger, $this->appManager);
+	}
+
+	private function sampleEnvelope(): array {
+		return [
+			'event' => [
+				'node' => ['id' => 42, 'path' => '/admin/files/Notes/todo.md'],
+				'class' => 'OCP\\Files\\Events\\Node\\NodeWrittenEvent',
+			],
+			'user' => ['uid' => 'admin', 'displayName' => 'admin'],
+			'time' => 1720000000,
+		];
+	}
+
+	public function testSendSyncEventRefusesWhenSecretUnset(): void {
+		// The shared setUp() client has no mcp_webhook_secret configured.
+		$this->httpClient->expects($this->never())->method('sendRequest');
+
+		$result = $this->client->sendSyncEvent($this->sampleEnvelope());
+
+		$this->assertArrayHasKey('error', $result);
+		$this->assertStringContainsString('secret', $result['error']);
+	}
+
+	public function testSendSyncEventPostsEnvelopeWithBearerSecret(): void {
+		$captured = null;
+		$this->httpClient->expects($this->once())
+			->method('sendRequest')
+			->with($this->callback(function (RequestInterface $request) use (&$captured): bool {
+				$captured = $request;
+				return true;
+			}))
+			->willReturn($this->makeResponse(200, json_encode(['status' => 'queued'])));
+
+		$result = $this->clientWithWebhookSecret('s3cr3t')->sendSyncEvent($this->sampleEnvelope());
+
+		$this->assertArrayNotHasKey('error', $result);
+		$this->assertSame('queued', $result['status'] ?? null);
+
+		$this->assertInstanceOf(RequestInterface::class, $captured);
+		$this->assertSame('POST', $captured->getMethod());
+		$this->assertStringContainsString('/webhooks/nextcloud', (string)$captured->getUri());
+		$this->assertStringNotContainsString('/api/v1/', (string)$captured->getUri());
+		$this->assertSame('Bearer s3cr3t', $captured->getHeaderLine('Authorization'));
+		$this->assertSame('Nextcloud-Astrolabe/0.14.0', $captured->getHeaderLine('User-Agent'));
+		$decoded = json_decode((string)$captured->getBody(), true);
+		$this->assertSame('OCP\\Files\\Events\\Node\\NodeWrittenEvent', $decoded['event']['class']);
+		$this->assertSame('admin', $decoded['user']['uid']);
+	}
+
+	public function testSendSyncEventReturnsErrorOn401(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(401, json_encode(['detail' => 'bad secret'])));
+
+		$result = $this->clientWithWebhookSecret('wrong')->sendSyncEvent($this->sampleEnvelope());
+
+		$this->assertArrayHasKey('error', $result);
+		$this->assertStringContainsString('401', $result['error']);
+	}
+
+	public function testSendSyncEventReturnsErrorOn503(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(503, ''));
+
+		$result = $this->clientWithWebhookSecret('s3cr3t')->sendSyncEvent($this->sampleEnvelope());
+
+		$this->assertArrayHasKey('error', $result);
+		$this->assertStringContainsString('503', $result['error']);
+	}
 }

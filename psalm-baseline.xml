@@ -19,42 +19,11 @@
       <code><![CDATA[setAppValue]]></code>
       <code><![CDATA[setAppValue]]></code>
     </DeprecatedMethod>
-    <InvalidArrayOffset>
-      <code><![CDATA[$webhook['eventFilter']]]></code>
-    </InvalidArrayOffset>
-    <MixedArgument>
-      <code><![CDATA[!empty($eventConfig['filter']) ? $eventConfig['filter'] : null]]></code>
-      <code><![CDATA[$eventConfig['event']]]></code>
-    </MixedArgument>
-    <MixedArrayAccess>
-      <code><![CDATA[$eventConfig['event']]]></code>
-      <code><![CDATA[$eventConfig['event']]]></code>
-      <code><![CDATA[$eventConfig['filter']]]></code>
-      <code><![CDATA[$presetEvent['event']]]></code>
-      <code><![CDATA[$presetEvent['event']]]></code>
-      <code><![CDATA[$presetEvent['filter']]]></code>
-      <code><![CDATA[$presetEvent['filter']]]></code>
-    </MixedArrayAccess>
     <MixedAssignment>
-      <code><![CDATA[$eventConfig]]></code>
-      <code><![CDATA[$presetEvent]]></code>
-      <code><![CDATA[$presetEvent]]></code>
-      <code><![CDATA[$presetFilter]]></code>
-      <code><![CDATA[$presetFilter]]></code>
       <code><![CDATA[$response['coordinates_3d']]]></code>
       <code><![CDATA[$response['pca_variance']]]></code>
       <code><![CDATA[$response['query_coords']]]></code>
-      <code><![CDATA[$webhookFilter]]></code>
     </MixedAssignment>
-    <PossiblyUndefinedArrayOffset>
-      <code><![CDATA[$webhook['event']]]></code>
-      <code><![CDATA[$webhook['event']]]></code>
-      <code><![CDATA[$webhook['event']]]></code>
-      <code><![CDATA[$webhook['id']]]></code>
-    </PossiblyUndefinedArrayOffset>
-    <RiskyTruthyFalsyComparison>
-      <code><![CDATA[empty($webhook['eventFilter'])]]></code>
-    </RiskyTruthyFalsyComparison>
     <TypeDoesNotContainType>
       <code><![CDATA[is_array($status)]]></code>
       <code><![CDATA[is_array($status)]]></code>
@@ -223,9 +192,6 @@
 			$preset['events']
 		)]]></code>
     </MixedReturnTypeCoercion>
-    <PossiblyUnusedMethod>
-      <code><![CDATA[getPresetEvents]]></code>
-    </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/Admin.php">
     <ClassMustBeFinal>

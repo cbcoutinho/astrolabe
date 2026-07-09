@@ -108,34 +108,32 @@
 			<!-- Webhook management -->
 			<NcSettingsSection
 				v-if="vectorSyncEnabled"
-				:name="t('astrolabe', 'Webhook management')"
-				:description="t('astrolabe', 'Configure real-time synchronization for Nextcloud apps using webhooks. Webhooks provide instant updates to the MCP server when content changes.')">
-				<div v-if="webhooksLoading" class="loading-indicator">
-					<NcLoadingIcon :size="32" />
-					<p>{{ t('astrolabe', 'Loading webhook presets…') }}</p>
-				</div>
-
-				<NcNoteCard v-else-if="webhooksProvisioningRequired" type="warning">
-					<p><strong>{{ t('astrolabe', 'MCP server background access not provisioned') }}</strong></p>
-					<p>
-						{{ t('astrolabe', 'The MCP server needs an app password to call Nextcloud APIs on behalf of an admin. Enable background indexing for this admin account in Personal Settings, then reload this page.') }}
-					</p>
-					<div class="webhook-auth-actions">
-						<NcButton variant="primary" @click="openPersonalSettings">
-							{{ t('astrolabe', 'Go to Personal Settings') }}
-						</NcButton>
-					</div>
+				:name="t('astrolabe', 'Sync management')"
+				:description="t('astrolabe', 'Configure real-time synchronization for Nextcloud apps. Astrolabe listens for changes in Nextcloud and delivers them directly to the MCP server, so its vector index stays up to date instantly.')">
+				<NcNoteCard v-if="!nativeSyncEnabled" type="warning">
+					<p><strong>{{ t('astrolabe', 'Native sync is turned off') }}</strong></p>
+					<p>{{ t('astrolabe', 'Change events are not being delivered. The MCP server falls back to periodic polling until native sync is re-enabled.') }}</p>
 				</NcNoteCard>
 
+				<NcNoteCard v-else-if="!webhookSecretConfigured" type="warning">
+					<p><strong>{{ t('astrolabe', 'Webhook secret not configured') }}</strong></p>
+					<p>{{ t('astrolabe', 'Set the “Webhook shared secret” in the MCP Server Configuration above to match the MCP server’s WEBHOOK_SECRET. Until then, change events cannot be delivered and the MCP server relies on periodic polling.') }}</p>
+				</NcNoteCard>
+
+				<div v-if="webhooksLoading" class="loading-indicator">
+					<NcLoadingIcon :size="32" />
+					<p>{{ t('astrolabe', 'Loading sync presets…') }}</p>
+				</div>
+
 				<NcNoteCard v-else-if="webhooksError" type="error">
-					<p><strong>{{ t('astrolabe', 'Failed to load webhook presets') }}</strong></p>
+					<p><strong>{{ t('astrolabe', 'Failed to load sync presets') }}</strong></p>
 					<p>{{ webhooksError }}</p>
 				</NcNoteCard>
 
 				<template v-else>
 					<div v-if="webhookPresets.length === 0" class="empty-state">
 						<NcNoteCard type="info">
-							<p>{{ t('astrolabe', 'No webhook presets available. Install supported apps (Notes, Calendar, Tables, Forms) to enable webhooks.') }}</p>
+							<p>{{ t('astrolabe', 'No sync presets available. Install supported apps (Notes, Calendar, Tables, Forms) to enable synchronization.') }}</p>
 						</NcNoteCard>
 					</div>
 
@@ -166,21 +164,21 @@
 					</div>
 
 					<NcNoteCard type="info" class="webhook-info">
-						<p><strong>{{ t('astrolabe', 'How Webhooks Work') }}</strong></p>
+						<p><strong>{{ t('astrolabe', 'How sync works') }}</strong></p>
 						<ul>
-							<li>{{ t('astrolabe', 'Enable a preset to register webhooks for that app with the MCP server') }}</li>
-							<li>{{ t('astrolabe', 'When content changes in Nextcloud, webhooks notify the MCP server instantly') }}</li>
+							<li>{{ t('astrolabe', 'Enable a preset to start delivering that app’s change events to the MCP server') }}</li>
+							<li>{{ t('astrolabe', 'When content changes in Nextcloud, Astrolabe delivers the change to the MCP server instantly') }}</li>
 							<li>{{ t('astrolabe', 'The MCP server updates its vector index in real-time for semantic search') }}</li>
-							<li>{{ t('astrolabe', 'Disable a preset to stop receiving updates for that app') }}</li>
+							<li>{{ t('astrolabe', 'Disable a preset to stop delivering updates for that app') }}</li>
 						</ul>
 					</NcNoteCard>
 
 					<NcNoteCard type="warning" class="webhook-requirements">
 						<p><strong>{{ t('astrolabe', 'Requirements') }}</strong></p>
 						<ul>
-							<li>{{ t('astrolabe', 'The webhook_listeners app must be installed and enabled in Nextcloud') }}</li>
 							<li>{{ t('astrolabe', 'The MCP server must be reachable from your Nextcloud instance') }}</li>
-							<li>{{ t('astrolabe', 'The MCP server must have an app password for the calling admin (see Personal Settings)') }}</li>
+							<li>{{ t('astrolabe', 'The webhook shared secret above must match the MCP server’s WEBHOOK_SECRET') }}</li>
+							<li>{{ t('astrolabe', 'Each user must have background indexing provisioned so the MCP server can index their content (see Personal Settings)') }}</li>
 						</ul>
 					</NcNoteCard>
 				</template>
@@ -347,10 +345,6 @@ const saving = ref(false)
 // Webhook management state
 const webhooksLoading = ref(false)
 const webhooksError = ref(null)
-// Set when the MCP server reports HTTP 428 (Precondition Required) — the
-// admin has not provisioned background indexing yet, so the MCP server has
-// no app password to call Nextcloud APIs with. Drives the CTA card below.
-const webhooksProvisioningRequired = ref(false)
 const webhookPresets = ref([])
 
 // Load initial state from PHP
@@ -363,6 +357,12 @@ const settings = ref(initialData.searchSettings || {
 	showVisualization: true,
 })
 const allowUserSelfProvision = ref(initialData.allowUserSelfProvision ?? true)
+
+// Native sync state. Astrolabe now delivers change events to the MCP server
+// itself (no webhook_listeners app), authenticated with a shared secret — the
+// UI warns when that secret is missing or the master switch is off.
+const nativeSyncEnabled = ref(initialData.nativeSyncEnabled ?? true)
+const webhookSecretConfigured = ref(initialData.webhookSecretConfigured ?? false)
 
 // Searchable-sources (admin consent) state. Only installed sources are
 // provided by the backend; each carries its current enabled state.
@@ -594,7 +594,6 @@ async function persistSources(snapshot) {
 async function loadWebhookPresets() {
 	webhooksLoading.value = true
 	webhooksError.value = null
-	webhooksProvisioningRequired.value = false
 
 	try {
 		const response = await axios.get(generateUrl('/apps/astrolabe/api/admin/webhooks/presets'))
@@ -612,23 +611,12 @@ async function loadWebhookPresets() {
 		}
 	} catch (err) {
 		console.error('Failed to load webhook presets:', err)
-		// 428 Precondition Required → admin hasn't completed Login Flow v2
-		// provisioning. Show the dedicated CTA instead of a generic error.
-		if (err.response?.status === 428 || err.response?.data?.provisioning_required) {
-			webhooksProvisioningRequired.value = true
-		} else {
-			webhooksError.value = err.response?.data?.error || err.message || t('astrolabe', 'Network error')
-		}
+		webhooksError.value = err.response?.data?.error || err.message || t('astrolabe', 'Network error')
 	} finally {
 		webhooksLoading.value = false
 	}
 }
 
-// Invariant: webhooksProvisioningRequired is reset on entry to
-// loadWebhookPresets and only ever set true here on a 428 — we never clear
-// it on success because the provisioning CTA card hides the toggle buttons
-// (the v-else-if chain shows only one card at a time), so a successful
-// toggle while the flag is true is not user-reachable.
 async function toggleWebhookPreset(preset) {
 	preset.toggling = true
 
@@ -642,28 +630,16 @@ async function toggleWebhookPreset(preset) {
 		if (response.data.success) {
 			// Toggle the enabled state
 			preset.enabled = !preset.enabled
-			showSuccess(response.data.message || (preset.enabled ? t('astrolabe', 'Webhook preset enabled') : t('astrolabe', 'Webhook preset disabled')))
+			showSuccess(response.data.message || (preset.enabled ? t('astrolabe', 'Sync preset enabled') : t('astrolabe', 'Sync preset disabled')))
 		} else {
-			showError(response.data.error || t('astrolabe', 'Failed to toggle webhook preset'))
+			showError(response.data.error || t('astrolabe', 'Failed to toggle sync preset'))
 		}
 	} catch (err) {
-		console.error('Failed to toggle webhook preset:', err)
-		// 428 → admin hasn't provisioned. Surface the dedicated CTA at the
-		// top of the page rather than a transient toast that the user might
-		// dismiss without action.
-		if (err.response?.status === 428 || err.response?.data?.provisioning_required) {
-			webhooksProvisioningRequired.value = true
-			showError(t('astrolabe', 'Authorize Astrolabe with the MCP server in Personal Settings to manage webhooks'))
-		} else {
-			showError(err.response?.data?.error || err.message || t('astrolabe', 'Network error'))
-		}
+		console.error('Failed to toggle sync preset:', err)
+		showError(err.response?.data?.error || err.message || t('astrolabe', 'Network error'))
 	} finally {
 		preset.toggling = false
 	}
-}
-
-function openPersonalSettings() {
-	window.location.href = generateUrl('/settings/user/astrolabe')
 }
 
 function formatUptime(seconds) {

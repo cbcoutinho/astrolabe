@@ -65,6 +65,39 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 		];
 	}
 
+	public function testSecretIsNeverEchoedOnRead(): void {
+		// The stored secret must not be sent back to the browser: the Get handler
+		// returns an empty string without ever reading the stored value.
+		$this->config->expects($this->never())->method('getSystemValue');
+
+		$event = $this->buildGetEvent('mcp_webhook_secret');
+		$this->listener->handle($event);
+
+		$this->assertSame('', $event->getValue());
+	}
+
+	public function testSecretPersistsOnNonEmptySet(): void {
+		$this->config->expects($this->once())
+			->method('setSystemValue')
+			->with('mcp_webhook_secret', 's3cr3t');
+
+		$event = $this->buildSetEvent('mcp_webhook_secret', 's3cr3t');
+		$this->listener->handle($event);
+
+		$this->assertTrue($event->isPropagationStopped());
+	}
+
+	public function testEmptySecretSetLeavesStoredValueUnchanged(): void {
+		// A blank save must not clobber the stored secret (the field renders blank).
+		$this->config->expects($this->never())->method('setSystemValue');
+
+		$event = $this->buildSetEvent('mcp_webhook_secret', '');
+		$this->listener->handle($event);
+
+		// Still consumed so no other handler treats the blank as a real value.
+		$this->assertTrue($event->isPropagationStopped());
+	}
+
 	public function testUnknownFieldDoesNotStopPropagationOnSave(): void {
 		// Unknown field IDs must not be silently consumed — otherwise a
 		// future rename would drop saves with no log trail.

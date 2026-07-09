@@ -14,6 +14,7 @@ use OCA\Astrolabe\Service\McpServerClient;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
+use OCP\App\IAppManager;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IAppConfig;
@@ -42,6 +43,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 	protected IAppConfig&MockObject $appConfig;
 	protected SearchSources&MockObject $searchSources;
 	protected SearchCapabilities&MockObject $searchCapabilities;
+	protected IAppManager&MockObject $appManager;
 	protected IRootFolder&MockObject $rootFolder;
 	protected Folder&MockObject $userFolder;
 	protected DocumentAccessService $documentAccess;
@@ -69,6 +71,13 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		// never throws; tests exercising the keyword-only gate override it.
 		$this->searchCapabilities->method('getSupportedSearchTypes')
 			->willReturn(['semantic', 'bm25', 'hybrid']);
+		$this->appManager = $this->createMock(IAppManager::class);
+		// Default: the core "files" app is enabled for the user, so the
+		// always-available files/notes presets surface. Tests that assert on other
+		// apps override. getWebhookPresets() uses the per-user (non-deprecated)
+		// accessor; getInstalledApps is stubbed too for any other caller.
+		$this->appManager->method('getEnabledAppsForUser')->willReturn(['files']);
+		$this->appManager->method('getInstalledApps')->willReturn(['files']);
 
 		// Real DocumentAccessService wired to mocked leaf deps (it's final, so it
 		// can't be mocked). By default SearchSources::isInstalled() returns false
@@ -99,6 +108,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 			$this->searchSources,
 			$this->searchCapabilities,
 			$this->documentAccess,
+			$this->appManager,
 		);
 	}
 

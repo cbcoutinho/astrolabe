@@ -8,13 +8,18 @@ use GuzzleHttp\Psr7\HttpFactory;
 use OCA\Astrolabe\Capabilities;
 use OCA\Astrolabe\Http\NextcloudPsr18Client;
 use OCA\Astrolabe\Listener\AstrolabeAdminSettingsListener;
+use OCA\Astrolabe\Listener\SyncEventListener;
 use OCA\Astrolabe\Search\SemanticSearchProvider;
+use OCA\Astrolabe\Service\WebhookPresets;
+use OCA\Astrolabe\Settings\Admin;
 use OCA\Astrolabe\Settings\AstrolabeAdminSettings;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Http\Client\IClientService;
+use OCP\IAppConfig;
 use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
 use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
 use Psr\Container\ContainerInterface;
@@ -66,5 +71,31 @@ class Application extends App implements IBootstrap {
 	}
 
 	public function boot(IBootContext $context): void {
+		// Subscribe our native sync listener to exactly the event classes of the
+		// presets the admin has enabled (mirrors webhook_listeners' dynamic
+		// registration). Config is read fresh each request, so toggling a preset
+		// takes effect on the next request with no cache to invalidate.
+		// addServiceListener() takes a string class name, so subscribing to an
+		// event from an app that isn't installed is harmless — it simply never fires.
+		$context->injectFn(function (IEventDispatcher $dispatcher, IAppConfig $appConfig): void {
+			if (!$appConfig->getValueBool(self::APP_ID, Admin::SETTING_NATIVE_SYNC_ENABLED, Admin::DEFAULT_NATIVE_SYNC_ENABLED)) {
+				return;
+			}
+
+			$enabledPresets = WebhookPresets::decodeEnabledPresetIds(
+				$appConfig->getValueString(self::APP_ID, Admin::SETTING_ENABLED_SYNC_PRESETS, Admin::DEFAULT_ENABLED_SYNC_PRESETS),
+			);
+
+			$eventClasses = [];
+			foreach ($enabledPresets as $presetId) {
+				foreach (WebhookPresets::getPresetEvents($presetId) as $eventClass) {
+					$eventClasses[$eventClass] = true;
+				}
+			}
+
+			foreach (array_keys($eventClasses) as $eventClass) {
+				$dispatcher->addServiceListener($eventClass, SyncEventListener::class, -1);
+			}
+		});
 	}
 }
