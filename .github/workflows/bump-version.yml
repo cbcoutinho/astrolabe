@@ -5,8 +5,11 @@ on:
     branches:
       - main
 
+# Run at most one bump/release at a time. Concurrent pushes to main must not
+# both bump the version and push tags, which has caused release failures in the
+# past. Queue subsequent pushes instead of cancelling an in-flight bump/release.
 concurrency:
-  group: bump-version-${{ github.ref }}
+  group: bump-version
   cancel-in-progress: false
 
 jobs:
