@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.36.0 (2026-07-10)
+
+### Feat
+
+- document keyword-index tag; retire stale keyword-only-mode wording
+
 ## v0.35.0 (2026-07-09)
 
 ### Feat
