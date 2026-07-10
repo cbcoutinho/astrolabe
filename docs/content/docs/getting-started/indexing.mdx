@@ -44,22 +44,17 @@ tag content, but reindexing won't be triggered automatically by tag changes.
 
 <Callout title="Optional: cheaper keyword-only indexing with `keyword-index`">
 
-If keyword-only indexing is enabled on your server, you can tag content with a
-second system tag, **`keyword-index`**, instead of `vector-index`. Files tagged
-`keyword-index` are indexed for **keyword (BM25) search only** — no embeddings
-are generated for them, so they cost less to index and need no embedding
-provider. They still show up in your normal search results, matched by exact
-words and phrases rather than by meaning.
+You can also tag content with a second system tag, **`keyword-index`**, instead
+of `vector-index`. Files tagged `keyword-index` are indexed for **keyword (BM25)
+search only** — no embeddings are generated for them, so they cost less to index
+and need no embedding provider. They still show up in your normal search
+results, matched by exact words and phrases rather than by meaning.
 
 Use it for bulk or low-value content you want findable by keyword but don't need
 semantic (meaning-based) recall on; keep `vector-index` for the content you want
-full semantic search over. Create and apply `keyword-index` exactly like
-`vector-index` above. A file that carries **both** tags is fully indexed —
-`vector-index` (semantic + keyword) wins.
-
-Keyword-only indexing is off unless your administrator has enabled it (the MCP
-server's `VECTOR_SYNC_KEYWORD_TAG` setting). On Astrolabe Cloud, check with
-support whether it's available for your tenant.
+full semantic search over. `keyword-index` works out of the box — create and
+apply it exactly like `vector-index` above. A file that carries **both** tags is
+fully indexed — `vector-index` (semantic + keyword) wins.
 
 </Callout>
 
