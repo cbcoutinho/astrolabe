@@ -29,10 +29,12 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 /**
- * Unit tests for SemanticSearchProvider's ADR-030 algorithm gating: the Unified
- * Search path must clamp the admin-configured algorithm to what the MCP server
- * advertises, so a keyword-only server doesn't silently return nothing when the
- * stored algorithm is still the "hybrid" default.
+ * Unit tests for SemanticSearchProvider's algorithm handling on the Unified
+ * Search path: a supported admin-configured algorithm is forwarded to the MCP
+ * server untouched. (The provider also carries a defensive clamp to a serviceable
+ * type, but that branch is unreachable in live behavior — the server advertises
+ * all three algorithms when vector sync is on and [] when off, the latter caught
+ * by the vector_sync_enabled early-return.)
  */
 final class SemanticSearchProviderTest extends TestCase {
 	private McpServerClient&MockObject $client;
@@ -133,14 +135,6 @@ final class SemanticSearchProviderTest extends TestCase {
 		// Named args arrive positionally in declaration order:
 		// (query, token, limit, offset, algorithm, fusion, scoreThreshold, docTypes)
 		return $captured[4];
-	}
-
-	public function testClampsHybridDefaultToBm25OnKeywordOnlyServer(): void {
-		$this->stubStoredAlgorithm('hybrid');
-		$provider = $this->providerAdvertising(['bm25']);
-		// "hybrid" isn't serviceable in keyword mode → coerced to the only
-		// supported type, so unified search returns bm25 results instead of empty.
-		$this->assertSame('bm25', $this->capturedAlgorithm($provider));
 	}
 
 	public function testLeavesSupportedAlgorithmUntouchedInHybridMode(): void {

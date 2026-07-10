@@ -195,7 +195,7 @@ class ApiController extends Controller {
 	}
 
 	/**
-	 * Uniform 422 for an algorithm the MCP server does not advertise (ADR-030).
+	 * Uniform 422 for an algorithm the MCP server does not advertise.
 	 *
 	 * ``error`` is the exception's human-readable sentence — consistent with the
 	 * other errors in this controller, which the UI renders verbatim in an
@@ -262,11 +262,11 @@ class ApiController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		// Gate the requested algorithm on what the MCP server advertises (ADR-030)
-		// *before* minting a token or hitting the MCP server, so a direct or stale
-		// client asking for e.g. "semantic" against a keyword-only server fails
-		// fast with a 422 rather than silently coercing to "hybrid" (BM25 results
-		// dressed up as a semantic answer). Mirrors the server's own 422 backstop.
+		// Gate the requested algorithm on what the MCP server advertises *before*
+		// minting a token or hitting the MCP server, so a direct or stale client
+		// asking for any algorithm while vector sync is off (server advertises [])
+		// fails fast with a 422 rather than silently coercing to another type.
+		// Mirrors the server's own 422 backstop.
 		try {
 			$this->searchCapabilities->assertSupported($algorithm);
 		} catch (UnsupportedSearchTypeException $e) {
@@ -455,11 +455,11 @@ class ApiController extends Controller {
 	): JSONResponse {
 		// Parameters are populated by the framework from the JSON request body
 		// (no need to read php://input directly).
-		// Admins may only persist an algorithm the MCP server can actually serve
-		// (ADR-030). The admin UI hides unsupported options, but reject an
-		// out-of-band save (e.g. a keyword-only server) rather than silently
-		// coercing to the default, so the stored config never drifts from what
-		// the server advertises.
+		// Admins may only persist an algorithm the MCP server can actually serve.
+		// The admin UI hides unsupported options, but reject an out-of-band save
+		// (e.g. while vector sync is off and the server advertises []) rather than
+		// silently coercing to the default, so the stored config never drifts from
+		// what the server advertises.
 		try {
 			$this->searchCapabilities->assertSupported($algorithm);
 		} catch (UnsupportedSearchTypeException $e) {

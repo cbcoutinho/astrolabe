@@ -136,14 +136,14 @@ class SemanticSearchProvider implements IProvider {
 			AdminSettings::DEFAULT_SEARCH_ALGORITHM
 		);
 
-		// Clamp the admin-configured algorithm to what the server can actually
-		// serve (ADR-030). vector_sync_enabled (checked above) is a *different*
-		// flag than SEARCH_MODE=keyword, so a keyword-only server (vector sync on,
-		// dense off → supported_search_types == ["bm25"]) with the algorithm left
-		// at its "hybrid" default would otherwise trip the server's strict 422 and
-		// make the global search bar silently return nothing. Reuse the status we
-		// just fetched (no extra poll); fall back to hybrid when available else the
-		// first supported type. Absent field (older server) ⇒ leave as-is.
+		// Defensive clamp: the live gate is the vector_sync_enabled early-return
+		// above (server advertises all three types when sync is on, [] when off),
+		// so a supported algorithm normally reaches here untouched. This branch is
+		// a harmless generic backstop — if an unsupported algorithm ever slipped
+		// through it would otherwise trip the server's strict 422 and make the
+		// global search bar silently return nothing, so coerce it to a serviceable
+		// type. Reuse the status we just fetched (no extra poll); prefer hybrid,
+		// else the first advertised type. Absent field (older server) ⇒ leave as-is.
 		/** @var mixed $supported — runtime JSON from the MCP status payload. */
 		$supported = $status['supported_search_types'] ?? null;
 		if (is_array($supported) && $supported !== [] && !in_array($algorithm, $supported, true)) {

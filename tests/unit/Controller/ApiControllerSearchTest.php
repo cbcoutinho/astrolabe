@@ -39,13 +39,14 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 	}
 
 	public function testRejectsUnsupportedAlgorithmWith422(): void {
-		// ADR-030: on a keyword-only server the picker hides Semantic, but a
-		// direct/stale client can still ask for it. The guard rejects it with 422
-		// (mirroring the MCP server's backstop) and never calls the MCP client.
+		// When vector sync is off the server advertises [] and can serve nothing,
+		// so the picker is empty — but a direct/stale client can still ask for an
+		// algorithm. The guard rejects it with 422 (mirroring the MCP server's
+		// backstop) and never calls the MCP client.
 		$this->authenticateUserWithToken();
 		$this->searchCapabilities->method('assertSupported')
 			->with('semantic')
-			->willThrowException(new UnsupportedSearchTypeException('semantic', ['bm25']));
+			->willThrowException(new UnsupportedSearchTypeException('semantic', []));
 		$this->client->expects($this->never())->method('search');
 
 		$response = $this->controller->search(query: 'anything', algorithm: 'semantic');
@@ -57,7 +58,7 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame('unsupported_search_type', $data['code']);
 		$this->assertStringContainsString('semantic', $data['error']);
 		$this->assertSame('semantic', $data['requested']);
-		$this->assertSame(['bm25'], $data['supported_search_types']);
+		$this->assertSame([], $data['supported_search_types']);
 	}
 
 	public function testForwardsRfc3339BoundsToClient(): void {

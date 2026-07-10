@@ -118,8 +118,8 @@ final class McpServerClientPactTest extends TestCase {
 
 		// The fields McpServerClient::getStatus() relies on; matched by type so the
 		// contract pins the shape, not the MCP server's exact values.
-		// ``supported_search_types`` (ADR-030) is the query-type vocabulary the
-		// UI gates its algorithm picker on and SearchCapabilities enforces.
+		// ``supported_search_types`` is the query-type vocabulary the UI gates its
+		// algorithm picker on and SearchCapabilities enforces.
 		$response = (new ProviderResponse())
 			->setStatus(200)
 			->addHeader('Content-Type', 'application/json')
@@ -153,18 +153,20 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
-	 * Strict gating contract (ADR-030): when the MCP server runs keyword-only
-	 * (SEARCH_MODE=keyword, advertising ``supported_search_types: ["bm25"]``), an
-	 * explicit ``semantic`` search request is rejected with HTTP 422
-	 * ``unsupported_search_type`` rather than silently coerced to BM25.
+	 * Strict gating contract: when vector sync is disabled the server advertises
+	 * ``supported_search_types: []`` and rejects any explicit search algorithm
+	 * with HTTP 422 ``unsupported_search_type`` rather than silently returning
+	 * nothing. (Keyword vs hybrid is now a per-document indexing choice on the
+	 * server — the ``keyword-index`` tag — not a keyword-only server mode; when
+	 * vector sync is on all three algorithms are offered.)
 	 *
 	 * astrolabe gates the request client-side from ``/api/v1/status`` (see
-	 * SearchCapabilities) and hides the option in its UI, but this pins the
+	 * SearchCapabilities) and hides the options in its UI, but this pins the
 	 * server-side backstop the client relies on. The provider state names the
-	 * precondition the MCP server sets up (a keyword-only instance); it matches
-	 * the handler registered on the provider side.
+	 * precondition the MCP server sets up; it matches the handler registered on
+	 * the provider side.
 	 */
-	public function testSearchRejectsUnsupportedAlgorithmInKeywordMode(): void {
+	public function testSearchRejectsUnsupportedAlgorithmWhenVectorSyncDisabled(): void {
 		$matcher = new Matcher();
 		$config = $this->mockServerConfig();
 
@@ -186,13 +188,14 @@ final class McpServerClientPactTest extends TestCase {
 			->setBody([
 				'error' => 'unsupported_search_type',
 				'requested' => 'semantic',
-				'supported_search_types' => $matcher->eachLike('bm25'),
+				// Vector sync off → nothing is supported.
+				'supported_search_types' => [],
 			]);
 
 		$builder = new InteractionBuilder($config);
 		$builder
-			->given('the server advertises keyword-only search support')
-			->uponReceiving('a semantic search request when the server is in keyword mode')
+			->given('the server has vector sync disabled')
+			->uponReceiving('a semantic search request when vector sync is disabled')
 			->with($request)
 			->willRespondWith($response);
 

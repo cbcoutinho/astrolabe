@@ -51,10 +51,10 @@ class PageController extends Controller {
 			// type filter only offers sources enabled for this user. The search
 			// backend already intersects requested types with this set.
 			'enabledDocTypes' => $this->searchSources->effectiveEnabledDocTypes(),
-			// Query algorithms the MCP server can actually serve (ADR-030), so
-			// the algorithm picker hides semantic/hybrid when the server runs
-			// keyword-only. The search backend rejects unsupported requests (422)
-			// as the backstop.
+			// Query algorithms the MCP server can actually serve, so the algorithm
+			// picker hides all options only when the advertised set is [] (vector
+			// sync off). The search backend rejects unsupported requests (422) as
+			// the backstop.
 			'supportedSearchTypes' => $this->searchCapabilities->getSupportedSearchTypes(),
 		]);
 

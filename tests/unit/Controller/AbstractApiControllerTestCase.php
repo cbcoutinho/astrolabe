@@ -68,7 +68,7 @@ abstract class AbstractApiControllerTestCase extends TestCase {
 		$this->searchCapabilities = $this->createMock(SearchCapabilities::class);
 		// Default: the MCP server supports every algorithm, so search tests see
 		// the pre-feature behaviour. The default void mock of assertSupported()
-		// never throws; tests exercising the keyword-only gate override it.
+		// never throws; tests exercising the unsupported-type gate override it.
 		$this->searchCapabilities->method('getSupportedSearchTypes')
 			->willReturn(['semantic', 'bm25', 'hybrid']);
 		$this->appManager = $this->createMock(IAppManager::class);

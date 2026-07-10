@@ -14,8 +14,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Unit tests for SearchCapabilities: it reads supported_search_types from the
- * MCP server's /api/v1/status (ADR-030) and gates algorithm requests, staying
- * permissive when status is unavailable so the server's 422 remains the backstop.
+ * MCP server's /api/v1/status and gates algorithm requests, staying permissive
+ * when status is unavailable so the server's 422 remains the backstop.
  */
 final class SearchCapabilitiesTest extends TestCase {
 	private McpServerClient&MockObject $client;
@@ -36,15 +36,17 @@ final class SearchCapabilitiesTest extends TestCase {
 		return new SearchCapabilities($this->client, $cacheFactory);
 	}
 
-	public function testReturnsAdvertisedKeywordOnlySet(): void {
+	public function testReturnsAdvertisedSetVerbatim(): void {
+		// The advertised set is passed through verbatim (order and contents
+		// preserved), whatever subset the server reports.
 		$this->client->method('getStatus')->willReturn([
 			'vector_sync_enabled' => true,
-			'supported_search_types' => ['bm25'],
+			'supported_search_types' => ['bm25', 'hybrid'],
 		]);
 		$this->cache->expects($this->once())->method('set')
-			->with('supported_search_types', ['bm25'], $this->anything());
+			->with('supported_search_types', ['bm25', 'hybrid'], $this->anything());
 
-		$this->assertSame(['bm25'], $this->subject()->getSupportedSearchTypes());
+		$this->assertSame(['bm25', 'hybrid'], $this->subject()->getSupportedSearchTypes());
 	}
 
 	public function testReturnsAllThreeInHybridMode(): void {
@@ -74,23 +76,26 @@ final class SearchCapabilitiesTest extends TestCase {
 
 	public function testUsesCachedValueWithoutFetching(): void {
 		$this->cache = $this->createMock(ICache::class);
-		$this->cache->method('get')->willReturn(['bm25']);
+		$this->cache->method('get')->willReturn(['semantic', 'bm25', 'hybrid']);
 		$this->client->expects($this->never())->method('getStatus');
 
-		$this->assertSame(['bm25'], $this->subject()->getSupportedSearchTypes());
+		$this->assertSame(['semantic', 'bm25', 'hybrid'], $this->subject()->getSupportedSearchTypes());
 	}
 
-	public function testAssertSupportedThrowsWithAdvertisedSet(): void {
+	public function testAssertSupportedThrowsWhenNothingAdvertised(): void {
+		// Vector sync off ⇒ the server advertises [] and can serve no algorithm,
+		// so any requested type is rejected.
 		$this->client->method('getStatus')->willReturn([
-			'supported_search_types' => ['bm25'],
+			'vector_sync_enabled' => false,
+			'supported_search_types' => [],
 		]);
 
 		try {
-			$this->subject()->assertSupported('semantic');
+			$this->subject()->assertSupported('hybrid');
 			$this->fail('Expected UnsupportedSearchTypeException');
 		} catch (UnsupportedSearchTypeException $e) {
-			$this->assertSame('semantic', $e->getRequested());
-			$this->assertSame(['bm25'], $e->getSupported());
+			$this->assertSame('hybrid', $e->getRequested());
+			$this->assertSame([], $e->getSupported());
 		}
 	}
 
