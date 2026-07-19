@@ -8,14 +8,18 @@
 			<AlertCircle :size="48" />
 			<p>{{ error }}</p>
 		</div>
-		<div v-show="!loading && !error" class="pdf-image-container">
-			<!-- A canvas exposes nothing to assistive tech on its own, where the
-				 <img> this replaced at least carried alt text. -->
-			<canvas
-				ref="canvasEl"
-				class="pdf-page-image"
-				role="img"
-				:aria-label="t('astrolabe', 'Page {page} of the PDF', { page: pageNumber })" />
+		<!-- The rendered page is the container, not just the canvas: it is the
+			 canvas plus its highlight overlays. Labelling it here also keeps the
+			 img role off the canvas, which is an interactive element and so
+			 cannot carry a non-interactive role. Without this the viewer exposes
+			 nothing to assistive tech, where the <img> it replaced at least had
+			 alt text. -->
+		<div
+			v-show="!loading && !error"
+			class="pdf-image-container"
+			role="img"
+			:aria-label="t('astrolabe', 'Page {page} of the PDF', { page: pageNumber })">
+			<canvas ref="canvasEl" class="pdf-page-image" />
 			<div
 				v-for="(rect, i) in (pageNumber === bboxPage ? highlightBbox : [])"
 				:key="i"

@@ -43,7 +43,8 @@ export function webdavUrlForPath(filePath) {
 		.map((segment) => encodeURIComponent(segment))
 		.join('/')
 
-	return `${generateRemoteUrl(`dav/files/${encodeURIComponent(uid)}`)}/${encoded}`
+	const root = generateRemoteUrl(`dav/files/${encodeURIComponent(uid)}`)
+	return `${root}/${encoded}`
 }
 
 /**
@@ -67,9 +68,9 @@ export async function resolveWebdavUrlByFileId(fileId, signal) {
 		throw new Error('No current user; cannot resolve a file by ID')
 	}
 	const scope = `/files/${uid}`
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
+		.replaceAll('&', '&amp;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;')
 
 	const body = `<?xml version="1.0" encoding="UTF-8"?>
 <d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -111,7 +112,7 @@ function davFetch(url, init = {}) {
 		...init,
 		headers: {
 			requesttoken: getRequestToken() ?? '',
-			...(init.headers ?? {}),
+			...init.headers,
 		},
 	})
 }
@@ -175,7 +176,7 @@ export async function fetchInitialData(url, length, signal) {
  * the path already resolves.
  *
  * @param {string} filePath Indexed path, relative to the owner's home
- * @param {number|null} fileId Nextcloud fileId, when known
+ * @param {number|null|undefined} fileId Nextcloud fileId, when known
  * @param {AbortSignal} [signal] Cancels the lookup requests
  * @return {Promise<{url: string, length: number}>} Where and how big
  */
@@ -190,7 +191,7 @@ export async function resolveDocument(filePath, fileId, signal) {
 			// answer for that case. But it also swallows transient failures
 			// (network, 5xx), which would otherwise surface to the user as a
 			// bare "not found" — so the cause is logged rather than discarded.
-			console.debug('PDF path lookup failed, falling back to fileId', {
+			console.warn('PDF path lookup failed, falling back to fileId', {
 				filePath,
 				error,
 			})
@@ -215,8 +216,9 @@ export class WebDavRangeTransport extends PDFDataRangeTransport {
 	/**
 	 * @param {number} length Total size of the document in bytes
 	 * @param {string} url WebDAV URL to read ranges from
-	 * @param {object} [options] Optional settings
-	 * @param {(error: Error) => void} [options.onError] Called when a range
+	 * @param {Uint8Array} initialData Opening slice PDF.js bootstraps from
+	 * @param {object} [root0] Optional settings
+	 * @param {(error: Error) => void} [root0.onError] Called when a range
 	 *   cannot be delivered, so the viewer can surface a real message instead
 	 *   of waiting forever on bytes that will never arrive.
 	 */
