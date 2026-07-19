@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\Response;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCP\App\IAppManager;
 use OCP\IConfig;
+use OCP\IRequest;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
@@ -33,6 +34,7 @@ final class McpServerClientTest extends TestCase {
 	private IConfig&MockObject $config;
 	private LoggerInterface&MockObject $logger;
 	private IAppManager&MockObject $appManager;
+	private IRequest&MockObject $request;
 	private McpServerClient $client;
 
 	protected function setUp(): void {
@@ -42,6 +44,9 @@ final class McpServerClientTest extends TestCase {
 		$this->config = $this->createMock(IConfig::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->appManager = $this->createMock(IAppManager::class);
+		$this->request = $this->createMock(IRequest::class);
+		$this->request->method('getId')->willReturn('nc-req-id-123');
+		$this->request->method('getHeader')->willReturn('');
 
 		$this->config->method('getSystemValue')
 			->willReturnCallback(function (string $key, $default) {
@@ -63,6 +68,7 @@ final class McpServerClientTest extends TestCase {
 			$this->config,
 			$this->logger,
 			$this->appManager,
+			$this->request,
 		);
 	}
 
@@ -355,5 +361,100 @@ final class McpServerClientTest extends TestCase {
 
 		$this->assertArrayHasKey('error', $result);
 		$this->assertStringContainsString('503', $result['error']);
+	}
+
+	// =========================================================================
+	// Correlation headers
+	// =========================================================================
+
+	/**
+	 * Astrolabe exports no spans of its own — there is no OTLP collector in
+	 * reach of the managed storage it runs on — so end-to-end tracing depends
+	 * on forwarding identifiers the backend can attach to the spans it already
+	 * records. X-Request-Id is Nextcloud's reqId, the value prefixing every
+	 * line this request writes to nextcloud.log, which makes it the join key
+	 * between a user-visible failure and the backend trace.
+	 */
+	public function testForwardsNextcloudRequestIdForCorrelation(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $request) use (&$captured): ResponseInterface {
+				$captured = $request;
+				return $this->makeResponse(200, json_encode(['status' => 'ok']));
+			});
+
+		$this->client->getStatus();
+
+		$this->assertNotNull($captured);
+		$this->assertSame('nc-req-id-123', $captured->getHeaderLine('X-Request-Id'));
+	}
+
+	/**
+	 * A traceparent arriving at Nextcloud is passed straight through, so an
+	 * instrumented upstream caller — or a future OTel PHP setup here — links
+	 * end to end with no further change: the backend already extracts it.
+	 */
+	public function testForwardsInboundTraceparent(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getId')->willReturn('nc-req-id-123');
+		$request->method('getHeader')->willReturnMap([
+			['traceparent', '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'],
+			['tracestate', 'vendor=value'],
+		]);
+
+		$factory = new HttpFactory();
+		$client = new McpServerClient(
+			$this->httpClient,
+			$factory,
+			$factory,
+			$this->config,
+			$this->logger,
+			$this->appManager,
+			$request,
+		);
+
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['status' => 'ok']));
+			});
+
+		$client->getStatus();
+
+		$this->assertSame(
+			'00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+			$captured->getHeaderLine('traceparent'),
+		);
+		$this->assertSame('vendor=value', $captured->getHeaderLine('tracestate'));
+	}
+
+	/**
+	 * Background jobs and CLI have no HTTP request to correlate against, so the
+	 * client must still construct and send without one.
+	 */
+	public function testOmitsCorrelationHeadersWithoutARequest(): void {
+		$factory = new HttpFactory();
+		$client = new McpServerClient(
+			$this->httpClient,
+			$factory,
+			$factory,
+			$this->config,
+			$this->logger,
+			$this->appManager,
+			null,
+		);
+
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['status' => 'ok']));
+			});
+
+		$client->getStatus();
+
+		$this->assertFalse($captured->hasHeader('X-Request-Id'));
+		$this->assertFalse($captured->hasHeader('traceparent'));
 	}
 }

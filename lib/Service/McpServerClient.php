@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Service;
 
 use OCP\App\IAppManager;
 use OCP\IConfig;
+use OCP\IRequest;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -25,6 +26,7 @@ class McpServerClient {
 	private StreamFactoryInterface $streamFactory;
 	private IConfig $config;
 	private LoggerInterface $logger;
+	private ?IRequest $request;
 	private string $baseUrl;
 	private string $userAgent;
 	private string $webhookSecret;
@@ -36,12 +38,16 @@ class McpServerClient {
 		IConfig $config,
 		LoggerInterface $logger,
 		IAppManager $appManager,
+		?IRequest $request = null,
 	) {
 		$this->httpClient = $httpClient;
 		$this->requestFactory = $requestFactory;
 		$this->streamFactory = $streamFactory;
 		$this->config = $config;
 		$this->logger = $logger;
+		// Nullable so background jobs and CLI, which have no HTTP request to
+		// correlate against, construct this without one.
+		$this->request = $request;
 
 		// Get MCP server configuration from Nextcloud config
 		$baseUrl = $this->config->getSystemValue('mcp_server_url', 'http://localhost:8000');
@@ -70,6 +76,35 @@ class McpServerClient {
 		/** @var array<string, string> $headers */
 		$headers = $options['headers'] ?? [];
 		$headers['User-Agent'] = $this->userAgent;
+
+		// Correlation headers. Astrolabe emits no spans of its own — it runs on
+		// managed storage with no OTLP collector in reach — so rather than mint
+		// a traceparent whose parent span would never arrive (leaving every
+		// backend trace with a permanently missing root), it forwards
+		// identifiers the backend can attach to the spans it already records.
+		//
+		// X-Request-Id is Nextcloud's own reqId, the value that prefixes every
+		// line this request writes to nextcloud.log. That makes it the join key
+		// between a user-visible failure, this app's logs, and the backend
+		// trace — without inventing anything.
+		//
+		// An inbound traceparent is forwarded when present so that a future
+		// OTel PHP setup, or any instrumented caller upstream of Nextcloud,
+		// links end to end with no further change here: the backend already
+		// extracts it (see ObservabilityMiddleware).
+		if ($this->request !== null) {
+			$headers['X-Request-Id'] = $this->request->getId();
+
+			$traceparent = $this->request->getHeader('traceparent');
+			if ($traceparent !== '') {
+				$headers['traceparent'] = $traceparent;
+				$tracestate = $this->request->getHeader('tracestate');
+				if ($tracestate !== '') {
+					$headers['tracestate'] = $tracestate;
+				}
+			}
+		}
+
 		$options['headers'] = $headers;
 		return $options;
 	}

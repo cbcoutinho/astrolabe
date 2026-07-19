@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\HttpFactory;
 use OCA\Astrolabe\Service\McpServerClient;
 use OCP\App\IAppManager;
 use OCP\IConfig;
+use OCP\IRequest;
 use PhpPact\Consumer\InteractionBuilder;
 use PhpPact\Consumer\Matcher\Matcher;
 use PhpPact\Consumer\Model\ConsumerRequest;
@@ -25,7 +26,8 @@ use Psr\Log\LoggerInterface;
  * request shape and response contract it depends on, producing a pact with
  * consumer=astrolabe, provider=nextcloud-mcp-server that the MCP server verifies.
  *
- * Scope: the public, stateless ``GET /api/v1/status`` call, plus the
+ * Scope: the public, stateless ``GET /api/v1/status`` call (twice — once for
+ * the response shape, once for the ``X-Request-Id`` correlation header), plus the
  * bearer-authenticated ``POST /api/v1/vector-sync/purge`` consent-purge call
  * (with a provider state). Full provider verification of the authenticated
  * surface (search, webhooks, apps, chunk-context, purge) needs
@@ -52,7 +54,7 @@ final class McpServerClientPactTest extends TestCase {
 	/**
 	 * Build McpServerClient with a real PSR-18 client pointed at the mock server.
 	 */
-	private function clientFor(MockServerConfig $config): McpServerClient {
+	private function clientFor(MockServerConfig $config, ?IRequest $request = null): McpServerClient {
 		$ncConfig = $this->createMock(IConfig::class);
 		$ncConfig->method('getSystemValue')
 			->willReturnCallback(function (string $key, $default) use ($config) {
@@ -73,6 +75,7 @@ final class McpServerClientPactTest extends TestCase {
 			$ncConfig,
 			$this->createMock(LoggerInterface::class),
 			$appManager,
+			$request,
 		);
 	}
 
@@ -150,6 +153,58 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertSame(123, $status['uptime_seconds'] ?? null);
 		$this->assertSame('1.0', $status['management_api_version'] ?? null);
 		$this->assertSame(['semantic'], $status['supported_search_types'] ?? null);
+	}
+
+	/**
+	 * Correlation contract: every request carries Nextcloud's reqId.
+	 *
+	 * astrolabe exports no spans of its own — there is no OTLP collector within
+	 * reach of the managed storage it runs on — so end-to-end tracing depends on
+	 * the MCP server recording an identifier astrolabe forwards. ``X-Request-Id``
+	 * is Nextcloud's reqId, the value prefixing every line the same request
+	 * writes to ``nextcloud.log``, which makes it the join key between a
+	 * user-visible failure and the backend trace.
+	 *
+	 * Pinned as a contract because the value is only useful if the provider
+	 * actually reads it: astrolabe sending the header and the MCP server
+	 * attaching it to spans are two halves of one agreement, and this is the
+	 * consumer half.
+	 */
+	public function testForwardsNextcloudRequestIdForTraceCorrelation(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('GET')
+			->setPath('/api/v1/status')
+			->addHeader('X-Request-Id', $matcher->like('nc-req-id-123'));
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'version' => $matcher->like('0.1.0'),
+				'auth_mode' => $matcher->like('basic'),
+				'vector_sync_enabled' => $matcher->boolean(false),
+				'uptime_seconds' => $matcher->integer(123),
+				'management_api_version' => $matcher->like('1.0'),
+				'supported_search_types' => $matcher->eachLike('semantic'),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->uponReceiving('a request carrying the Nextcloud request id')
+			->with($request)
+			->willRespondWith($response);
+
+		$ncRequest = $this->createMock(IRequest::class);
+		$ncRequest->method('getId')->willReturn('nc-req-id-123');
+		$ncRequest->method('getHeader')->willReturn('');
+
+		$status = $this->clientFor($config, $ncRequest)->getStatus();
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertArrayNotHasKey('error', $status);
 	}
 
 	/**
