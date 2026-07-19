@@ -75,13 +75,23 @@ jobs:
       - name: Install Pact CLI
         if: ${{ env.PACT_BROKER != '' }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-ruby-standalone/f03e620e7552239b6ca59438c9beed9d1038c949/install.sh | bash # v2.6.1
-          echo "$PWD/pact/bin" >> "$GITHUB_PATH"
+          # Unified pact CLI (Rust, pact-foundation/pact-cli) — replaces the
+          # deprecated pact-ruby-standalone `pact-broker` CLI, which now only
+          # warns and is unmaintained. Matches nextcloud-mcp-server.
+          #
+          # Deliberately NOT the official pact-foundation/pact-cli composite
+          # action: renovate.json extends config:best-practices, which includes
+          # helpers:pinGitHubActionDigests, and the action derives the binary
+          # version from github.action_ref — a digest-pinned ref matches no
+          # vX.Y.Z pattern and silently falls through to releases/latest. This
+          # pinned URL is renovate-managed via the customManager in renovate.json.
+          curl -fsSL https://github.com/pact-foundation/pact-cli/releases/download/v0.10.7/pact-installer.sh | sh
+          echo "$HOME/.pact/bin" >> "$GITHUB_PATH"
 
       - name: Publish pacts to broker
         if: ${{ env.PACT_BROKER != '' }}
         run: |
-          pact-broker publish tests/contract/pacts \
+          pact broker publish tests/contract/pacts \
             --broker-base-url "$PACT_BROKER" \
             --broker-username "$PACT_USERNAME" \
             --broker-password "$PACT_PASSWORD" \
@@ -154,8 +164,10 @@ jobs:
       - name: Install Pact CLI
         if: ${{ env.PACT_BROKER != '' }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-ruby-standalone/f03e620e7552239b6ca59438c9beed9d1038c949/install.sh | bash # v2.6.1
-          echo "$PWD/pact/bin" >> "$GITHUB_PATH"
+          # See the consumer job above for why this is a pinned installer URL
+          # and not the official composite action.
+          curl -fsSL https://github.com/pact-foundation/pact-cli/releases/download/v0.10.7/pact-installer.sh | sh
+          echo "$HOME/.pact/bin" >> "$GITHUB_PATH"
 
       # SHADOW MODE: run can-i-deploy for signal but never fail the workflow.
       # The broker's `production` environment is populated by the
@@ -169,7 +181,7 @@ jobs:
         if: ${{ env.PACT_BROKER != '' }}
         run: |
           set +e
-          pact-broker can-i-deploy \
+          pact broker can-i-deploy \
             --broker-base-url "$PACT_BROKER" \
             --broker-username "$PACT_USERNAME" \
             --broker-password "$PACT_PASSWORD" \
