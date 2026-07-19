@@ -25,6 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.38.0 (2026-07-19)
+
+### Feat
+
+- **tracing**: forward correlation headers to the MCP server
+- **pdf**: rasterize PDF chunk previews in the browser
+
+### Fix
+
+- **pdf**: clear eslint and Sonar findings
+- **pdf**: label the canvas, cancel bootstrap fetches, correct stale docs
+- **pdf**: serialise concurrent viewer loads
+- **pdf**: make browser-side rendering actually work
+
 ## v0.37.0 (2026-07-18)
 
 ### Feat
