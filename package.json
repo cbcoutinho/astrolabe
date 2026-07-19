@@ -20,6 +20,7 @@
     "extends @nextcloud/browserslist-config"
   ],
   "dependencies": {
+    "@nextcloud/auth": "^2.6.0",
     "@nextcloud/axios": "^2.5.1",
     "@nextcloud/dialogs": "^7.2.0",
     "@nextcloud/initial-state": "^3.0.0",
@@ -27,15 +28,16 @@
     "@nextcloud/router": "^3.0.1",
     "@nextcloud/vue": "^9.3.3",
     "markdown-it": "^14.1.0",
+    "pdfjs-dist": "^5.7.284",
     "plotly.js-dist-min": "^3.0.0",
     "vue": "^3.0.0",
     "vue-material-design-icons": "^5.3.1"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1",
     "@nextcloud/browserslist-config": "3.1.2",
     "@nextcloud/eslint-config": "9.0.1",
     "@nextcloud/stylelint-config": "3.2.2",
+    "@playwright/test": "1.56.1",
     "@vitejs/plugin-vue": "6.0.8",
     "eslint": "10.7.0",
     "sass-embedded": "1.100.0",

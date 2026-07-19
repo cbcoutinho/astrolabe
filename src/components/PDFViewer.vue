@@ -8,11 +8,8 @@
 			<AlertCircle :size="48" />
 			<p>{{ error }}</p>
 		</div>
-		<div v-else class="pdf-image-container">
-			<img
-				:src="`data:image/png;base64,${imageData}`"
-				class="pdf-page-image"
-				alt="PDF page">
+		<div v-show="!loading && !error" class="pdf-image-container">
+			<canvas ref="canvasEl" class="pdf-page-image" />
 			<div
 				v-for="(rect, i) in (pageNumber === bboxPage ? highlightBbox : [])"
 				:key="i"
@@ -23,30 +20,38 @@
 </template>
 
 <script setup>
-import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
-import { generateUrl } from '@nextcloud/router'
 import { NcLoadingIcon } from '@nextcloud/vue'
 /**
- * PDFViewer - Server-side PDF rendering component.
+ * PDFViewer - client-side PDF rendering component.
  *
- * Displays PDF pages as server-rendered PNG images, avoiding client-side
- * PDF.js issues with CSP worker restrictions and ES private field access
- * in Chromium browsers.
+ * Pages are rasterized here, in the browser, from the copy of the file that
+ * already lives in Nextcloud. The backend is deliberately not involved: it
+ * used to render pages with PyMuPDF, which meant buffering the whole document
+ * into the API pod and OOMKilled it on large scans.
  *
- * The server uses PyMuPDF to render PDF pages to PNG images, which are
- * returned as base64-encoded data.
+ * Bytes arrive through WebDavRangeTransport, so opening one page of a
+ * multi-hundred-megabyte document transfers only the ranges PDF.js asks for.
  */
-import { onMounted, ref, watch } from 'vue'
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
+// `inline` is load-bearing, not a size trade-off. A non-inlined worker is
+// emitted as a separate asset and referenced by a root-absolute URL
+// (`new Worker("/assets/pdf.worker…")`), which 404s for a Nextcloud app served
+// from /custom_apps/astrolabe/. Inlining yields a blob: worker with no URL to
+// resolve — hence `worker-src blob:` in the app's CSP, see PageController.
+import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&inline'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AlertCircle from 'vue-material-design-icons/AlertCircle.vue'
+import { fetchContentLength, resolveWebdavUrlByFileId, WebDavRangeTransport, webdavUrlForPath } from '../services/pdfRangeTransport.js'
 
 const props = defineProps({
 	filePath: {
 		type: String,
 		required: true,
 	},
-	// Nextcloud fileId, when known. Sent alongside file_path so the backend can
-	// run the astrolabe-side access check by id (falls back to path otherwise).
+	// Nextcloud fileId, when known. Preferred over filePath for addressing the
+	// file, since a share received by this user is mounted at a different path
+	// than the owner indexed — see resolveUrl().
 	docId: {
 		type: Number,
 		default: null,
@@ -61,7 +66,7 @@ const props = defineProps({
 	},
 	// Normalized [x0, y0, x1, y1] tuples (0..1, top-left origin) marking
 	// the location of the matched chunk on the page. Drawn as a soft-yellow
-	// overlay on top of the rendered image. Empty array = no highlight.
+	// overlay on top of the rendered page. Empty array = no highlight.
 	highlightBbox: {
 		type: Array,
 		default: () => [],
@@ -77,63 +82,127 @@ const props = defineProps({
 
 const emit = defineEmits(['loaded', 'error', 'pageRendered'])
 
+GlobalWorkerOptions.workerPort = new PdfWorker()
+
 // Reactive state
 const loading = ref(true)
 const error = ref(null)
-const imageData = ref(null)
 const totalPages = ref(0)
+const canvasEl = ref(null)
+
+// Non-reactive handles: wrapping a PDFDocumentProxy in a ref would make Vue
+// walk its internals, and these are transport/render handles rather than view
+// state.
+let pdfDoc = null
+let transport = null
+let renderTask = null
 
 /**
- * Fetch a PDF page from the server as a PNG image.
+ * Release the current document and any in-flight transfers.
  */
-async function loadPage() {
+function teardown() {
+	renderTask?.cancel()
+	renderTask = null
+	pdfDoc?.destroy()
+	pdfDoc = null
+	transport?.abort()
+	transport = null
+}
+
+/**
+ * Resolve the file to a WebDAV URL in the current user's tree.
+ *
+ * fileId first: the indexed path belongs to the file's owner, and a share
+ * received by this user is mounted at a different path, so path addressing
+ * 404s on shared results. Path is the fallback for callers with no fileId.
+ *
+ * @return {Promise<string>} Absolute WebDAV URL
+ */
+async function resolveUrl() {
+	if (props.docId !== null && props.docId !== undefined) {
+		const byId = await resolveWebdavUrlByFileId(props.docId)
+		if (byId) {
+			return byId
+		}
+	}
+	return webdavUrlForPath(props.filePath)
+}
+
+/**
+ * Open the document for the current file.
+ */
+async function loadDocument() {
+	teardown()
+
+	const url = await resolveUrl()
+	const length = await fetchContentLength(url)
+
+	transport = new WebDavRangeTransport(length, url)
+	pdfDoc = await getDocument({ range: transport }).promise
+	totalPages.value = pdfDoc.numPages
+
+	emit('loaded', { totalPages: pdfDoc.numPages })
+}
+
+/**
+ * Rasterize the current page onto the canvas.
+ */
+async function renderPage() {
+	// Clamp: a stale page number left over from a previous document would
+	// reject inside PDF.js with a much less actionable error.
+	const pageNum = Math.min(Math.max(props.pageNumber, 1), pdfDoc.numPages)
+	const page = await pdfDoc.getPage(pageNum)
+	const viewport = page.getViewport({ scale: props.scale })
+
+	const canvas = canvasEl.value
+	if (!canvas) {
+		return
+	}
+	canvas.width = viewport.width
+	canvas.height = viewport.height
+
+	renderTask = page.render({
+		canvas,
+		canvasContext: canvas.getContext('2d'),
+		viewport,
+	})
+	await renderTask.promise
+	renderTask = null
+
+	emit('pageRendered', { pageNumber: pageNum })
+}
+
+/**
+ * Load (if needed) and render, mapping failures to a user-facing message.
+ *
+ * @param {boolean} reload Re-open the document rather than reusing it
+ */
+async function show(reload) {
 	loading.value = true
 	error.value = null
 
 	try {
-		// Build request URL
-		const url = generateUrl('/apps/astrolabe/api/pdf-preview')
-		const params = {
-			file_path: props.filePath,
-			page: props.pageNumber,
-			scale: props.scale,
+		if (reload || !pdfDoc) {
+			await loadDocument()
 		}
-		if (props.docId !== null && props.docId !== undefined) {
-			params.doc_id = props.docId
-		}
-
-		const response = await axios.get(url, { params })
-
-		if (!response.data.success) {
-			throw new Error(response.data.error || 'Failed to load PDF page')
-		}
-
-		const data = response.data
-
-		// Update state
-		imageData.value = data.image
-		totalPages.value = data.total_pages
-
-		// Emit loaded event - App.vue uses this for navigation controls
-		emit('loaded', { totalPages: data.total_pages })
-		emit('pageRendered', { pageNumber: props.pageNumber })
-
+		await renderPage()
 		loading.value = false
 	} catch (err) {
+		// A cancelled render is the expected outcome of navigating away
+		// mid-render, not a failure worth surfacing.
+		if (err?.name === 'RenderingCancelledException' || err?.name === 'AbortError') {
+			return
+		}
 		console.error('PDF load error:', err)
 
-		// Provide user-friendly error messages based on axios error structure
-		const status = err.response?.status
-		const serverError = err.response?.data?.error
-
-		if (status === 404) {
+		if (err?.name === 'PasswordException') {
+			error.value = t('astrolabe', 'This PDF is password protected')
+		} else if (err?.name === 'InvalidPDFException') {
+			error.value = t('astrolabe', 'This file is not a valid PDF')
+		} else if (err?.message?.includes('404')) {
 			error.value = t('astrolabe', 'PDF file not found')
-		} else if (status === 401 || status === 403) {
-			error.value = serverError || t('astrolabe', 'Authorization required to view PDF')
-		} else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network')) {
-			error.value = t('astrolabe', 'Network error loading PDF')
-		} else if (serverError) {
-			error.value = serverError
+		} else if (err?.message?.includes('401') || err?.message?.includes('403')) {
+			error.value = t('astrolabe', 'Authorization required to view PDF')
 		} else {
 			error.value = t('astrolabe', 'Unable to load PDF page')
 		}
@@ -153,13 +222,12 @@ function highlightStyle(rect) {
 	}
 }
 
-// Re-fetch when file path or page number changes
-watch(() => [props.filePath, props.pageNumber], loadPage)
+// A new file needs a fresh document; a new page only needs a re-render.
+watch(() => props.filePath, () => show(true))
+watch(() => [props.pageNumber, props.scale], () => show(false))
 
-// Initial load
-onMounted(() => {
-	loadPage()
-})
+onMounted(() => show(true))
+onBeforeUnmount(teardown)
 </script>
 
 <style scoped lang="scss">

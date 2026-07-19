@@ -782,40 +782,4 @@ class ApiController extends Controller {
 		return new JSONResponse($result);
 	}
 
-	/**
-	 * Server-side rendered PDF page preview.
-	 */
-	#[NoAdminRequired]
-	public function pdfPreview(
-		string $file_path,
-		int $page = 1,
-		float $scale = 2.0,
-		?int $doc_id = null,
-	): JSONResponse {
-		// PDF previews are always file-backed; verify access locally (by fileId
-		// when the caller supplies it, else by path) before minting a token.
-		$user = $this->userSession->getUser();
-		if ($user === null) {
-			return new JSONResponse(['success' => false, 'error' => 'User not authenticated'], Http::STATUS_UNAUTHORIZED);
-		}
-		$doc = $this->docForAccessCheck('file', $doc_id !== null ? (string)$doc_id : '', ['path' => $file_path]);
-		if ($this->documentAccess->check($user->getUID(), $doc) === AccessDecision::DENIED) {
-			return $this->accessDeniedResponse();
-		}
-
-		$accessToken = $this->tokenForCurrentUser();
-		if ($accessToken instanceof JSONResponse) {
-			return $accessToken;
-		}
-
-		$result = $this->client->getPdfPreview($file_path, $page, $scale, $accessToken);
-		if (isset($result['error'])) {
-			return new JSONResponse([
-				'success' => false,
-				'error' => $result['error'],
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
-		}
-
-		return new JSONResponse($result);
-	}
 }

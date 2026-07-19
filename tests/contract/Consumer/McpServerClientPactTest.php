@@ -28,7 +28,7 @@ use Psr\Log\LoggerInterface;
  * Scope: the public, stateless ``GET /api/v1/status`` call, plus the
  * bearer-authenticated ``POST /api/v1/vector-sync/purge`` consent-purge call
  * (with a provider state). Full provider verification of the authenticated
- * surface (search, webhooks, apps, chunk-context, pdf-preview, purge) needs
+ * surface (search, webhooks, apps, chunk-context, purge) needs
  * provider-state + token handling stood up on the MCP side — the deferred
  * follow-up (see tests/contract/README.md); the published pact rides the
  * broker's pending flow until then.

@@ -12,6 +12,8 @@ build/
 node_modules/
 js/
 css/
+# Vite emits the inlined PDF.js worker's sourcemap here
+assets/
 .phpunit.cache/
 
 # Playwright

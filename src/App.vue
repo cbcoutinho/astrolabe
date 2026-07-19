@@ -447,6 +447,7 @@ import { FilePickerType, getFilePickerBuilder } from '@nextcloud/dialogs'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import Plotly from 'plotly.js-dist-min'
+import { defineAsyncComponent } from 'vue'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
@@ -472,7 +473,11 @@ import Magnify from 'vue-material-design-icons/Magnify.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
-import PDFViewer from './components/PDFViewer.vue'
+
+// PDFViewer pulls in PDF.js and its bundled worker (several MB). Loading it
+// lazily keeps that weight out of the main entry chunk for the majority of
+// sessions, which never open a PDF chunk preview.
+const PDFViewer = defineAsyncComponent(() => import('./components/PDFViewer.vue'))
 
 export default {
 	name: 'App',

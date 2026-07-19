@@ -7,7 +7,6 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\AppFramework\Http;
 use OCP\Files\Node;
-use OCP\Files\NotFoundException;
 use OCP\IUser;
 
 /**
@@ -80,33 +79,9 @@ final class ApiControllerAccessTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
 	}
 
-	// --- pdfPreview -----------------------------------------------------------
-
-	public function testPdfPreviewAllowedByDocId(): void {
-		$this->filesInstalled();
-		$this->userFolder->method('getById')->with(42)->willReturn([$this->createMock(Node::class)]);
-		$this->authenticateUserWithToken('alice', 'tok');
-
-		$this->client->expects($this->once())
-			->method('getPdfPreview')
-			->willReturn(['success' => true, 'image' => 'base64']);
-
-		$response = $this->controller->pdfPreview('/alice/files/doc.pdf', 1, 2.0, 42);
-
-		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-	}
-
-	public function testPdfPreviewDeniedByPathReturns403(): void {
-		$this->filesInstalled();
-		$this->userFolder->method('get')->willThrowException(new NotFoundException());
-		$this->withUser('alice');
-
-		$this->client->expects($this->never())->method('getPdfPreview');
-
-		$response = $this->controller->pdfPreview('/alice/files/secret.pdf');
-
-		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
-	}
+	// PDF page rendering no longer has a controller action: pages are rasterized
+	// in the browser from the copy already in Nextcloud, which enforces access
+	// natively on the WebDAV read. There is nothing left to access-check here.
 
 	// --- search post-filter ---------------------------------------------------
 

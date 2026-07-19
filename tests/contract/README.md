@@ -91,7 +91,7 @@ served directly so the MCP provider-verification job stays green) and the
 bearer-authenticated `POST /api/v1/vector-sync/purge` consent-purge call (with
 the `an admin can purge indexed documents` provider state). Full provider
 verification of the authenticated surface (`search`, `webhooks` CRUD, `apps`,
-`chunk-context`, `pdf-preview`, `vector-sync/purge`) needs provider-state
+`chunk-context`, `vector-sync/purge`) needs provider-state
 handlers and bearer-token injection on the MCP side and is the deferred
 follow-up; until then the purge pact rides the broker's pending flow (the MCP
 verifier opts in via `include_pending`).
