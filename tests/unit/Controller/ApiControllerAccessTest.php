@@ -11,7 +11,7 @@ use OCP\IUser;
 
 /**
  * Controller-level tests for the astrolabe-side access checks on the
- * content-fetch endpoints (chunk-context, pdf-preview) and the search
+ * content-fetch endpoints (chunk-context) and the search
  * post-filter. Decisions are driven through the real DocumentAccessService wired
  * in the base fixture: SearchSources::isInstalled + IRootFolder::getById/get.
  */

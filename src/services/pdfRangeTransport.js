@@ -170,9 +170,16 @@ export async function resolveDocument(filePath, fileId) {
 		try {
 			const url = webdavUrlForPath(filePath)
 			return { url, length: await fetchContentLength(url) }
-		} catch {
-			// Falls through to the fileId lookup below; a miss here is the
-			// expected outcome for a file shared with this user.
+		} catch (error) {
+			// Deliberately broad: a miss here is the expected outcome for a file
+			// shared with this user, and the fileId lookup below is the real
+			// answer for that case. But it also swallows transient failures
+			// (network, 5xx), which would otherwise surface to the user as a
+			// bare "not found" — so the cause is logged rather than discarded.
+			console.debug('PDF path lookup failed, falling back to fileId', {
+				filePath,
+				error,
+			})
 		}
 	}
 

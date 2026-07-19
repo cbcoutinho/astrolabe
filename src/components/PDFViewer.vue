@@ -97,6 +97,14 @@ let pdfDoc = null
 let transport = null
 let renderTask = null
 
+// Bumped by every show(). An async load/render that finds the counter has moved
+// on has been superseded, and discards its result rather than writing to the
+// shared handles above. App.vue sets currentPdfPath, currentPdfDocId and
+// viewerPage together in one synchronous block, so without this a single result
+// click could otherwise start two overlapping loads whose completion order
+// decides what is displayed.
+let generation = 0
+
 /**
  * Cancel an in-flight render and wait for it to actually settle.
  *
@@ -132,14 +140,28 @@ function teardown() {
 
 /**
  * Open the document for the current file.
+ *
+ * Everything is built into locals and only published to the shared handles once
+ * this call is confirmed to still be the current one; a superseded load tears
+ * down what it built instead, so its range fetches stop rather than streaming
+ * into a document nobody will display.
+ *
+ * @param {number} gen Generation this call belongs to
+ * @return {Promise<boolean>} False if superseded before completing
  */
-async function loadDocument() {
+async function loadDocument(gen) {
 	teardown()
 
 	const { url, length } = await resolveDocument(props.filePath, props.docId)
+	if (gen !== generation) {
+		return false
+	}
 	const initialData = await fetchInitialData(url, length)
+	if (gen !== generation) {
+		return false
+	}
 
-	transport = new WebDavRangeTransport(length, url, initialData, {
+	const pendingTransport = new WebDavRangeTransport(length, url, initialData, {
 		// Ranges are fetched outside the load/render promise chain, so a failed
 		// one would otherwise leave the viewer spinning on bytes that will
 		// never arrive.
@@ -149,8 +171,8 @@ async function loadDocument() {
 			loading.value = false
 		},
 	})
-	pdfDoc = await getDocument({
-		range: transport,
+	const pendingDoc = await getDocument({
+		range: pendingTransport,
 		rangeChunkSize: RANGE_CHUNK_SIZE,
 		// Runtime assets, resolved against this module's own URL so they work
 		// wherever the app is installed (/apps/ or /custom_apps/). wasmUrl is
@@ -175,9 +197,22 @@ async function loadDocument() {
 		disableAutoFetch: true,
 		disableStream: true,
 	}).promise
+
+	if (gen !== generation) {
+		// Superseded while the document was opening. Tear down what this call
+		// built rather than the shared handles, which now belong to the newer
+		// load, so the abandoned transport stops fetching ranges.
+		pendingTransport.abort()
+		pendingDoc.destroy()
+		return false
+	}
+
+	transport = pendingTransport
+	pdfDoc = pendingDoc
 	totalPages.value = pdfDoc.numPages
 
 	emit('loaded', { totalPages: pdfDoc.numPages })
+	return true
 }
 
 /**
@@ -221,19 +256,35 @@ async function renderPage() {
  * @param {boolean} reload Re-open the document rather than reusing it
  */
 async function show(reload) {
+	const gen = ++generation
 	loading.value = true
 	error.value = null
 
 	try {
 		if (reload || !pdfDoc) {
-			await loadDocument()
+			if (!(await loadDocument(gen))) {
+				return
+			}
+		}
+		if (gen !== generation) {
+			return
 		}
 		await renderPage()
+		if (gen !== generation) {
+			// A newer show() is already driving the viewer; leaving `loading`
+			// to it avoids flashing this stale render's completion.
+			return
+		}
 		loading.value = false
 	} catch (err) {
 		// A cancelled render is the expected outcome of navigating away
-		// mid-render, not a failure worth surfacing.
-		if (err?.name === 'RenderingCancelledException' || err?.name === 'AbortError') {
+		// mid-render, not a failure worth surfacing. Nor is a superseded call:
+		// the newer one owns the error state now.
+		if (
+			err?.name === 'RenderingCancelledException'
+			|| err?.name === 'AbortError'
+			|| gen !== generation
+		) {
 			return
 		}
 		console.error('PDF load error:', err)
@@ -265,9 +316,19 @@ function highlightStyle(rect) {
 	}
 }
 
-// A new file needs a fresh document; a new page only needs a re-render.
-watch(() => props.filePath, () => show(true))
-watch(() => [props.pageNumber, props.scale], () => show(false))
+// One watcher, not two. App.vue assigns filePath, docId and pageNumber together
+// in a single synchronous block, so separate watchers land in the same reactive
+// flush and each start an independent show() — two concurrent loads racing over
+// the same document handles. Deciding reload-vs-rerender once per flush means
+// that click produces exactly one show().
+watch(
+	() => [props.filePath, props.docId, props.pageNumber, props.scale],
+	([filePath, docId], [prevFilePath, prevDocId]) => {
+		// A different file needs a fresh document; a new page or scale only
+		// needs a re-render of the one already open.
+		show(filePath !== prevFilePath || docId !== prevDocId)
+	},
+)
 
 onMounted(() => show(true))
 onBeforeUnmount(teardown)
