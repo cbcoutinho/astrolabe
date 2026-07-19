@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Service;
 
 use OCP\App\IAppManager;
 use OCP\IConfig;
+use OCP\IRequest;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -25,6 +26,7 @@ class McpServerClient {
 	private StreamFactoryInterface $streamFactory;
 	private IConfig $config;
 	private LoggerInterface $logger;
+	private ?IRequest $request;
 	private string $baseUrl;
 	private string $userAgent;
 	private string $webhookSecret;
@@ -36,12 +38,16 @@ class McpServerClient {
 		IConfig $config,
 		LoggerInterface $logger,
 		IAppManager $appManager,
+		?IRequest $request = null,
 	) {
 		$this->httpClient = $httpClient;
 		$this->requestFactory = $requestFactory;
 		$this->streamFactory = $streamFactory;
 		$this->config = $config;
 		$this->logger = $logger;
+		// Nullable so background jobs and CLI, which have no HTTP request to
+		// correlate against, construct this without one.
+		$this->request = $request;
 
 		// Get MCP server configuration from Nextcloud config
 		$baseUrl = $this->config->getSystemValue('mcp_server_url', 'http://localhost:8000');
@@ -70,6 +76,35 @@ class McpServerClient {
 		/** @var array<string, string> $headers */
 		$headers = $options['headers'] ?? [];
 		$headers['User-Agent'] = $this->userAgent;
+
+		// Correlation headers. Astrolabe emits no spans of its own — it runs on
+		// managed storage with no OTLP collector in reach — so rather than mint
+		// a traceparent whose parent span would never arrive (leaving every
+		// backend trace with a permanently missing root), it forwards
+		// identifiers the backend can attach to the spans it already records.
+		//
+		// X-Request-Id is Nextcloud's own reqId, the value that prefixes every
+		// line this request writes to nextcloud.log. That makes it the join key
+		// between a user-visible failure, this app's logs, and the backend
+		// trace — without inventing anything.
+		//
+		// An inbound traceparent is forwarded when present so that a future
+		// OTel PHP setup, or any instrumented caller upstream of Nextcloud,
+		// links end to end with no further change here: the backend already
+		// extracts it (see ObservabilityMiddleware).
+		if ($this->request !== null) {
+			$headers['X-Request-Id'] = $this->request->getId();
+
+			$traceparent = $this->request->getHeader('traceparent');
+			if ($traceparent !== '') {
+				$headers['traceparent'] = $traceparent;
+				$tracestate = $this->request->getHeader('tracestate');
+				if ($tracestate !== '') {
+					$headers['tracestate'] = $tracestate;
+				}
+			}
+		}
+
 		$options['headers'] = $headers;
 		return $options;
 	}
@@ -772,72 +807,5 @@ class McpServerClient {
 			'Failed to get chunk context',
 			['doc_type' => $docType, 'doc_id' => $docId],
 		);
-	}
-
-	/**
-	 * Get PDF page preview (server-side rendered).
-	 *
-	 * Renders a PDF page to PNG using PyMuPDF on the server.
-	 * This avoids client-side PDF.js issues with CSP and ES private fields.
-	 *
-	 * Requires OAuth bearer token for authentication.
-	 *
-	 * @param string $filePath WebDAV path to PDF file
-	 * @param int $page Page number (1-indexed)
-	 * @param float $scale Zoom factor (default: 2.0)
-	 * @param string $token OAuth bearer token
-	 * @return array{
-	 *   success?: bool,
-	 *   image?: string,
-	 *   page_number?: int,
-	 *   total_pages?: int,
-	 *   error?: string
-	 * }
-	 */
-	public function getPdfPreview(
-		string $filePath,
-		int $page,
-		float $scale,
-		string $token,
-	): array {
-		try {
-			$response = $this->send(
-				'GET',
-				$this->baseUrl . '/api/v1/pdf-preview',
-				$this->withUserAgent([
-					'headers' => [
-						'Authorization' => 'Bearer ' . $token
-					],
-					'query' => [
-						'file_path' => $filePath,
-						'page' => $page,
-						'scale' => $scale,
-					]
-				])
-			);
-
-			// PSR-18 clients don't throw on HTTP status; turn non-2xx into an
-			// error here, mirroring the prior http_errors=true behaviour.
-			$statusCode = $response->getStatusCode();
-			if ($statusCode < 200 || $statusCode >= 300) {
-				throw new \RuntimeException("Unexpected HTTP $statusCode from MCP server");
-			}
-
-			/** @var array{success?: bool, image?: string, page_number?: int, total_pages?: int, error?: string} $data */
-			$data = json_decode((string)$response->getBody(), true);
-
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				throw new \RuntimeException('Invalid JSON response from server');
-			}
-
-			return $data;
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to get PDF preview', [
-				'error' => $e->getMessage(),
-				'file_path' => $filePath,
-				'page' => $page,
-			]);
-			return ['error' => $e->getMessage()];
-		}
 	}
 }

@@ -472,6 +472,11 @@ import Magnify from 'vue-material-design-icons/Magnify.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
+// Imported statically, despite PDF.js being several MB. A dynamic import emits
+// a separate chunk whose URL Vite resolves against `base` (`/`), so it is
+// requested from /js/… instead of /custom_apps/astrolabe/js/… and 404s — the
+// same root-relative-URL problem that forces the worker to be inlined. Making
+// this lazy again needs a base-aware chunk URL first.
 import PDFViewer from './components/PDFViewer.vue'
 
 export default {

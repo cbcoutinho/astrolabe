@@ -13,6 +13,7 @@ use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
@@ -58,9 +59,27 @@ class PageController extends Controller {
 			'supportedSearchTypes' => $this->searchCapabilities->getSupportedSearchTypes(),
 		]);
 
-		return new TemplateResponse(
+		$response = new TemplateResponse(
 			Application::APP_ID,
 			'index',
 		);
+
+		// PDF chunk previews are rasterized in the browser by PDF.js, which runs
+		// its parser in a Web Worker. Nextcloud's default policy sets no
+		// worker-src, so it falls back through child-src to a nonce-only
+		// script-src — and a worker URL cannot carry a nonce, so the worker is
+		// blocked outright. That block is what previously forced page rendering
+		// onto the MCP server, where reading whole documents into memory
+		// OOMKilled the API pod.
+		//
+		// blob: is what the bundled worker actually uses: Vite's inline-worker
+		// helper builds a Blob and calls createObjectURL, only falling back to a
+		// data: URL if Blob is unavailable. Allowing blob: keeps that fallback
+		// off the table, so data: is deliberately not permitted here.
+		$csp = new ContentSecurityPolicy();
+		$csp->addAllowedWorkerSrcDomain('blob:');
+		$response->setContentSecurityPolicy($csp);
+
+		return $response;
 	}
 }

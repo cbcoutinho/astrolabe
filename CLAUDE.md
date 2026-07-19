@@ -113,6 +113,44 @@ publish + provider verify + shadow `can-i-deploy`),
 `landing-pages.yml` (website → GitHub Pages), `docs.yml` (docs typecheck/build),
 `release.yml` + `bump-version.yml` (Commitizen).
 
+## Breaking changes: gate on versions, never on merge order
+
+This app is **0.x**, so breaking changes are allowed. What is required is that a
+breaking change is **discoverable by version** — not that deploys happen in a
+particular sequence.
+
+**Do not write "merge X first" / "deploy A before B" in a PR description.** This
+app ships through the Nextcloud App Store and `nextcloud-mcp-server` ships as a
+container; they are versioned and released independently, and any given instance
+may run any combination. Merge order describes one moment and is invalidated by
+a rollback, a staged rollout, or an admin who simply updates one and not the
+other. A version recorded against the change stays true forever.
+
+### What is required
+
+1. **A `BREAKING CHANGE:` footer on the commit that lands it**, naming what
+   changed. Commitizen is configured with `major_version_zero = true` and
+   `update_changelog_on_bump = true` (`.cz.toml`), so that footer bumps the
+   **minor** version and writes the entry into the changelog keyed to the
+   released version — and `version_files` propagates it to `appinfo/info.xml`
+   and `package.json`. That changelog entry is the contract.
+2. **State the version in the PR description** — "stops calling X as of 0.38.0" —
+   rather than naming another PR to merge first. Cross-repo PRs may link each
+   other for context; they must not claim an ordering requirement.
+3. **Gate on advertised capability, not on an assumed deployment.** The MCP
+   server exposes `management_api_version` and `supported_search_types` from
+   `GET /api/v1/status`; `SearchCapabilities` already reads them to hide UI the
+   server cannot serve. That is the pattern to extend — it degrades correctly
+   against any server version rather than assuming one.
+
+### Why this matters here
+
+An admin running an older MCP server must get a degraded feature, not a broken
+page. Conversely, when this app stops calling an endpoint, older servers still
+offering it are unaffected. If a change genuinely cannot degrade on either side,
+that is a signal the endpoint needed a deprecation window — keep it, log on use,
+remove it a version later — not a merge-order note.
+
 ## Conventions
 
 - PHP 8.2+, Nextcloud 32+; commits follow **Commitizen** (`.cz.toml`).

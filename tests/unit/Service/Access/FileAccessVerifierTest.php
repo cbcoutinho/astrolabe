@@ -95,7 +95,7 @@ final class FileAccessVerifierTest extends TestCase {
 	}
 
 	public function testOwnedIdWithForeignPathIsDenied(): void {
-		// The pdf-preview mismatch: caller pairs a fileId they own with someone
+		// The mismatch case: caller pairs a fileId they own with someone
 		// else's path (the identifier actually served). Both must resolve ⇒ deny.
 		$this->userFolder->method('getById')->with(42)->willReturn([$this->createMock(Node::class)]);
 		$this->userFolder->method('get')->willThrowException(new NotFoundException());

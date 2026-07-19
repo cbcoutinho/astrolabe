@@ -45,7 +45,7 @@ final class FileAccessVerifier implements AccessVerifierInterface {
 
 		// Check every identifier supplied. Callers may pass a fileId, a WebDAV
 		// path, or both — and different endpoints forward different ones
-		// downstream (chunk-context uses doc_id, pdf-preview uses file_path). If
+		// downstream (chunk-context uses doc_id). If
 		// both are present they must BOTH resolve for the user: otherwise a caller
 		// could pair an owned fileId with someone else's path (or vice-versa) and
 		// have the check pass while the content served is keyed on the unverified
