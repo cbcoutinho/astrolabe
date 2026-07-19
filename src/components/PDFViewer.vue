@@ -42,7 +42,7 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&inline'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AlertCircle from 'vue-material-design-icons/AlertCircle.vue'
-import { fetchContentLength, resolveWebdavUrlByFileId, WebDavRangeTransport, webdavUrlForPath } from '../services/pdfRangeTransport.js'
+import { fetchInitialData, RANGE_CHUNK_SIZE, resolveDocument, WebDavRangeTransport } from '../services/pdfRangeTransport.js'
 
 const props = defineProps({
 	filePath: {
@@ -98,6 +98,27 @@ let transport = null
 let renderTask = null
 
 /**
+ * Cancel an in-flight render and wait for it to actually settle.
+ *
+ * `cancel()` only requests cancellation; the canvas stays claimed until the
+ * task's promise rejects, so the await is what makes it safe to start the next
+ * render immediately afterwards.
+ */
+async function cancelRender() {
+	const task = renderTask
+	if (!task) {
+		return
+	}
+	renderTask = null
+	task.cancel()
+	try {
+		await task.promise
+	} catch {
+		// Expected: cancellation rejects with RenderingCancelledException.
+	}
+}
+
+/**
  * Release the current document and any in-flight transfers.
  */
 function teardown() {
@@ -110,35 +131,50 @@ function teardown() {
 }
 
 /**
- * Resolve the file to a WebDAV URL in the current user's tree.
- *
- * fileId first: the indexed path belongs to the file's owner, and a share
- * received by this user is mounted at a different path, so path addressing
- * 404s on shared results. Path is the fallback for callers with no fileId.
- *
- * @return {Promise<string>} Absolute WebDAV URL
- */
-async function resolveUrl() {
-	if (props.docId !== null && props.docId !== undefined) {
-		const byId = await resolveWebdavUrlByFileId(props.docId)
-		if (byId) {
-			return byId
-		}
-	}
-	return webdavUrlForPath(props.filePath)
-}
-
-/**
  * Open the document for the current file.
  */
 async function loadDocument() {
 	teardown()
 
-	const url = await resolveUrl()
-	const length = await fetchContentLength(url)
+	const { url, length } = await resolveDocument(props.filePath, props.docId)
+	const initialData = await fetchInitialData(url, length)
 
-	transport = new WebDavRangeTransport(length, url)
-	pdfDoc = await getDocument({ range: transport }).promise
+	transport = new WebDavRangeTransport(length, url, initialData, {
+		// Ranges are fetched outside the load/render promise chain, so a failed
+		// one would otherwise leave the viewer spinning on bytes that will
+		// never arrive.
+		onError: (err) => {
+			console.error('PDF range transport failed:', err)
+			error.value = t('astrolabe', 'Network error loading PDF')
+			loading.value = false
+		},
+	})
+	pdfDoc = await getDocument({
+		range: transport,
+		rangeChunkSize: RANGE_CHUNK_SIZE,
+		// Runtime assets, resolved against this module's own URL so they work
+		// wherever the app is installed (/apps/ or /custom_apps/). wasmUrl is
+		// the load-bearing one: scanned pages are JPEG 2000 / JBIG2, and
+		// without the OpenJPEG WASM module the decoder fails and the page
+		// renders as a blank canvas with only a console warning.
+		wasmUrl: new URL('../pdfjs/wasm/', import.meta.url).href,
+		cMapUrl: new URL('../pdfjs/cmaps/', import.meta.url).href,
+		cMapPacked: true,
+		standardFontDataUrl: new URL('../pdfjs/standard_fonts/', import.meta.url).href,
+		iccUrl: new URL('../pdfjs/iccs/', import.meta.url).href,
+		// Both default to false, and both defaults are wrong here.
+		//
+		// disableAutoFetch: PDF.js otherwise keeps pulling ranges in the
+		// background until it holds the whole document, "even if it isn't
+		// needed to display the current page" — hundreds of requests and the
+		// full file for a one-page view, which is exactly the transfer this
+		// change exists to avoid.
+		//
+		// disableStream: this transport serves ranges, not a progressive
+		// stream, so without it PDF.js waits on data that never arrives.
+		disableAutoFetch: true,
+		disableStream: true,
+	}).promise
 	totalPages.value = pdfDoc.numPages
 
 	emit('loaded', { totalPages: pdfDoc.numPages })
@@ -148,6 +184,13 @@ async function loadDocument() {
  * Rasterize the current page onto the canvas.
  */
 async function renderPage() {
+	// PDF.js refuses to run two renders against the same canvas ("Cannot use
+	// the same canvas during multiple render() operations"). Page navigation
+	// is only bounds-gated, not render-gated, so double-clicking Next during a
+	// slow render — very plausible on the large scans this targets — would
+	// otherwise surface that as a spurious "Unable to load PDF page".
+	await cancelRender()
+
 	// Clamp: a stale page number left over from a previous document would
 	// reject inside PDF.js with a much less actionable error.
 	const pageNum = Math.min(Math.max(props.pageNumber, 1), pdfDoc.numPages)

@@ -128,27 +128,103 @@ export async function fetchContentLength(url) {
 }
 
 /**
+ * Resolve a search result to the WebDAV URL and byte length to read from.
+ *
+ * Tries the indexed path first and only falls back to a fileId SEARCH when
+ * that misses. The path is correct for files the user owns — the common case —
+ * and the HEAD needed to size the document doubles as the existence check, so
+ * the happy path costs one cheap request. The fallback covers shares, which
+ * Nextcloud mounts at a different path than the owner indexed; that SEARCH
+ * walks the user's whole tree at depth infinity, so it is worth avoiding when
+ * the path already resolves.
+ *
+ * @param {string} filePath Indexed path, relative to the owner's home
+ * @param {number|null} fileId Nextcloud fileId, when known
+ * @return {Promise<{url: string, length: number}>} Where and how big
+ */
+// PDF.js range-chunk size, and the initial slice handed to the transport. The
+// initial read must exceed RANGE_CHUNK_SIZE or it buys nothing (pdf.js's own
+// test makes the same point), while staying far below the whole document —
+// this is what a one-page view actually costs.
+export const RANGE_CHUNK_SIZE = 65536
+const INITIAL_BYTES = RANGE_CHUNK_SIZE * 2
+
+/**
+ * Read the leading bytes PDF.js needs to bootstrap the document.
+ *
+ * @param {string} url WebDAV URL
+ * @param {number} length Total document size
+ * @return {Promise<Uint8Array>} The opening slice of the file
+ */
+export async function fetchInitialData(url, length) {
+	const end = Math.min(INITIAL_BYTES, length) - 1
+	const response = await davFetch(url, { headers: { Range: `bytes=0-${end}` } })
+	if (response.status !== 206 && response.status !== 200) {
+		throw new Error(`Could not read the start of the PDF (HTTP ${response.status})`)
+	}
+	return new Uint8Array(await response.arrayBuffer())
+}
+
+export async function resolveDocument(filePath, fileId) {
+	if (filePath) {
+		try {
+			const url = webdavUrlForPath(filePath)
+			return { url, length: await fetchContentLength(url) }
+		} catch {
+			// Falls through to the fileId lookup below; a miss here is the
+			// expected outcome for a file shared with this user.
+		}
+	}
+
+	if (fileId === null || fileId === undefined) {
+		throw new Error(`PDF not found at ${filePath} and no fileId to fall back to`)
+	}
+
+	const url = await resolveWebdavUrlByFileId(fileId)
+	if (!url) {
+		throw new Error(`PDF with fileId ${fileId} is not accessible`)
+	}
+	return { url, length: await fetchContentLength(url) }
+}
+
+/**
  * PDF.js transport that satisfies range requests from Nextcloud WebDAV.
  */
 export class WebDavRangeTransport extends PDFDataRangeTransport {
 	/**
 	 * @param {number} length Total size of the document in bytes
 	 * @param {string} url WebDAV URL to read ranges from
+	 * @param {object} [options] Optional settings
+	 * @param {(error: Error) => void} [options.onError] Called when a range
+	 *   cannot be delivered, so the viewer can surface a real message instead
+	 *   of waiting forever on bytes that will never arrive.
 	 */
-	constructor(length, url) {
-		// No initial data and not progressive: every byte arrives through
-		// requestDataRange, which is what keeps the transfer proportional to
-		// the pages actually viewed rather than to the file size.
-		super(length, null, false)
+	constructor(length, url, initialData, { onError } = {}) {
+		// initialData is mandatory, not an optimisation: PDF.js bootstraps the
+		// document from the full reader's first chunk and only then switches to
+		// ranges. Constructed with null the load simply never settles, and the
+		// viewer spins forever. pdf.js's own "fetch document info and page
+		// using only ranges" test seeds it the same way.
+		//
+		// progressiveDone stays false — this transport does send more data,
+		// just through requestDataRange rather than progressively.
+		super(length, initialData, false)
 		this.url = url
+		this.onError = onError
 		this.controllers = new Set()
 	}
 
 	/**
 	 * Fetch [begin, end) and hand it to PDF.js.
 	 *
-	 * PDF.js treats a missing range as a fatal document error, so a failed
-	 * fetch is reported rather than silently dropped.
+	 * A failed range is NOT reported back through `onDataRange(begin, null)`:
+	 * PDF.js funnels the chunk through `new Uint8Array(val).buffer`, so `null`
+	 * arrives as a valid *zero-length* chunk rather than an error. That
+	 * silently truncates the document instead of failing it. The failure is
+	 * raised out-of-band via `onError` instead.
+	 *
+	 * One retry first, since these are large transfers over links where a
+	 * single dropped range is more likely to be transient than fatal.
 	 *
 	 * @param {number} begin First byte offset (inclusive)
 	 * @param {number} end Last byte offset (exclusive)
@@ -157,24 +233,34 @@ export class WebDavRangeTransport extends PDFDataRangeTransport {
 		const controller = new AbortController()
 		this.controllers.add(controller)
 
-		davFetch(this.url, {
-			// end is exclusive for PDF.js, inclusive for HTTP.
-			headers: { Range: `bytes=${begin}-${end - 1}` },
-			signal: controller.signal,
-		})
-			.then(async (response) => {
-				if (response.status !== 206) {
-					throw new Error(`Expected 206 for range request, got ${response.status}`)
+		const attempt = async () => {
+			const response = await davFetch(this.url, {
+				// end is exclusive for PDF.js, inclusive for HTTP.
+				headers: { Range: `bytes=${begin}-${end - 1}` },
+				signal: controller.signal,
+			})
+			if (response.status !== 206) {
+				throw new Error(`Expected 206 for range request, got ${response.status}`)
+			}
+			return new Uint8Array(await response.arrayBuffer())
+		}
+
+		attempt()
+			.catch((error) => {
+				if (error.name === 'AbortError') {
+					throw error
 				}
-				const buffer = await response.arrayBuffer()
-				this.onDataRange(begin, new Uint8Array(buffer))
+				return attempt()
+			})
+			.then((chunk) => {
+				this.onDataRange(begin, chunk)
 			})
 			.catch((error) => {
 				if (error.name === 'AbortError') {
 					return
 				}
 				console.error('PDF range request failed', { begin, end, error })
-				this.onDataRange(begin, null)
+				this.onError?.(error)
 			})
 			.finally(() => {
 				this.controllers.delete(controller)
