@@ -15,7 +15,12 @@ import { PDFDataRangeTransport } from 'pdfjs-dist'
  * Content-Range) but does **not** advertise ``Accept-Ranges``. PDF.js gates its
  * automatic range mode on that header, so left to its own detection it would
  * decide ranges are unsupported and download the entire file. Driving the
- * transport explicitly is what keeps a one-page render to a few hundred KB.
+ * transport explicitly is what stops that.
+ *
+ * Measured cost is still substantial for these documents: one page of a 397 MB,
+ * non-linearized scan takes ~793 range requests and ~50 MB, because PDF.js has
+ * to seek to each object individually with no hint tables to guide it.
+ * Linearizing at ingest is the fix for that and is tracked separately.
  */
 
 /**
@@ -53,9 +58,10 @@ export function webdavUrlForPath(filePath) {
  * backend's ``file_accessible_by_id`` relies on.
  *
  * @param {number} fileId Nextcloud internal file ID
+ * @param {AbortSignal} [signal] Cancels the request
  * @return {Promise<string|null>} Absolute WebDAV URL, or null if not found
  */
-export async function resolveWebdavUrlByFileId(fileId) {
+export async function resolveWebdavUrlByFileId(fileId, signal) {
 	const uid = getCurrentUser()?.uid
 	if (!uid) {
 		throw new Error('No current user; cannot resolve a file by ID')
@@ -79,6 +85,7 @@ export async function resolveWebdavUrlByFileId(fileId) {
 		method: 'SEARCH',
 		headers: { 'Content-Type': 'text/xml' },
 		body,
+		signal,
 	})
 	if (!response.ok) {
 		return null
@@ -113,10 +120,11 @@ function davFetch(url, init = {}) {
  * Resolve a document's byte length without downloading it.
  *
  * @param {string} url WebDAV URL
+ * @param {AbortSignal} [signal] Cancels the request
  * @return {Promise<number>} Size in bytes
  */
-export async function fetchContentLength(url) {
-	const response = await davFetch(url, { method: 'HEAD' })
+export async function fetchContentLength(url, signal) {
+	const response = await davFetch(url, { method: 'HEAD', signal })
 	if (!response.ok) {
 		throw new Error(`HEAD ${response.status} while sizing PDF`)
 	}
@@ -125,6 +133,34 @@ export async function fetchContentLength(url) {
 		throw new Error('PDF has no usable Content-Length')
 	}
 	return length
+}
+
+// PDF.js range-chunk size, and the initial slice handed to the transport. The
+// initial read must exceed RANGE_CHUNK_SIZE or it buys nothing (pdf.js's own
+// test makes the same point), while staying far below the whole document —
+// this is what a one-page view actually costs.
+export const RANGE_CHUNK_SIZE = 65536
+const INITIAL_BYTES = RANGE_CHUNK_SIZE * 2
+
+/**
+ * Read the leading bytes PDF.js needs to bootstrap the document.
+ *
+ * Takes a signal so a superseded load can stop this transfer rather than let it
+ * complete and be discarded — every other range request is already cancellable
+ * through WebDavRangeTransport.abort().
+ *
+ * @param {string} url WebDAV URL
+ * @param {number} length Total document size
+ * @param {AbortSignal} [signal] Cancels the request
+ * @return {Promise<Uint8Array>} The opening slice of the file
+ */
+export async function fetchInitialData(url, length, signal) {
+	const end = Math.min(INITIAL_BYTES, length) - 1
+	const response = await davFetch(url, { headers: { Range: `bytes=0-${end}` }, signal })
+	if (response.status !== 206 && response.status !== 200) {
+		throw new Error(`Could not read the start of the PDF (HTTP ${response.status})`)
+	}
+	return new Uint8Array(await response.arrayBuffer())
 }
 
 /**
@@ -140,36 +176,14 @@ export async function fetchContentLength(url) {
  *
  * @param {string} filePath Indexed path, relative to the owner's home
  * @param {number|null} fileId Nextcloud fileId, when known
+ * @param {AbortSignal} [signal] Cancels the lookup requests
  * @return {Promise<{url: string, length: number}>} Where and how big
  */
-// PDF.js range-chunk size, and the initial slice handed to the transport. The
-// initial read must exceed RANGE_CHUNK_SIZE or it buys nothing (pdf.js's own
-// test makes the same point), while staying far below the whole document —
-// this is what a one-page view actually costs.
-export const RANGE_CHUNK_SIZE = 65536
-const INITIAL_BYTES = RANGE_CHUNK_SIZE * 2
-
-/**
- * Read the leading bytes PDF.js needs to bootstrap the document.
- *
- * @param {string} url WebDAV URL
- * @param {number} length Total document size
- * @return {Promise<Uint8Array>} The opening slice of the file
- */
-export async function fetchInitialData(url, length) {
-	const end = Math.min(INITIAL_BYTES, length) - 1
-	const response = await davFetch(url, { headers: { Range: `bytes=0-${end}` } })
-	if (response.status !== 206 && response.status !== 200) {
-		throw new Error(`Could not read the start of the PDF (HTTP ${response.status})`)
-	}
-	return new Uint8Array(await response.arrayBuffer())
-}
-
-export async function resolveDocument(filePath, fileId) {
+export async function resolveDocument(filePath, fileId, signal) {
 	if (filePath) {
 		try {
 			const url = webdavUrlForPath(filePath)
-			return { url, length: await fetchContentLength(url) }
+			return { url, length: await fetchContentLength(url, signal) }
 		} catch (error) {
 			// Deliberately broad: a miss here is the expected outcome for a file
 			// shared with this user, and the fileId lookup below is the real
@@ -187,11 +201,11 @@ export async function resolveDocument(filePath, fileId) {
 		throw new Error(`PDF not found at ${filePath} and no fileId to fall back to`)
 	}
 
-	const url = await resolveWebdavUrlByFileId(fileId)
+	const url = await resolveWebdavUrlByFileId(fileId, signal)
 	if (!url) {
 		throw new Error(`PDF with fileId ${fileId} is not accessible`)
 	}
-	return { url, length: await fetchContentLength(url) }
+	return { url, length: await fetchContentLength(url, signal) }
 }
 
 /**

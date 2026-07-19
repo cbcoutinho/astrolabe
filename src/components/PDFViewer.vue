@@ -9,7 +9,13 @@
 			<p>{{ error }}</p>
 		</div>
 		<div v-show="!loading && !error" class="pdf-image-container">
-			<canvas ref="canvasEl" class="pdf-page-image" />
+			<!-- A canvas exposes nothing to assistive tech on its own, where the
+				 <img> this replaced at least carried alt text. -->
+			<canvas
+				ref="canvasEl"
+				class="pdf-page-image"
+				role="img"
+				:aria-label="t('astrolabe', 'Page {page} of the PDF', { page: pageNumber })" />
 			<div
 				v-for="(rect, i) in (pageNumber === bboxPage ? highlightBbox : [])"
 				:key="i"
@@ -30,8 +36,9 @@ import { NcLoadingIcon } from '@nextcloud/vue'
  * used to render pages with PyMuPDF, which meant buffering the whole document
  * into the API pod and OOMKilled it on large scans.
  *
- * Bytes arrive through WebDavRangeTransport, so opening one page of a
- * multi-hundred-megabyte document transfers only the ranges PDF.js asks for.
+ * Bytes arrive through WebDavRangeTransport, so only the ranges PDF.js asks
+ * for cross the wire rather than the whole document. For a non-linearized scan
+ * that is still a lot of them — see the note in pdfRangeTransport.js.
  */
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 // `inline` is load-bearing, not a size trade-off. A non-inlined worker is
@@ -49,9 +56,9 @@ const props = defineProps({
 		type: String,
 		required: true,
 	},
-	// Nextcloud fileId, when known. Preferred over filePath for addressing the
-	// file, since a share received by this user is mounted at a different path
-	// than the owner indexed — see resolveUrl().
+	// Nextcloud fileId, when known. The fallback when the indexed path misses,
+	// since a share received by this user is mounted at a different path than
+	// the owner indexed — see resolveDocument().
 	docId: {
 		type: Number,
 		default: null,
@@ -105,6 +112,11 @@ let renderTask = null
 // decides what is displayed.
 let generation = 0
 
+// Cancels the lookup/bootstrap fetches of an in-flight load. The transport owns
+// cancellation for its own range requests; this covers the ones that happen
+// before the transport exists.
+let loadController = null
+
 /**
  * Cancel an in-flight render and wait for it to actually settle.
  *
@@ -130,6 +142,8 @@ async function cancelRender() {
  * Release the current document and any in-flight transfers.
  */
 function teardown() {
+	loadController?.abort()
+	loadController = null
 	renderTask?.cancel()
 	renderTask = null
 	pdfDoc?.destroy()
@@ -152,11 +166,14 @@ function teardown() {
 async function loadDocument(gen) {
 	teardown()
 
-	const { url, length } = await resolveDocument(props.filePath, props.docId)
+	const controller = new AbortController()
+	loadController = controller
+
+	const { url, length } = await resolveDocument(props.filePath, props.docId, controller.signal)
 	if (gen !== generation) {
 		return false
 	}
-	const initialData = await fetchInitialData(url, length)
+	const initialData = await fetchInitialData(url, length, controller.signal)
 	if (gen !== generation) {
 		return false
 	}
@@ -173,6 +190,13 @@ async function loadDocument(gen) {
 	})
 	const pendingDoc = await getDocument({
 		range: pendingTransport,
+		// Currently inert, and kept deliberately. pdf.js only forwards
+		// rangeChunkSize to its NetworkStream branch, not to the custom-transport
+		// branch this uses, so the chunked-stream manager falls back to its own
+		// 65536 default — measured identical at 64 KB through 1 MB. Passing it
+		// keeps the intent explicit and starts working if pdf.js ever wires it
+		// up; do not expect changing RANGE_CHUNK_SIZE to alter request sizes
+		// today.
 		rangeChunkSize: RANGE_CHUNK_SIZE,
 		// Runtime assets, resolved against this module's own URL so they work
 		// wherever the app is installed (/apps/ or /custom_apps/). wasmUrl is
