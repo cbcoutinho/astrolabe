@@ -31,6 +31,7 @@ use Psr\Container\ContainerInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'astrolabe';
@@ -101,10 +102,25 @@ class Application extends App implements IBootstrap {
 				Admin::SETTING_AGENT_ENABLED,
 				Admin::DEFAULT_AGENT_ENABLED,
 			);
-		} catch (\Throwable) {
+		} catch (\Throwable $e) {
 			// register() runs on every request including installation, when the
 			// config table may not be readable yet. Defaulting to off means a
 			// failure here cannot hijack the Assistant.
+			//
+			// Logged because "not installed yet" and "the container is broken"
+			// look identical from here, and the second one would otherwise
+			// disable the agent permanently without ever saying so. Best effort:
+			// during installation the logger may be no more available than the
+			// config was.
+			try {
+				\OCP\Server::get(LoggerInterface::class)->debug(
+					'Could not read the Astrolabe agent toggle; leaving the provider unregistered',
+					['exception' => $e, 'app' => self::APP_ID],
+				);
+			} catch (\Throwable) {
+				// Nothing left to report with.
+			}
+
 			return false;
 		}
 	}
