@@ -25,6 +25,9 @@ use OCP\IUserSession;
  * @psalm-suppress UnusedClass — resolved by route name through the DI container.
  */
 final class AssistantController extends Controller {
+	/** PNG file signature (RFC 2083 §3.1). */
+	private const PNG_SIGNATURE = "\x89PNG\r\n\x1a\n";
+
 	public function __construct(
 		string $appName,
 		IRequest $request,
@@ -48,6 +51,16 @@ final class AssistantController extends Controller {
 	 *                                    document summarizes itself, with nothing to stage. Nextcloud re-validates
 	 *                                    the caller's access to every id when it prepares the task input, so these
 	 *                                    are not trusted here beyond shape.
+	 *
+	 * @return JSONResponse<Http::STATUS_OK, array{success: bool, task_id: int, mode: string}, array{}>|JSONResponse<Http::STATUS_UNAUTHORIZED|Http::STATUS_FORBIDDEN|Http::STATUS_UNPROCESSABLE_ENTITY|Http::STATUS_INTERNAL_SERVER_ERROR|Http::STATUS_BAD_GATEWAY|Http::STATUS_SERVICE_UNAVAILABLE, array{success: bool, error: string}, array{}>
+	 *
+	 * 200: Summary scheduled; poll the task id via the TaskProcessing OCS API
+	 * 401: Not logged in
+	 * 403: The document is no longer accessible to this user
+	 * 422: The document has no text to summarize
+	 * 500: The summary could not be scheduled
+	 * 502: The document text could not be read from the MCP server
+	 * 503: No summarization provider is available on this server
 	 */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 20, period: 60)]
@@ -111,7 +124,9 @@ final class AssistantController extends Controller {
 	 *
 	 * Only PNG is accepted: it is what the browser canvas produces, and pinning the
 	 * type keeps arbitrary uploads from being staged into the user's storage under
-	 * the guise of a summary.
+	 * the guise of a summary. The declared multipart type is client-controlled, so
+	 * the signature is checked too — otherwise the guarantee would rest on a header
+	 * the caller writes.
 	 *
 	 * @return list<string>
 	 */
@@ -148,7 +163,7 @@ final class AssistantController extends Controller {
 				continue;
 			}
 			$bytes = file_get_contents($tmpName);
-			if ($bytes !== false && $bytes !== '') {
+			if ($bytes !== false && str_starts_with($bytes, self::PNG_SIGNATURE)) {
 				$pages[] = $bytes;
 			}
 		}

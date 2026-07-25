@@ -111,8 +111,8 @@ class SummaryService {
 		if (in_array(AssistantCapabilities::SUMMARY_MODE_IMAGES, $modes, true)) {
 			$taskId = $this->scheduleImageSummary(
 				$userId,
-				$this->boundImages($imageFileIds),
-				array_slice($renderedPages, 0, self::MAX_IMAGES),
+				$this->validImageIds($imageFileIds),
+				$renderedPages,
 			);
 			if ($taskId !== null) {
 				return ['task_id' => $taskId, 'mode' => AssistantCapabilities::SUMMARY_MODE_IMAGES];
@@ -149,6 +149,13 @@ class SummaryService {
 		array $imageFileIds,
 		array $renderedPages,
 	): ?int {
+		// One budget shared across both sources, not one each. The cap is about
+		// what a single task sends to the model, so a caller supplying file ids
+		// *and* rendered pages must not get to spend it twice. Trimming before
+		// staging also avoids writing pages that would only be discarded.
+		$imageFileIds = array_slice($imageFileIds, 0, self::MAX_IMAGES);
+		$renderedPages = array_slice($renderedPages, 0, self::MAX_IMAGES - count($imageFileIds));
+
 		// Pages rendered in the browser have to become files before a task can
 		// reference them; images already in Nextcloud summarize themselves.
 		$token = null;
@@ -287,12 +294,14 @@ class SummaryService {
 	}
 
 	/**
+	 * Drop ids that cannot name a file, and duplicates that would send the same
+	 * page twice. The spend cap is applied later, once both sources are known.
+	 *
 	 * @param list<int> $imageFileIds
 	 * @return list<int>
 	 */
-	private function boundImages(array $imageFileIds): array {
-		$ids = array_values(array_unique(array_filter($imageFileIds, static fn (int $id): bool => $id > 0)));
-		return array_slice($ids, 0, self::MAX_IMAGES);
+	private function validImageIds(array $imageFileIds): array {
+		return array_values(array_unique(array_filter($imageFileIds, static fn (int $id): bool => $id > 0)));
 	}
 
 	/**

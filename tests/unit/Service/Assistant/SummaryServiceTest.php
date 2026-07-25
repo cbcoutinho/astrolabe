@@ -317,6 +317,47 @@ final class SummaryServiceTest extends TestCase {
 	}
 
 	/**
+	 * The cap is one budget across both sources, not one each: a caller supplying
+	 * file ids *and* rendered pages must not get to spend it twice. The frontend
+	 * never sends both, but the backend is the only enforcement point that matters.
+	 */
+	public function testTheSpendCapIsSharedAcrossBothImageSources(): void {
+		$this->capabilities->method('getSummaryModes')->willReturn(['analyze-images']);
+		$existingIds = range(1, 5);
+
+		// Only the remaining budget may be staged, and staging is trimmed before
+		// the write so no page is stored just to be discarded.
+		$this->scratchImages->expects($this->once())
+			->method('store')
+			->with('alice', $this->anything(), $this->countOf(SummaryService::MAX_IMAGES - 5))
+			->willReturn([101, 102, 103]);
+		$task = $this->captureTask();
+
+		$this->schedule($existingIds, array_fill(0, 8, 'png'));
+
+		$captured = $task();
+		$this->assertInstanceOf(Task::class, $captured);
+		$this->assertCount(SummaryService::MAX_IMAGES, $captured->getInput()['images']);
+	}
+
+	/**
+	 * Already at budget on file ids alone, so nothing is staged at all — and with
+	 * no scratch folder written there is nothing to clean up.
+	 */
+	public function testStagesNothingWhenFileIdsAlreadyFillTheBudget(): void {
+		$this->capabilities->method('getSummaryModes')->willReturn(['analyze-images']);
+		$this->scratchImages->expects($this->never())->method('store');
+		$task = $this->captureTask();
+
+		$this->schedule(range(1, SummaryService::MAX_IMAGES + 4), array_fill(0, 5, 'png'));
+
+		$captured = $task();
+		$this->assertInstanceOf(Task::class, $captured);
+		$this->assertCount(SummaryService::MAX_IMAGES, $captured->getInput()['images']);
+		$this->assertSame('astrolabe-summary', $captured->getCustomId());
+	}
+
+	/**
 	 * A task that never got scheduled will never settle, so the completion listener
 	 * will never fire — the staged pages have to be cleaned up here or they leak
 	 * into the user's files permanently.
