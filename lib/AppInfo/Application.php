@@ -14,6 +14,7 @@ use OCA\Astrolabe\Search\SemanticSearchProvider;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin;
 use OCA\Astrolabe\Settings\AstrolabeAdminSettings;
+use OCA\Astrolabe\TaskProcessing\ContextAgentProvider;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -78,6 +79,32 @@ class Application extends App implements IBootstrap {
 		// both clutter and a slow leak.
 		$context->registerEventListener(TaskSuccessfulEvent::class, SummaryCleanupListener::class);
 		$context->registerEventListener(TaskFailedEvent::class, SummaryCleanupListener::class);
+
+		// Take over the Assistant's agent chat — but only when the admin has asked
+		// for it. Assistant treats the task type as available the moment any
+		// provider registers, so registering unconditionally would silently
+		// rewire every chat on the instance. Read directly from app config rather
+		// than via AssistantCapabilities: asking IManager which task types exist
+		// while it is still collecting providers would recurse.
+		if ($this->agentEnabled()) {
+			$context->registerTaskProcessingProvider(ContextAgentProvider::class);
+		}
+	}
+
+	private function agentEnabled(): bool {
+		try {
+			$appConfig = \OCP\Server::get(IAppConfig::class);
+			return $appConfig->getValueBool(
+				self::APP_ID,
+				Admin::SETTING_AGENT_ENABLED,
+				Admin::DEFAULT_AGENT_ENABLED,
+			);
+		} catch (\Throwable) {
+			// register() runs on every request including installation, when the
+			// config table may not be readable yet. Defaulting to off means a
+			// failure here cannot hijack the Assistant.
+			return false;
+		}
 	}
 
 	public function boot(IBootContext $context): void {

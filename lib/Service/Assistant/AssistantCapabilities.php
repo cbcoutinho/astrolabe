@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Service\Assistant;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Settings\Admin as AdminSettings;
+use OCP\IAppConfig;
 use OCP\TaskProcessing\IManager;
 use OCP\TaskProcessing\TaskTypes\AnalyzeImages;
+use OCP\TaskProcessing\TaskTypes\TextToTextChatWithTools;
 use OCP\TaskProcessing\TaskTypes\TextToTextSummary;
 use Psr\Log\LoggerInterface;
 
@@ -47,8 +50,39 @@ class AssistantCapabilities {
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
 		private IManager $taskProcessing,
+		private IAppConfig $appConfig,
 		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Whether Astrolabe is currently answering Assistant's agent chat.
+	 *
+	 * Both halves are required. The admin toggle is the consent gate, and
+	 * `core:text2text:chatwithtools` is the engine the loop runs on — without a
+	 * tool-calling model there is nothing to drive the MCP tools with, so the
+	 * provider would register only to fail on first use.
+	 */
+	public function isAgentAvailable(): bool {
+		if (!$this->isAgentEnabled()) {
+			return false;
+		}
+		return in_array(TextToTextChatWithTools::ID, $this->availableTaskTypeIds(), true);
+	}
+
+	/**
+	 * The admin opt-in alone, without the provider check.
+	 *
+	 * Registration must consult this rather than {@see isAgentAvailable()}:
+	 * asking IManager which task types are available while it is still collecting
+	 * providers would recurse.
+	 */
+	public function isAgentEnabled(): bool {
+		return $this->appConfig->getValueBool(
+			Application::APP_ID,
+			AdminSettings::SETTING_AGENT_ENABLED,
+			AdminSettings::DEFAULT_AGENT_ENABLED,
+		);
 	}
 
 	/**
