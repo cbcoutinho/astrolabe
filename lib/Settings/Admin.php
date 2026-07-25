@@ -63,6 +63,19 @@ class Admin implements ISettings {
 	public const SETTING_ENABLED_SYNC_PRESETS = 'enabled_sync_presets';
 	public const DEFAULT_ENABLED_SYNC_PRESETS = '[]';
 
+	// Registers Astrolabe as a TaskProcessing provider for the core
+	// `core:contextagent:interaction` task type, which makes the Assistant's
+	// "Chat with AI" route every message through Astrolabe instead of the
+	// Context Agent app.
+	//
+	// Deliberately OFF by default and opt-in. A task type counts as "available"
+	// the moment any provider registers for it, so registering unconditionally
+	// would silently rewire every Assistant chat on the instance the moment this
+	// app is installed. If context_agent is also installed both providers claim
+	// the same task type and the admin picks between them in the AI settings.
+	public const SETTING_AGENT_ENABLED = 'agent_enabled';
+	public const DEFAULT_AGENT_ENABLED = false;
+
 	private $config;
 	private $appConfig;
 	private $initialState;

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe;
 
+use OCA\Astrolabe\Service\Assistant\AssistantCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
 use OCP\Capabilities\ICapability;
 
 /**
- * Advertises which content sources are available for semantic search.
+ * Advertises which content sources are available for semantic search, and which
+ * Assistant features this instance can actually serve.
  *
  * Exposed under ``astrolabe.semantic_search`` on the OCS capabilities endpoint
  * (``/ocs/v2.php/cloud/capabilities``). The MCP server reads this as the single
@@ -21,17 +23,25 @@ use OCP\Capabilities\ICapability;
  */
 final class Capabilities implements ICapability {
 	private SearchSources $searchSources;
+	private AssistantCapabilities $assistant;
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
-	public function __construct(SearchSources $searchSources) {
+	public function __construct(
+		SearchSources $searchSources,
+		AssistantCapabilities $assistant,
+	) {
 		$this->searchSources = $searchSources;
+		$this->assistant = $assistant;
 	}
 
 	/**
-	 * @return array{astrolabe: array{semantic_search: array{
-	 *   enabled_doc_types: list<string>,
-	 *   sources: list<array{app: string, doc_types: list<string>, enabled: bool}>
-	 * }}}
+	 * @return array{astrolabe: array{
+	 *   semantic_search: array{
+	 *     enabled_doc_types: list<string>,
+	 *     sources: list<array{app: string, doc_types: list<string>, enabled: bool}>
+	 *   },
+	 *   assistant: array{summary_modes: list<string>, agent_available: bool}
+	 * }}
 	 */
 	#[\Override]
 	public function getCapabilities(): array {
@@ -57,6 +67,14 @@ final class Capabilities implements ICapability {
 				'semantic_search' => [
 					'enabled_doc_types' => $enabledDocTypes,
 					'sources' => $sources,
+				],
+				// Which AI features this instance can serve. Astrolabe supplies
+				// retrieval only, so both values depend on TaskProcessing
+				// providers the admin installed separately — clients must gate on
+				// these rather than assume the features exist.
+				'assistant' => [
+					'summary_modes' => $this->assistant->getSummaryModes(),
+					'agent_available' => $this->assistant->isAgentAvailable(),
 				],
 			],
 		];
