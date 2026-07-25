@@ -89,11 +89,25 @@ final class ContextAgentProvider implements ISynchronousProvider {
 	}
 
 	/**
+	 * Declaring `memories` is what makes Assistant send it.
+	 *
+	 * ChatService inspects the provider's optional input shape and, only if this
+	 * key is present, passes summaries of the user's earlier chats
+	 * (SessionSummaryService::getMemories). It is the sanctioned way for the
+	 * Assistant to hand context to a provider, so it is worth accepting rather
+	 * than reconstructing that context ourselves.
+	 *
 	 * @return ShapeDescriptor[]
 	 */
 	#[\Override]
 	public function getOptionalInputShape(): array {
-		return [];
+		return [
+			'memories' => new ShapeDescriptor(
+				'Memories',
+				'What the Assistant recalls about this user from earlier chats.',
+				EShapeType::ListOfTexts,
+			),
+		];
 	}
 
 	/**
@@ -145,6 +159,29 @@ final class ContextAgentProvider implements ISynchronousProvider {
 	}
 
 	/**
+	 * Flatten Assistant's memories into a single block, if it sent any.
+	 *
+	 * @param array<string, mixed> $input
+	 */
+	private function memories(array $input): string {
+		/** @var mixed $memories */
+		$memories = $input['memories'] ?? null;
+		if (!is_array($memories)) {
+			return '';
+		}
+
+		$lines = [];
+		/** @var mixed $memory */
+		foreach ($memories as $memory) {
+			if (is_string($memory) && trim($memory) !== '') {
+				$lines[] = $memory;
+			}
+		}
+
+		return $lines === [] ? '' : implode("\n\n", $lines);
+	}
+
+	/**
 	 * @param array<string, mixed> $input
 	 * @return array<string, list<string>|string>
 	 * @throws ProcessingException
@@ -174,7 +211,12 @@ final class ContextAgentProvider implements ISynchronousProvider {
 		$reportProgress(0.1);
 
 		try {
-			$result = $this->agentLoop->run($userId, $prompt, $conversation->getDecodedHistory());
+			$result = $this->agentLoop->run(
+				$userId,
+				$prompt,
+				$conversation->getDecodedHistory(),
+				$this->memories($input),
+			);
 		} catch (AgentException $e) {
 			$this->logger->warning('Astrolabe agent turn failed', [
 				'exception' => $e,

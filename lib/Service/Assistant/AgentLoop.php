@@ -38,18 +38,36 @@ final class AgentLoop {
 	 */
 	private const MAX_TOOL_RESULT_CHARS = 8000;
 
+	/**
+	 * Deliberately minimal, and confined to things the model cannot infer.
+	 *
+	 * Astrolabe is a context and tool provider here, not a chat product: the
+	 * Assistant owns the conversation, its persona and its user-facing
+	 * instructions. An earlier version of this prompt told the model how to
+	 * behave in a conversation, and it promptly answered "is that deployed yet?"
+	 * with "no, I am a prototype" — inventing a persona that competes with the
+	 * app the user is actually talking to.
+	 *
+	 * So this states only what is true of *these tools* and could not be known
+	 * otherwise: that they read the user's own content, and that they cannot
+	 * write. Everything else is left to the Assistant and the model.
+	 */
 	private const SYSTEM_PROMPT = <<<'PROMPT'
-		You are the assistant for a Nextcloud user, with tools that search and read
-		their own content. Prefer searching before answering: you have no reliable
-		memory of their files.
+		Your tools search and read this user's own Nextcloud content. Use them when
+		a question depends on what is in their files, and name the documents you
+		draw facts from so the user can check them. If the tools find nothing
+		relevant, say so rather than answering from general knowledge.
 
-		Cite what you used. When a fact comes from a document, name that document in
-		your answer. If the tools return nothing relevant, say so plainly instead of
-		answering from general knowledge — the user is asking about their content,
-		not the world.
+		Prefer nc_semantic_search for questions about what their content says; it
+		searches everything. Reach for a more specific tool only when you need
+		something it cannot give you.
 
-		Your tools are read-only. If asked to create, change or delete something,
-		explain that you can only read for now.
+		Call a tool with every required parameter, using the types its schema
+		declares — a search query is a plain string, not an object or a list. Make
+		one call at a time and use its result before deciding whether to make
+		another.
+
+		The tools are read-only: they cannot create, change or delete anything.
 		PROMPT;
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
@@ -66,7 +84,7 @@ final class AgentLoop {
 	 * @return array{output: string, sources: list<string>, history: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
-	public function run(string $userId, string $prompt, array $history): array {
+	public function run(string $userId, string $prompt, array $history, string $memories = ''): array {
 		try {
 			$client = $this->clientFactory->connect($userId, $this->scopes());
 		} catch (McpUnavailableException $e) {
@@ -74,7 +92,7 @@ final class AgentLoop {
 		}
 
 		try {
-			return $this->drive($client, $userId, $prompt, $history);
+			return $this->drive($client, $userId, $prompt, $history, $memories);
 		} finally {
 			// The server holds a session per connection; leaving it open leaks one
 			// per turn.
@@ -94,7 +112,7 @@ final class AgentLoop {
 	 * @return array{output: string, sources: list<string>, history: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
-	private function drive(Client $client, string $userId, string $prompt, array $history): array {
+	private function drive(Client $client, string $userId, string $prompt, array $history, string $memories): array {
 		$tools = $this->toolCatalogue($client);
 		if ($tools === '') {
 			throw new AgentException(
@@ -118,7 +136,7 @@ final class AgentLoop {
 				break;
 			}
 
-			$result = $this->askModel($userId, $this->prompt($prompt, $toolResults), $history, $tools);
+			$result = $this->askModel($userId, $this->prompt($prompt, $toolResults), $history, $tools, $memories);
 			$output = $result['output'];
 			$calls = $result['tool_calls'];
 
@@ -184,11 +202,17 @@ final class AgentLoop {
 		string $prompt,
 		array $history,
 		string $toolsJson,
+		string $memories,
 	): array {
 		$task = new Task(
 			TextToTextChatWithTools::ID,
 			[
-				'system_prompt' => self::SYSTEM_PROMPT,
+				// Assistant's own recollection of earlier sessions, when it chose to
+				// send any, appended rather than replacing ours: it is context about
+				// the user, not instructions about the tools.
+				'system_prompt' => $memories === ''
+					? self::SYSTEM_PROMPT
+					: self::SYSTEM_PROMPT . "\n\n" . $memories,
 				'input' => $prompt,
 				'tool_message' => '',
 				'history' => array_map(
@@ -234,9 +258,14 @@ final class AgentLoop {
 			return $question;
 		}
 
+		// Framed as evidence for the question, not as the subject. Saying "answer
+		// from this if you can" made the model summarise search results instead of
+		// replying to what was asked: a follow-up like "can you link the file you
+		// referenced?" came back as a restatement of the previous answer.
 		return $question
-			. "\n\nHere is what your tools returned. Answer from this if you can, "
-			. "and only call another tool if something essential is still missing.\n\n"
+			. "\n\n---\nYour tools returned the following. Use it to answer the "
+			. 'message above. Call another tool only if something essential is '
+			. "still missing.\n\n"
 			. $toolResults;
 	}
 
