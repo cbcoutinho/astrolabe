@@ -40,7 +40,7 @@ final class Capabilities implements ICapability {
 	 *     enabled_doc_types: list<string>,
 	 *     sources: list<array{app: string, doc_types: list<string>, enabled: bool}>
 	 *   },
-	 *   assistant: array{summary_modes: list<string>, agent_available: bool}
+	 *   assistant: array{summary_modes: list<string>}
 	 * }}
 	 */
 	#[\Override]
@@ -69,12 +69,11 @@ final class Capabilities implements ICapability {
 					'sources' => $sources,
 				],
 				// Which AI features this instance can serve. Astrolabe supplies
-				// retrieval only, so both values depend on TaskProcessing
-				// providers the admin installed separately — clients must gate on
-				// these rather than assume the features exist.
+				// retrieval only, so this depends on TaskProcessing providers the
+				// admin installed separately — clients must gate on it rather than
+				// assume the feature exists.
 				'assistant' => [
 					'summary_modes' => $this->assistant->getSummaryModes(),
-					'agent_available' => $this->assistant->isAgentAvailable(),
 				],
 			],
 		];

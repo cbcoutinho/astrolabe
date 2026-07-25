@@ -74,12 +74,10 @@ final class CapabilitiesTest extends TestCase {
 			'enabledDocTypes' => [],
 		]);
 		$this->assistant->method('getSummaryModes')->willReturn(['analyze-images', 'text2text']);
-		$this->assistant->method('isAgentAvailable')->willReturn(true);
 
 		$assistant = $this->capabilities()->getCapabilities()['astrolabe']['assistant'];
 
 		$this->assertSame(['analyze-images', 'text2text'], $assistant['summary_modes']);
-		$this->assertTrue($assistant['agent_available']);
 	}
 
 	/**
@@ -93,11 +91,9 @@ final class CapabilitiesTest extends TestCase {
 			'enabledDocTypes' => [],
 		]);
 		$this->assistant->method('getSummaryModes')->willReturn([]);
-		$this->assistant->method('isAgentAvailable')->willReturn(false);
 
 		$assistant = $this->capabilities()->getCapabilities()['astrolabe']['assistant'];
 
 		$this->assertSame([], $assistant['summary_modes']);
-		$this->assertFalse($assistant['agent_available']);
 	}
 }

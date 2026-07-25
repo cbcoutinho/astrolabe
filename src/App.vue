@@ -644,6 +644,11 @@ export default {
 			summaryText: '',
 			summaryMode: '',
 			summaryError: '',
+			// Bumped whenever the viewer changes document. A summary can take
+			// minutes, and the user can switch results while one is in flight, so
+			// the resolving request checks this before writing its result — without
+			// it, document A's summary can land on document B.
+			summaryGeneration: 0,
 		}
 	},
 
@@ -1314,6 +1319,9 @@ export default {
 			this.viewerLoading = true
 			this.viewerTitle = result.title || 'Chunk Viewer'
 			this.currentResult = result // Store result for document linking
+			// Switching documents must not leave the previous one's summary on
+			// screen, nor let its in-flight request write over this one.
+			this.resetSummary()
 
 			try {
 				// Fetch chunk context
@@ -1429,6 +1437,9 @@ export default {
 		},
 
 		resetSummary() {
+			// Bumping the generation orphans any in-flight request, so its result
+			// is discarded rather than written against whatever is now on screen.
+			this.summaryGeneration++
 			this.summaryLoading = false
 			this.summaryText = ''
 			this.summaryMode = ''
@@ -1453,6 +1464,10 @@ export default {
 			}
 
 			this.resetSummary()
+			// Claim this generation after the reset bumped it: every write below
+			// is conditional on the viewer still showing the document this request
+			// was made for.
+			const generation = this.summaryGeneration
 			this.summaryLoading = true
 
 			try {
@@ -1487,14 +1502,25 @@ export default {
 					generateUrl('/apps/astrolabe/api/v1/summary'),
 					form,
 				)
+				const text = await this.awaitSummaryTask(data.task_id)
+				if (generation !== this.summaryGeneration) {
+					return
+				}
 				this.summaryMode = data.mode ?? ''
-				this.summaryText = await this.awaitSummaryTask(data.task_id)
+				this.summaryText = text
 			} catch (error) {
+				if (generation !== this.summaryGeneration) {
+					return
+				}
 				console.error('Summary failed:', error)
 				this.summaryError = error.response?.data?.error
 					?? this.t('astrolabe', 'Could not summarize this document.')
 			} finally {
-				this.summaryLoading = false
+				// Only the request that still owns the viewer may clear the
+				// spinner: a superseded one would stop the current request's.
+				if (generation === this.summaryGeneration) {
+					this.summaryLoading = false
+				}
 			}
 		},
 
