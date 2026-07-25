@@ -79,6 +79,14 @@ services:
       NEXTCLOUD_HOST: http://app:80
       NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
       NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
+      # Issuer the `oidc` app actually stamps into tokens. It builds `iss` from
+      # scheme + host only (TokenGenerationRequestListener parses PHP_URL_SCHEME
+      # and PHP_URL_HOST, never PHP_URL_PORT), so on any non-standard port the
+      # issuer loses the port and will not match NEXTCLOUD_HOST or the public
+      # issuer URL. /mcp verifies `iss`; the management API deliberately skips
+      # it, so without this only half the integration works and the failure looks
+      # like a bad token rather than a mismatched issuer.
+      OIDC_ISSUER: http://localhost
       # 0.91.x dropped ENABLE_LOGIN_FLOW; deployment mode now selects the auth flow (ADR-022)
       MCP_DEPLOYMENT_MODE: login_flow
       # 0.91.x gates the management/vector-viz API on a client_id allowlist;
