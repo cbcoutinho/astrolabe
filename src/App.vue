@@ -2090,6 +2090,15 @@ a.mcp-result-title {
 	}
 }
 
+// Summarize + Close sit together in the header; without an explicit gap they
+// render flush against each other, matching .mcp-modal-footer's spacing.
+.mcp-modal-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
 .mcp-modal-title-link {
 	color: var(--color-main-text);
 	text-decoration: none;

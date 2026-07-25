@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service\Assistant;
 
+use OCP\AppFramework\Http;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
@@ -67,7 +68,7 @@ class ScratchImageStore {
 				'exception' => $e,
 				'user_id' => $userId,
 			]);
-			throw new SummaryException('Could not stage the document pages', 500, $e);
+			throw new SummaryException('Could not stage the document pages', Http::STATUS_INTERNAL_SERVER_ERROR, $e);
 		}
 
 		$ids = [];
@@ -84,7 +85,7 @@ class ScratchImageStore {
 					'exception' => $e,
 					'user_id' => $userId,
 				]);
-				throw new SummaryException('Could not stage the document pages', 500, $e);
+				throw new SummaryException('Could not stage the document pages', Http::STATUS_INTERNAL_SERVER_ERROR, $e);
 			}
 		}
 
