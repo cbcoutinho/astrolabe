@@ -11,10 +11,13 @@ use OCP\Settings\IDeclarativeSettingsForm;
 /**
  * Admin controls for the Assistant agent.
  *
- * Separate from the MCP connection form because these are stored in **app**
- * config rather than system config, and `STORAGE_TYPE_INTERNAL` lets Nextcloud
- * persist them directly — the connection form needs a listener only because it
- * writes system config.
+ * A form of its own so the agent's switches sit apart from the MCP connection
+ * settings, which are about reaching the server at all rather than about what
+ * the Assistant may do with it.
+ *
+ * Its values live in **app** config rather than system config, which would
+ * ordinarily make `STORAGE_TYPE_INTERNAL` the obvious choice — Nextcloud can
+ * persist those itself. It cannot here; see the note on `storage_type` below.
  *
  * @psalm-suppress UnusedClass — registered via IRegistrationContext.
  */
