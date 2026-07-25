@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Controller;
 
 use OCA\Astrolabe\AppInfo\Application;
+use OCA\Astrolabe\Service\Assistant\AssistantCapabilities;
 use OCA\Astrolabe\Service\SearchCapabilities;
 use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
@@ -30,6 +31,7 @@ class PageController extends Controller {
 		private IInitialState $initialState,
 		private SearchSources $searchSources,
 		private SearchCapabilities $searchCapabilities,
+		private AssistantCapabilities $assistantCapabilities,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -57,6 +59,11 @@ class PageController extends Controller {
 			// sync off). The search backend rejects unsupported requests (422) as
 			// the backstop.
 			'supportedSearchTypes' => $this->searchCapabilities->getSupportedSearchTypes(),
+			// Summary tiers a TaskProcessing provider can actually serve, so the
+			// chunk viewer only offers the action when something can answer it.
+			// Empty ⇒ the button is hidden entirely. Provided here as well as on
+			// the OCS capabilities endpoint so the page needs no extra round-trip.
+			'summaryModes' => $this->assistantCapabilities->getSummaryModes(),
 		]);
 
 		$response = new TemplateResponse(

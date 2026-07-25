@@ -49,6 +49,13 @@ services:
       MYSQL_HOST: db
       REDIS_HOST: redis
       MCP_SERVER_URL: http://mcp:8000
+      # Dedicated TaskProcessing workers (see app-hooks/before-starting). Cron
+      # drives synchronous providers only every 5 minutes, which is unusable for
+      # an Assistant chat turn or a Summarize click; workers cut pickup latency
+      # to about a second. Several run so a slow multimodal summary cannot block
+      # a chat turn queued behind it.
+      TASKPROCESSING_WORKERS: "4"
+      TASKPROCESSING_WORKER_TIMEOUT: "300"
     healthcheck:
       test: ["CMD-SHELL", "curl -Ss http://localhost/status.php | grep '\"installed\":true' || exit 1"]
       interval: 15s
@@ -57,7 +64,7 @@ services:
 
   mcp:
     # renovate: datasource=docker depName=ghcr.io/cbcoutinho/nextcloud-mcp-server
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.91.2
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.148.0
     restart: "no"
     command: ["--transport", "streamable-http", "--oauth"]
     depends_on:

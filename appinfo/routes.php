@@ -77,6 +77,15 @@ return [
 			'verb' => 'GET',
 		],
 
+		// Assistant integration. Scheduling returns a TaskProcessing task id; the
+		// frontend then polls core's own OCS endpoint
+		// (/ocs/v2.php/taskprocessing/task/{id}) rather than a route of ours.
+		[
+			'name' => 'assistant#summarize',
+			'url' => '/api/v1/summary',
+			'verb' => 'POST',
+		],
+
 		// Admin settings
 		[
 			'name' => 'api#serverStatus',

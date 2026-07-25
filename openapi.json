@@ -3,7 +3,7 @@
     "info": {
         "title": "astrolabe",
         "version": "0.0.1",
-        "description": "Manage the MCP Server from within Nextcloud UI",
+        "description": "AI-powered semantic search across your Nextcloud",
         "license": {
             "name": "agpl"
         }
@@ -20,121 +20,69 @@
             }
         },
         "schemas": {
-            "OCSMeta": {
+            "Capabilities": {
                 "type": "object",
                 "required": [
-                    "status",
-                    "statuscode"
+                    "astrolabe"
                 ],
                 "properties": {
-                    "status": {
-                        "type": "string"
-                    },
-                    "statuscode": {
-                        "type": "integer"
-                    },
-                    "message": {
-                        "type": "string"
-                    },
-                    "totalitems": {
-                        "type": "string"
-                    },
-                    "itemsperpage": {
-                        "type": "string"
-                    }
-                }
-            }
-        }
-    },
-    "paths": {
-        "/ocs/v2.php/apps/astrolabe/api": {
-            "get": {
-                "operationId": "api-index",
-                "summary": "An example API endpoint",
-                "tags": [
-                    "api"
-                ],
-                "security": [
-                    {
-                        "bearer_auth": []
-                    },
-                    {
-                        "basic_auth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "OCS-APIRequest",
-                        "in": "header",
-                        "description": "Required to be true for the API request to pass",
-                        "required": true,
-                        "schema": {
-                            "type": "boolean",
-                            "default": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Data returned",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "ocs"
-                                    ],
-                                    "properties": {
-                                        "ocs": {
+                    "astrolabe": {
+                        "type": "object",
+                        "required": [
+                            "semantic_search",
+                            "assistant"
+                        ],
+                        "properties": {
+                            "semantic_search": {
+                                "type": "object",
+                                "required": [
+                                    "enabled_doc_types",
+                                    "sources"
+                                ],
+                                "properties": {
+                                    "enabled_doc_types": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "sources": {
+                                        "type": "array",
+                                        "items": {
                                             "type": "object",
                                             "required": [
-                                                "meta",
-                                                "data"
+                                                "app",
+                                                "doc_types",
+                                                "enabled"
                                             ],
                                             "properties": {
-                                                "meta": {
-                                                    "$ref": "#/components/schemas/OCSMeta"
+                                                "app": {
+                                                    "type": "string"
                                                 },
-                                                "data": {
-                                                    "type": "object",
-                                                    "required": [
-                                                        "message"
-                                                    ],
-                                                    "properties": {
-                                                        "message": {
-                                                            "type": "string"
-                                                        }
+                                                "doc_types": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
                                                     }
+                                                },
+                                                "enabled": {
+                                                    "type": "boolean"
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Current user is not logged in",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "ocs"
-                                    ],
-                                    "properties": {
-                                        "ocs": {
-                                            "type": "object",
-                                            "required": [
-                                                "meta",
-                                                "data"
-                                            ],
-                                            "properties": {
-                                                "meta": {
-                                                    "$ref": "#/components/schemas/OCSMeta"
-                                                },
-                                                "data": {}
-                                            }
+                            },
+                            "assistant": {
+                                "type": "object",
+                                "required": [
+                                    "summary_modes"
+                                ],
+                                "properties": {
+                                    "summary_modes": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -145,5 +93,19 @@
             }
         }
     },
-    "tags": []
+    "paths": {},
+    "tags": [
+        {
+            "name": "credentials",
+            "description": "Controller for managing background sync credentials (app passwords). Two provisioning paths share {@see AppPasswordProvisioningService}: - self-service ({@see storeAppPassword}): the user mints a token via core/getapppassword and hands it to us; we validate, store and sync it. - admin ({@see adminProvisionUser}): an admin mints a token on a user's behalf. Admin-only methods carry no #[NoAdminRequired] attribute, so Nextcloud's SecurityMiddleware restricts them to admins."
+        },
+        {
+            "name": "api",
+            "description": "API controller for MCP Server UI. Handles form submissions and AJAX requests from settings panels. Authenticates to the MCP server by minting a short-lived JWT for the current Nextcloud session user via McpTokenMinter — no per-user OAuth tokens are persisted by this controller or the app at large."
+        },
+        {
+            "name": "assistant",
+            "description": "Assistant-backed features over Astrolabe's indexed content. Scheduling only: the response carries a TaskProcessing task id, and the client polls core's own OCS endpoint (/ocs/v2.php/taskprocessing/task/{id}) for the result. Nothing here proxies model output, so there is no polling route of ours to secure or rate-limit."
+        }
+    ]
 }

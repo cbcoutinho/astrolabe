@@ -8,6 +8,7 @@ use GuzzleHttp\Psr7\HttpFactory;
 use OCA\Astrolabe\Capabilities;
 use OCA\Astrolabe\Http\NextcloudPsr18Client;
 use OCA\Astrolabe\Listener\AstrolabeAdminSettingsListener;
+use OCA\Astrolabe\Listener\SummaryCleanupListener;
 use OCA\Astrolabe\Listener\SyncEventListener;
 use OCA\Astrolabe\Search\SemanticSearchProvider;
 use OCA\Astrolabe\Service\WebhookPresets;
@@ -22,6 +23,8 @@ use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
 use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
+use OCP\TaskProcessing\Events\TaskFailedEvent;
+use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -68,6 +71,13 @@ class Application extends App implements IBootstrap {
 			DeclarativeSettingsSetValueEvent::class,
 			AstrolabeAdminSettingsListener::class
 		);
+
+		// Delete pages staged for a multimodal summary as soon as its task reaches
+		// a terminal state. They live in the user's own storage (TaskProcessing
+		// image inputs must be files the user can read), so leaving them behind is
+		// both clutter and a slow leak.
+		$context->registerEventListener(TaskSuccessfulEvent::class, SummaryCleanupListener::class);
+		$context->registerEventListener(TaskFailedEvent::class, SummaryCleanupListener::class);
 	}
 
 	public function boot(IBootContext $context): void {
