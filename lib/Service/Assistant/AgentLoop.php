@@ -40,6 +40,20 @@ final class AgentLoop {
 	private const MAX_TOOL_RESULT_CHARS = 8000;
 
 	/**
+	 * Turns of prior conversation carried into a new one.
+	 *
+	 * The whole history is resent on every turn, so without a bound an active
+	 * conversation grows its own prompt until it hits the provider's context
+	 * window — and pays for the excess on every call before it does. The 30-day
+	 * expiry bounds how long a *stale* conversation lives, not how large an
+	 * *active* one gets.
+	 *
+	 * Trimming keeps the most recent turns, which is where a follow-up's
+	 * referents live.
+	 */
+	private const MAX_HISTORY_TURNS = 20;
+
+	/**
 	 * Deliberately minimal, and confined to things the model cannot infer.
 	 *
 	 * Astrolabe is a context and tool provider here, not a chat product: the
@@ -202,6 +216,9 @@ final class AgentLoop {
 
 		$history[] = ['role' => 'human', 'content' => $prompt];
 		$history[] = ['role' => 'assistant', 'content' => $output];
+		// Trim what is stored as well as what is sent: otherwise the row grows
+		// forever even though only the tail is ever used.
+		$history = $this->recentTurns($history);
 
 		return [
 			'output' => $output,
@@ -239,7 +256,7 @@ final class AgentLoop {
 				'tool_message' => '',
 				'history' => array_map(
 					static fn (array $turn): string => json_encode($turn, JSON_THROW_ON_ERROR),
-					$history,
+					$this->recentTurns($history),
 				),
 				'tools' => $toolsJson,
 			],
@@ -267,6 +284,17 @@ final class AgentLoop {
 			'output' => is_string($text) ? $text : '',
 			'tool_calls' => $this->parseToolCalls(is_string($rawCalls) ? $rawCalls : ''),
 		];
+	}
+
+	/**
+	 * The tail of the conversation, bounded so an active chat cannot grow its own
+	 * prompt without limit.
+	 *
+	 * @param list<array{role: string, content: string}> $history
+	 * @return list<array{role: string, content: string}>
+	 */
+	private function recentTurns(array $history): array {
+		return array_slice($history, -self::MAX_HISTORY_TURNS);
 	}
 
 	/**

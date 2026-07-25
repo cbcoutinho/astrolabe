@@ -350,6 +350,35 @@ final class AgentLoopTest extends TestCase {
 	}
 
 	/**
+	 * Every other budget in the loop is bounded, and this one has to be too: the
+	 * whole history is resent on each turn, so an active conversation would
+	 * otherwise grow its own prompt until it hit the provider's context window,
+	 * paying for the excess on every call before it did.
+	 */
+	public function testBoundsHowMuchHistoryIsSentAndStored(): void {
+		$tasks = $this->withModelTurns([['output' => 'ok', 'tool_calls' => '']]);
+		$history = [];
+		for ($i = 0; $i < 60; $i++) {
+			$history[] = ['role' => $i % 2 === 0 ? 'human' : 'assistant', 'content' => 'turn ' . $i];
+		}
+
+		$result = $this->loop()->run('alice', 'and now?', $history);
+
+		/** @var list<string> $sent */
+		$sent = ($tasks())[0]->getInput()['history'];
+		$this->assertLessThanOrEqual(20, count($sent));
+		// The tail is kept, because that is where a follow-up's referents live.
+		$this->assertStringContainsString('turn 59', $sent[count($sent) - 1]);
+
+		// Storage is trimmed too, or the row grows forever regardless.
+		$this->assertLessThanOrEqual(20, count($result['history']));
+		$this->assertSame(
+			['role' => 'assistant', 'content' => 'ok'],
+			$result['history'][count($result['history']) - 1],
+		);
+	}
+
+	/**
 	 * Assistant only sends memories when the provider declares the input, and it
 	 * is context about the user — appended to our tool instructions, not
 	 * replacing them.

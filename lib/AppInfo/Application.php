@@ -14,6 +14,7 @@ use OCA\Astrolabe\Search\SemanticSearchProvider;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin;
 use OCA\Astrolabe\Settings\AstrolabeAdminSettings;
+use OCA\Astrolabe\Settings\AstrolabeAgentSettings;
 use OCA\Astrolabe\TaskProcessing\ContextAgentProvider;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -62,6 +63,7 @@ class Application extends App implements IBootstrap {
 
 		// Register declarative admin settings
 		$context->registerDeclarativeSettings(AstrolabeAdminSettings::class);
+		$context->registerDeclarativeSettings(AstrolabeAgentSettings::class);
 
 		// Register event listeners for declarative settings
 		$context->registerEventListener(

@@ -84,8 +84,15 @@ final class McpProbe extends Command {
 			if ($call !== null && $call !== '') {
 				/** @var string $rawArgs */
 				$rawArgs = $input->getOption('args');
-				/** @var array<string, mixed> $args */
-				$args = json_decode($rawArgs, true, 512, JSON_THROW_ON_ERROR);
+				try {
+					/** @var array<string, mixed> $args */
+					$args = json_decode($rawArgs, true, 512, JSON_THROW_ON_ERROR);
+				} catch (\JsonException $e) {
+					// A malformed --args is a typo at the prompt, so say which part
+					// is wrong rather than surfacing an uncaught exception.
+					$output->writeln(sprintf('<error>--args is not valid JSON: %s</error>', $e->getMessage()));
+					return 1;
+				}
 
 				$output->writeln(sprintf("\n<info>calling %s</info> %s", $call, $rawArgs));
 				$result = $client->callTool($call, $args);
