@@ -30,8 +30,11 @@ use Psr\Log\LoggerInterface;
  * with no confirmation round-trip: there is nothing to confirm. Adding a write
  * scope to the admin setting without building that round-trip would quietly turn
  * this into an agent that changes user data unasked.
+ *
+ * @psalm-suppress ClassMustBeFinal — kept non-final so it can be mocked in the
+ *   unit tests, mirroring the other Service classes.
  */
-final class AgentLoop {
+class AgentLoop {
 	/**
 	 * Cap on characters of tool output fed back per call. A directory listing or
 	 * a base64 blob can otherwise fill the context window in a single round and
@@ -267,11 +270,20 @@ final class AgentLoop {
 		try {
 			$completed = $this->taskProcessing->runTask($task);
 		} catch (\Throwable $e) {
-			throw new AgentException('The assistant model could not be reached: ' . $e->getMessage(), $e);
+			throw $this->adminOnly(
+				'The assistant model could not be reached: ' . $e->getMessage(),
+				'The assistant model is unavailable. An administrator needs to check the '
+				. 'text generation provider.',
+				$e,
+			);
 		}
 
 		if ($completed->getStatus() !== Task::STATUS_SUCCESSFUL) {
-			throw new AgentException('The assistant model failed: ' . ($completed->getErrorMessage() ?? 'unknown error'));
+			throw $this->adminOnly(
+				'The assistant model failed: ' . ($completed->getErrorMessage() ?? 'unknown error'),
+				'The assistant model could not answer. An administrator needs to check the '
+				. 'text generation provider.',
+			);
 		}
 
 		$taskOutput = $completed->getOutput();
@@ -284,6 +296,25 @@ final class AgentLoop {
 			'output' => is_string($text) ? $text : '',
 			'tool_calls' => $this->parseToolCalls(is_string($rawCalls) ? $rawCalls : ''),
 		];
+	}
+
+	/**
+	 * Log the diagnosis, hand the chat something the reader can act on.
+	 *
+	 * Every message thrown from here lands in the Assistant's chat, and the
+	 * person reading it is whoever happened to ask a question — not the admin who
+	 * configured the provider. Provider error text ("401 from …", a quota
+	 * message, a stack-derived transport error) tells them nothing they can use
+	 * and exposes backend detail besides, so it goes to the log, where the person
+	 * who *can* fix it will look.
+	 */
+	private function adminOnly(string $diagnosis, string $userFacing, ?\Throwable $previous = null): AgentException {
+		$this->logger->warning($diagnosis, [
+			'exception' => $previous,
+			'app' => Application::APP_ID,
+		]);
+
+		return new AgentException($userFacing, $previous);
 	}
 
 	/**
@@ -450,7 +481,12 @@ final class AgentLoop {
 		try {
 			$tools = $client->listTools()->tools;
 		} catch (\Throwable $e) {
-			throw new AgentException('Could not list the assistant\'s tools: ' . $e->getMessage(), $e);
+			throw $this->adminOnly(
+				'Could not list the assistant\'s tools: ' . $e->getMessage(),
+				'Astrolabe could not load the tools it searches your content with. '
+				. 'An administrator needs to check the MCP server connection.',
+				$e,
+			);
 		}
 
 		$described = [];

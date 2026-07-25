@@ -56,7 +56,7 @@ final class AgentLoopTest extends TestCase {
 	 * first configuration, so a per-test override has to happen before the mock
 	 * is ever configured.
 	 */
-	private function loop(): AgentLoop {
+	private function loop(?LoggerInterface $logger = null): AgentLoop {
 		$this->appConfig->method('getValueString')->willReturn(AdminSettings::DEFAULT_AGENT_SCOPES);
 		$maxIterations = $this->maxIterations;
 		$timeout = $this->timeout;
@@ -73,7 +73,7 @@ final class AgentLoopTest extends TestCase {
 			$this->clientFactory,
 			$this->appConfig,
 			$this->urlGenerator(),
-			$this->createMock(LoggerInterface::class),
+			$logger ?? $this->createMock(LoggerInterface::class),
 		);
 	}
 
@@ -447,7 +447,13 @@ final class AgentLoopTest extends TestCase {
 		$loop->run('alice', 'q', []);
 	}
 
-	public function testAFailedModelTaskFailsTheTurn(): void {
+	/**
+	 * The failure has to reach the user, but the provider's own words must not:
+	 * whoever is in the chat is rarely the admin who configured the provider, and
+	 * "provider quota exceeded" is both useless to them and backend detail they
+	 * were not meant to see. The diagnosis belongs in the log.
+	 */
+	public function testAFailedModelTaskFailsTheTurnWithoutQuotingTheProvider(): void {
 		$this->taskProcessing->method('runTask')->willReturnCallback(
 			static function (Task $task): Task {
 				$task->setStatus(Task::STATUS_FAILED);
@@ -456,9 +462,26 @@ final class AgentLoopTest extends TestCase {
 			},
 		);
 
-		$this->expectException(AgentException::class);
-		$this->expectExceptionMessage('provider quota exceeded');
-		$this->loop()->run('alice', 'q', []);
+		$logger = $this->createMock(LoggerInterface::class);
+		$logged = [];
+		$logger->method('warning')->willReturnCallback(
+			function (string $message) use (&$logged): void {
+				$logged[] = $message;
+			},
+		);
+
+		try {
+			$this->loop($logger)->run('alice', 'q', []);
+			$this->fail('a failed model task must fail the turn');
+		} catch (AgentException $e) {
+			$this->assertStringNotContainsString('quota', $e->getMessage());
+			$this->assertStringContainsString('administrator', $e->getMessage());
+		}
+
+		$this->assertNotEmpty(
+			array_filter($logged, static fn (string $m): bool => str_contains($m, 'provider quota exceeded')),
+			'the diagnosis must still reach the admin, via the log',
+		);
 	}
 
 	public function testDisconnectsEvenWhenTheTurnFails(): void {

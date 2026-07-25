@@ -12,8 +12,11 @@ use OCP\Security\ISecureRandom;
 
 /**
  * @template-extends QBMapper<AgentConversation>
+ *
+ * @psalm-suppress ClassMustBeFinal — kept non-final so it can be mocked in the
+ *   unit tests, mirroring the other Service classes.
  */
-final class AgentConversationMapper extends QBMapper {
+class AgentConversationMapper extends QBMapper {
 	private const TOKEN_LENGTH = 43;
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
@@ -101,7 +104,12 @@ final class AgentConversationMapper extends QBMapper {
 		return false;
 	}
 
-	private function findById(?int $id): ?AgentConversation {
+	/**
+	 * Protected as a seam: the retry policy above is the part worth testing, and
+	 * it can only be exercised without a database if the two statements it drives
+	 * can be substituted. There is no DB-backed test tier in this repo.
+	 */
+	protected function findById(?int $id): ?AgentConversation {
 		if ($id === null) {
 			return null;
 		}
@@ -123,7 +131,7 @@ final class AgentConversationMapper extends QBMapper {
 	 *
 	 * @return bool false when the revision moved on, i.e. this write lost a race
 	 */
-	private function writeIfUnchanged(AgentConversation $conversation): bool {
+	protected function writeIfUnchanged(AgentConversation $conversation): bool {
 		$revision = $conversation->getRevision();
 
 		$qb = $this->db->getQueryBuilder();
