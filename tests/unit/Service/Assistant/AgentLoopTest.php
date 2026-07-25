@@ -15,6 +15,7 @@ use OCA\Astrolabe\Service\Mcp\McpClientFactory;
 use OCA\Astrolabe\Service\Mcp\McpUnavailableException;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\IAppConfig;
+use OCP\IURLGenerator;
 use OCP\TaskProcessing\IManager;
 use OCP\TaskProcessing\Task;
 use OCP\TaskProcessing\TaskTypes\TextToTextChatWithTools;
@@ -71,8 +72,25 @@ final class AgentLoopTest extends TestCase {
 			$this->taskProcessing,
 			$this->clientFactory,
 			$this->appConfig,
+			$this->urlGenerator(),
 			$this->createMock(LoggerInterface::class),
 		);
+	}
+
+	/**
+	 * @param list<string> $names
+	 */
+	/**
+	 * A stub URL generator rather than a mocked collector: the loop builds its
+	 * own collector per turn (it is stateful, and a worker serves many tasks), so
+	 * citations are asserted through real link construction.
+	 */
+	private function urlGenerator(): IURLGenerator {
+		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator->method('linkToRoute')->willReturn('/apps/astrolabe/');
+		$urlGenerator->method('getAbsoluteURL')
+			->willReturnCallback(static fn (string $path): string => 'https://cloud.example' . $path);
+		return $urlGenerator;
 	}
 
 	/**
@@ -132,6 +150,7 @@ final class AgentLoopTest extends TestCase {
 
 		$this->assertSame('Paris.', $result['output']);
 		$this->assertSame([], $result['sources']);
+		$this->assertStringNotContainsString('Sources', $result['output'], 'no tools, so nothing to cite');
 	}
 
 	/**
@@ -155,8 +174,9 @@ final class AgentLoopTest extends TestCase {
 
 		$result = $this->loop()->run('alice', 'How is networking set up?', []);
 
-		$this->assertSame('It uses Cilium.', $result['output']);
-		$this->assertSame(['nc_semantic_search'], $result['sources']);
+		$this->assertStringContainsString('It uses Cilium.', $result['output']);
+		// A tool returning prose yields no citations — only structured results do.
+		$this->assertSame([], $result['sources']);
 	}
 
 	/**
@@ -344,7 +364,7 @@ final class AgentLoopTest extends TestCase {
 		$this->assertStringContainsString('read-only', $systemPrompt, 'the tool constraints must survive');
 	}
 
-	public function testDeduplicatesSourcesAcrossRounds(): void {
+	public function testDeduplicatesCitationsAcrossRounds(): void {
 		$this->maxIterations = 3;
 		$this->timeout = 600;
 		$this->withModelTurns([
@@ -352,9 +372,12 @@ final class AgentLoopTest extends TestCase {
 			['output' => '', 'tool_calls' => json_encode([['name' => 'nc_semantic_search', 'args' => ['query' => 'b']]])],
 			['output' => 'done', 'tool_calls' => ''],
 		]);
-		$this->withToolResult('result');
+		// The same document surfaces in both rounds; it must be cited once.
+		$this->withToolResult(json_encode(['results' => [[
+			'id' => 78, 'doc_type' => 'note', 'title' => 'Kubernetes Cluster Architecture',
+		]]]));
 
-		$this->assertSame(['nc_semantic_search'], $this->loop()->run('alice', 'q', [])['sources']);
+		$this->assertSame(['Kubernetes Cluster Architecture'], $this->loop()->run('alice', 'q', [])['sources']);
 	}
 
 	public function testAnUnreachableMcpServerFailsTheTurnWithItsOwnMessage(): void {
@@ -366,6 +389,7 @@ final class AgentLoopTest extends TestCase {
 			$this->taskProcessing,
 			$clientFactory,
 			$this->appConfig,
+			$this->urlGenerator(),
 			$this->createMock(LoggerInterface::class),
 		);
 
@@ -389,6 +413,7 @@ final class AgentLoopTest extends TestCase {
 			$this->taskProcessing,
 			$clientFactory,
 			$this->appConfig,
+			$this->urlGenerator(),
 			$this->createMock(LoggerInterface::class),
 		);
 

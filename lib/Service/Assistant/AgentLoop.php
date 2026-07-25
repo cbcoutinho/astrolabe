@@ -11,6 +11,7 @@ use OCA\Astrolabe\Service\Mcp\McpClientFactory;
 use OCA\Astrolabe\Service\Mcp\McpUnavailableException;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\IAppConfig;
+use OCP\IURLGenerator;
 use OCP\TaskProcessing\IManager;
 use OCP\TaskProcessing\Task;
 use OCP\TaskProcessing\TaskTypes\TextToTextChatWithTools;
@@ -75,6 +76,7 @@ final class AgentLoop {
 		private IManager $taskProcessing,
 		private McpClientFactory $clientFactory,
 		private IAppConfig $appConfig,
+		private IURLGenerator $urlGenerator,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -92,7 +94,10 @@ final class AgentLoop {
 		}
 
 		try {
-			return $this->drive($client, $userId, $prompt, $history, $memories);
+			// Per turn, never shared: the collector is stateful and a worker
+			// process serves many tasks, so a reused instance would carry one
+			// user's citations into another user's answer.
+			return $this->drive($client, new CitationCollector($this->urlGenerator), $userId, $prompt, $history, $memories);
 		} finally {
 			// The server holds a session per connection; leaving it open leaks one
 			// per turn.
@@ -112,7 +117,7 @@ final class AgentLoop {
 	 * @return array{output: string, sources: list<string>, history: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
-	private function drive(Client $client, string $userId, string $prompt, array $history, string $memories): array {
+	private function drive(Client $client, CitationCollector $citations, string $userId, string $prompt, array $history, string $memories): array {
 		$tools = $this->toolCatalogue($client);
 		if ($tools === '') {
 			throw new AgentException(
@@ -125,7 +130,6 @@ final class AgentLoop {
 		$maxIterations = $this->maxIterations();
 
 		$toolResults = '';
-		$sources = [];
 		$output = '';
 		$truncated = true;
 		$ranOutOfTime = false;
@@ -163,7 +167,7 @@ final class AgentLoop {
 				$observations[] = sprintf(
 					"Result of %s:\n%s",
 					$call['name'],
-					$this->invoke($client, $call, $sources),
+					$this->invoke($client, $call, $citations),
 				);
 			}
 			$toolResults = implode("\n\n", $observations);
@@ -180,12 +184,30 @@ final class AgentLoop {
 			$output .= "\n\n_(I stopped before finishing — this may be incomplete.)_";
 		}
 
+		// Astrolabe appends the citations rather than relying on the model to name
+		// its sources: prose citations read the same whether the document was
+		// consulted or invented, and only these are traceable to a tool result.
+		$output .= $citations->markdown();
+
+		// A tool that omits doc_type contributes content the user cannot trace
+		// back. Surfacing it here is what turns "this answer has no sources" into
+		// a fixable report against the tool.
+		$uncitable = $citations->uncitableTools();
+		if ($uncitable !== []) {
+			$this->logger->info('MCP tools returned results without a doc_type, so they could not be cited', [
+				'tools' => $uncitable,
+				'app' => Application::APP_ID,
+			]);
+		}
+
 		$history[] = ['role' => 'human', 'content' => $prompt];
 		$history[] = ['role' => 'assistant', 'content' => $output];
 
 		return [
 			'output' => $output,
-			'sources' => array_values(array_unique($sources)),
+			// Document titles, not tool names: Assistant renders this list as plain
+			// text, where a title informs the reader and a tool name does not.
+			'sources' => $citations->titles(),
 			'history' => $history,
 		];
 	}
@@ -354,9 +376,8 @@ final class AgentLoop {
 	 * over one bad call would be worse than letting it adapt.
 	 *
 	 * @param array{id: string, name: string, arguments: array<string, mixed>} $call
-	 * @param list<string> $sources
 	 */
-	private function invoke(Client $client, array $call, array &$sources): string {
+	private function invoke(Client $client, array $call, CitationCollector $citations): string {
 		try {
 			$result = $client->callTool($call['name'], $call['arguments']);
 		} catch (\Throwable $e) {
@@ -368,8 +389,6 @@ final class AgentLoop {
 			return sprintf('This tool failed: %s', $e->getMessage());
 		}
 
-		$sources[] = $call['name'];
-
 		$parts = [];
 		foreach ($result->content as $content) {
 			if ($content instanceof TextContent) {
@@ -377,6 +396,10 @@ final class AgentLoop {
 			}
 		}
 		$text = trim(implode("\n", $parts));
+
+		// Harvest before truncation: the documents are named early in the payload,
+		// and a long result would otherwise lose its own citations.
+		$citations->collect($call['name'], $text);
 
 		if ($text === '') {
 			return 'This tool returned no results.';
