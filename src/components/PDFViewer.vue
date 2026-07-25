@@ -358,6 +358,52 @@ watch(
 	},
 )
 
+/**
+ * Render pages to PNG blobs for a multimodal summary.
+ *
+ * Deliberately renders to its own detached canvas rather than reusing the
+ * displayed one: PDF.js refuses two concurrent renders against the same canvas,
+ * and reusing it would also make the viewer visibly flicker through the captured
+ * pages. This is also why nothing here touches `renderTask` — capture must not
+ * interfere with, or be cancelled by, ordinary page navigation.
+ *
+ * Rendered at a fixed scale rather than the viewer's: what the user happens to
+ * have zoomed to is unrelated to what a vision model needs to read the page.
+ *
+ * @param {number[]} pageNumbers Pages to capture, 1-based.
+ * @param {number} scale Render scale.
+ * @return {Promise<Blob[]>} PNG blobs, in the order requested.
+ */
+async function capturePages(pageNumbers, scale = 2.0) {
+	if (!pdfDoc) {
+		return []
+	}
+
+	const blobs = []
+	for (const requested of pageNumbers) {
+		const pageNum = Math.min(Math.max(requested, 1), pdfDoc.numPages)
+		const page = await pdfDoc.getPage(pageNum)
+		const viewport = page.getViewport({ scale })
+
+		const canvas = document.createElement('canvas')
+		canvas.width = viewport.width
+		canvas.height = viewport.height
+		await page.render({
+			canvas,
+			canvasContext: canvas.getContext('2d'),
+			viewport,
+		}).promise
+
+		const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+		if (blob) {
+			blobs.push(blob)
+		}
+	}
+	return blobs
+}
+
+defineExpose({ capturePages })
+
 onMounted(() => show(true))
 onBeforeUnmount(teardown)
 </script>
