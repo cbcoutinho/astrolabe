@@ -21,6 +21,19 @@ use Psr\Log\LoggerInterface;
  * for all management operations.
  */
 class McpServerClient {
+	/**
+	 * Characters of surrounding text the chunk viewer asks for either side of a
+	 * chunk — enough to read around a hit without pulling the document.
+	 */
+	public const DEFAULT_CHUNK_CONTEXT = 500;
+
+	/**
+	 * The server's own ceiling on the `context` query parameter. Asking for more
+	 * is a 400, so callers wanting "as much as possible" (summarization) clamp to
+	 * this rather than guessing.
+	 */
+	public const MAX_CHUNK_CONTEXT = 10000;
+
 	private ClientInterface $httpClient;
 	private RequestFactoryInterface $requestFactory;
 	private StreamFactoryInterface $streamFactory;
@@ -781,13 +794,16 @@ class McpServerClient {
 		string $token,
 		?int $chunkIndex = null,
 		?int $totalChunks = null,
+		int $context = self::DEFAULT_CHUNK_CONTEXT,
 	): array {
 		$query = [
 			'doc_type' => $docType,
 			'doc_id' => $docId,
 			'start' => $start,
 			'end' => $end,
-			'context' => 500,
+			// Clamped to the server's own ceiling so an over-wide ask degrades to
+			// the widest supported window instead of a 400.
+			'context' => max(0, min($context, self::MAX_CHUNK_CONTEXT)),
 		];
 		if ($chunkIndex !== null) {
 			$query['chunk_index'] = $chunkIndex;
