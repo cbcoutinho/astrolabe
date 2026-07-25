@@ -46,6 +46,11 @@ See [documentation](https://github.com/cbcoutinho/astrolabe) for configuration d
 		     If the `oidc` app is missing, the token-mint path raises. -->
 		<app>oidc</app>
 	</dependencies>
+	<background-jobs>
+		<!-- Backstop for summary scratch pages whose task never reached a terminal
+		     state; SummaryCleanupListener handles the normal path. -->
+		<job>OCA\Astrolabe\BackgroundJob\SweepSummaryScratchJob</job>
+	</background-jobs>
 	<settings>
 		<personal>OCA\Astrolabe\Settings\Personal</personal>
 		<personal-section>OCA\Astrolabe\Settings\PersonalSection</personal-section>

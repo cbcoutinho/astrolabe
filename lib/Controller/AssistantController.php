@@ -40,10 +40,14 @@ final class AssistantController extends Controller {
 	 * Rate-limited because each call costs model inference on the admin's
 	 * provider, which is a real budget rather than just server load.
 	 *
-	 * @param list<mixed> $image_file_ids Rendered page images for the multimodal
-	 *                                    tier. Rasterization happens in the browser — see SummaryService for why —
-	 *                                    and Nextcloud re-validates the caller's access to every id when it prepares
-	 *                                    the task input, so these are not trusted here beyond shape.
+	 * Pages rendered in the browser arrive as uploaded files under `pages[]`;
+	 * rasterization is client-side because server-side PDF rendering is what
+	 * previously OOMKilled the MCP server's API pod.
+	 *
+	 * @param list<mixed> $image_file_ids Images already in Nextcloud — an image
+	 *                                    document summarizes itself, with nothing to stage. Nextcloud re-validates
+	 *                                    the caller's access to every id when it prepares the task input, so these
+	 *                                    are not trusted here beyond shape.
 	 */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 20, period: 60)]
@@ -84,6 +88,7 @@ final class AssistantController extends Controller {
 					'path' => $path,
 				],
 				$this->intIds($image_file_ids),
+				$this->uploadedPages(),
 			);
 		} catch (SummaryException $e) {
 			return new JSONResponse(
@@ -99,6 +104,55 @@ final class AssistantController extends Controller {
 			// pages or only the extracted text.
 			'mode' => $result['mode'],
 		]);
+	}
+
+	/**
+	 * Read the rendered pages out of the multipart upload, in page order.
+	 *
+	 * Only PNG is accepted: it is what the browser canvas produces, and pinning the
+	 * type keeps arbitrary uploads from being staged into the user's storage under
+	 * the guise of a summary.
+	 *
+	 * @return list<string>
+	 */
+	private function uploadedPages(): array {
+		/** @var mixed $upload */
+		$upload = $this->request->getUploadedFile('pages');
+		if (!is_array($upload)) {
+			return [];
+		}
+
+		/** @var mixed $tmpNames */
+		$tmpNames = $upload['tmp_name'] ?? null;
+		if (!is_array($tmpNames)) {
+			return [];
+		}
+		/** @var mixed $rawTypes */
+		$rawTypes = $upload['type'] ?? null;
+		$types = is_array($rawTypes) ? $rawTypes : [];
+		/** @var mixed $rawErrors */
+		$rawErrors = $upload['error'] ?? null;
+		$errors = is_array($rawErrors) ? $rawErrors : [];
+
+		$pages = [];
+		/** @var mixed $tmpName */
+		foreach ($tmpNames as $i => $tmpName) {
+			/** @var mixed $error */
+			$error = $errors[$i] ?? UPLOAD_ERR_NO_FILE;
+			/** @var mixed $type */
+			$type = $types[$i] ?? '';
+			if ($error !== UPLOAD_ERR_OK || $type !== 'image/png') {
+				continue;
+			}
+			if (!is_string($tmpName) || !is_uploaded_file($tmpName)) {
+				continue;
+			}
+			$bytes = file_get_contents($tmpName);
+			if ($bytes !== false && $bytes !== '') {
+				$pages[] = $bytes;
+			}
+		}
+		return $pages;
 	}
 
 	/**

@@ -48,6 +48,13 @@ class SummaryService {
 	 */
 	public const MAX_IMAGES = 8;
 
+	/**
+	 * customId prefix marking a task whose input images were staged in the user's
+	 * storage. The suffix is the {@see ScratchImageStore} token, which is how the
+	 * completion listener finds the pages to delete without a mapping table.
+	 */
+	public const CUSTOM_ID_SCRATCH_PREFIX = 'astrolabe-summary:scratch:';
+
 	private const PROMPT_IMAGES = 'Summarize this document. Preserve the structure of any tables, '
 		. 'figures, headings and forms rather than flattening them into prose, and note anything '
 		. 'handwritten, stamped or annotated. If the pages are only part of a longer document, say so.';
@@ -61,6 +68,7 @@ class SummaryService {
 		private DocumentAccessService $documentAccess,
 		private McpServerClient $client,
 		private McpTokenMinter $tokenMinter,
+		private ScratchImageStore $scratchImages,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -70,7 +78,10 @@ class SummaryService {
 	 *
 	 * @param array<string, scalar|null> $identifiers Access-check identifiers carried
 	 *                                                on the search result (board_id, mailbox_id, calendar_uri, path).
-	 * @param list<int> $imageFileIds Rendered page images, when the caller has them.
+	 * @param list<int> $imageFileIds Images already in Nextcloud — an image document
+	 *                                summarizes itself, with nothing to stage.
+	 * @param list<string> $renderedPages Raw bytes of pages rendered in the browser,
+	 *                                    which have to be staged as files before a task can reference them.
 	 *
 	 * @return array{task_id: int, mode: string}
 	 * @throws SummaryException
@@ -85,6 +96,7 @@ class SummaryService {
 		?int $totalChunks,
 		array $identifiers,
 		array $imageFileIds,
+		array $renderedPages = [],
 	): array {
 		// Local, authoritative access check BEFORE minting a token or calling the
 		// MCP server, matching ApiController::chunkContext(). Guards the staleness
@@ -96,12 +108,15 @@ class SummaryService {
 
 		$modes = $this->capabilities->getSummaryModes();
 
-		$images = $this->boundImages($imageFileIds);
-		if ($images !== [] && in_array(AssistantCapabilities::SUMMARY_MODE_IMAGES, $modes, true)) {
-			return [
-				'task_id' => $this->scheduleImageSummary($userId, $docType, $docId, $images),
-				'mode' => AssistantCapabilities::SUMMARY_MODE_IMAGES,
-			];
+		if (in_array(AssistantCapabilities::SUMMARY_MODE_IMAGES, $modes, true)) {
+			$taskId = $this->scheduleImageSummary(
+				$userId,
+				$this->boundImages($imageFileIds),
+				array_slice($renderedPages, 0, self::MAX_IMAGES),
+			);
+			if ($taskId !== null) {
+				return ['task_id' => $taskId, 'mode' => AssistantCapabilities::SUMMARY_MODE_IMAGES];
+			}
 		}
 
 		if (in_array(AssistantCapabilities::SUMMARY_MODE_TEXT, $modes, true)) {
@@ -122,25 +137,52 @@ class SummaryService {
 	}
 
 	/**
+	 * Schedule a multimodal summary, or return null when there are no pages to
+	 * send — in which case the caller falls back to the text tier.
+	 *
 	 * @param list<int> $imageFileIds
+	 * @param list<string> $renderedPages
+	 * @throws SummaryException
 	 */
 	private function scheduleImageSummary(
 		string $userId,
-		string $docType,
-		string $docId,
 		array $imageFileIds,
-	): int {
+		array $renderedPages,
+	): ?int {
+		// Pages rendered in the browser have to become files before a task can
+		// reference them; images already in Nextcloud summarize themselves.
+		$token = null;
+		if ($renderedPages !== []) {
+			$token = $this->scratchImages->newToken();
+			$imageFileIds = array_merge(
+				$imageFileIds,
+				$this->scratchImages->store($userId, $token, $renderedPages),
+			);
+		}
+
+		if ($imageFileIds === []) {
+			return null;
+		}
+
 		// File ids are passed straight through: Manager::prepareInputData() runs
 		// validateFileId() and validateUserAccessToFile() against this same userId
 		// for every image slot, so core is the authority on whether the caller may
 		// read them.
-		return $this->scheduleTask(
-			AnalyzeImages::ID,
-			['images' => $imageFileIds, 'input' => self::PROMPT_IMAGES],
-			$userId,
-			$docType,
-			$docId,
-		);
+		try {
+			return $this->scheduleTask(
+				AnalyzeImages::ID,
+				['images' => $imageFileIds, 'input' => self::PROMPT_IMAGES],
+				$userId,
+				$token === null ? 'astrolabe-summary' : self::CUSTOM_ID_SCRATCH_PREFIX . $token,
+			);
+		} catch (SummaryException $e) {
+			// Nothing will ever complete this task, so nothing would ever clean up
+			// after it.
+			if ($token !== null) {
+				$this->scratchImages->discard($userId, $token);
+			}
+			throw $e;
+		}
 	}
 
 	private function scheduleTextSummary(
@@ -190,30 +232,24 @@ class SummaryService {
 			TextToTextSummary::ID,
 			['input' => $text . self::PROMPT_TEXT_SUFFIX],
 			$userId,
-			$docType,
-			$docId,
+			'astrolabe-summary',
 		);
 	}
 
 	/**
 	 * @param array<string, list<int>|string> $input
+	 * @throws SummaryException
 	 */
 	private function scheduleTask(
 		string $taskTypeId,
 		array $input,
 		string $userId,
-		string $docType,
-		string $docId,
+		string $customId,
 	): int {
-		$task = new Task(
-			$taskTypeId,
-			$input,
-			Application::APP_ID,
-			$userId,
-			// Lets the frontend correlate a poll with the document it asked about,
-			// and makes stray tasks attributable in the admin task list.
-			'astrolabe-summary:' . $docType . ':' . $docId,
-		);
+		// customId makes stray tasks attributable in the admin task list, and for
+		// the multimodal tier it also carries the scratch token the completion
+		// listener needs to clean up.
+		$task = new Task($taskTypeId, $input, Application::APP_ID, $userId, $customId);
 
 		try {
 			$this->taskProcessing->scheduleTask($task);
@@ -221,7 +257,6 @@ class SummaryService {
 			$this->logger->error('Failed to schedule a summary task', [
 				'exception' => $e,
 				'task_type' => $taskTypeId,
-				'doc_type' => $docType,
 				'app' => Application::APP_ID,
 			]);
 			throw new SummaryException('Could not schedule the summary', Http::STATUS_INTERNAL_SERVER_ERROR, $e);

@@ -10,6 +10,7 @@ use OCA\Astrolabe\Service\Access\DocumentAccessService;
 use OCA\Astrolabe\Service\Access\FileAccessVerifier;
 use OCA\Astrolabe\Service\Access\MailAccessVerifier;
 use OCA\Astrolabe\Service\Assistant\AssistantCapabilities;
+use OCA\Astrolabe\Service\Assistant\ScratchImageStore;
 use OCA\Astrolabe\Service\Assistant\SummaryException;
 use OCA\Astrolabe\Service\Assistant\SummaryService;
 use OCA\Astrolabe\Service\McpServerClient;
@@ -39,6 +40,7 @@ final class SummaryServiceTest extends TestCase {
 	private Folder&MockObject $userFolder;
 	private McpServerClient&MockObject $client;
 	private McpTokenMinter&MockObject $tokenMinter;
+	private ScratchImageStore&MockObject $scratchImages;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -48,8 +50,10 @@ final class SummaryServiceTest extends TestCase {
 		$this->client = $this->createMock(McpServerClient::class);
 		$this->tokenMinter = $this->createMock(McpTokenMinter::class);
 		$this->userFolder = $this->createMock(Folder::class);
+		$this->scratchImages = $this->createMock(ScratchImageStore::class);
 
 		$this->tokenMinter->method('mintForUser')->willReturn('jwt');
+		$this->scratchImages->method('newToken')->willReturn('scratchtoken1234');
 	}
 
 	/**
@@ -78,6 +82,7 @@ final class SummaryServiceTest extends TestCase {
 			$this->documentAccess(),
 			$this->client,
 			$this->tokenMinter,
+			$this->scratchImages,
 			$this->createMock(LoggerInterface::class),
 		);
 	}
@@ -95,12 +100,27 @@ final class SummaryServiceTest extends TestCase {
 
 	/**
 	 * @param list<int> $images
+	 * @param list<string> $pages
 	 * @return array{task_id: int, mode: string}
 	 */
-	private function schedule(array $images = []): array {
+	private function schedule(array $images = [], array $pages = []): array {
 		return $this->service()->schedule(
-			'alice', 'file', '123', 0, 900, 0, 4, ['path' => '/Reports/q3.pdf'], $images,
+			'alice', 'file', '123', 0, 900, 0, 4, ['path' => '/Reports/q3.pdf'], $images, $pages,
 		);
+	}
+
+	private function captureTask(): \Closure {
+		$captured = null;
+		$this->taskProcessing->method('scheduleTask')
+			->willReturnCallback(static function (Task $task) use (&$captured): void {
+				$task->setId(1);
+				$captured = $task;
+			});
+		// A regular closure, not an arrow function: arrow functions bind by value,
+		// so the accessor would always see the null from before the callback ran.
+		return static function () use (&$captured): ?Task {
+			return $captured;
+		};
 	}
 
 	public function testPrefersImagesWhenPagesSuppliedAndVisionAvailable(): void {
@@ -258,6 +278,76 @@ final class SummaryServiceTest extends TestCase {
 		} catch (SummaryException $e) {
 			$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $e->getStatusCode());
 		}
+	}
+
+	/**
+	 * Browser-rendered pages have to become files before a task can reference them,
+	 * and the scratch token rides along in the customId so the completion listener
+	 * can find them again without a mapping table.
+	 */
+	public function testStagesRenderedPagesAndRecordsTheTokenOnTheTask(): void {
+		$this->capabilities->method('getSummaryModes')->willReturn(['analyze-images']);
+		$this->scratchImages->expects($this->once())
+			->method('store')
+			->with('alice', 'scratchtoken1234', ['png-1', 'png-2'])
+			->willReturn([501, 502]);
+		$task = $this->captureTask();
+
+		$result = $this->schedule([], ['png-1', 'png-2']);
+
+		$this->assertSame('analyze-images', $result['mode']);
+		$captured = $task();
+		$this->assertInstanceOf(Task::class, $captured);
+		$this->assertSame([501, 502], $captured->getInput()['images']);
+		$this->assertSame(
+			SummaryService::CUSTOM_ID_SCRATCH_PREFIX . 'scratchtoken1234',
+			$captured->getCustomId(),
+		);
+	}
+
+	public function testCapsStagedPagesToo(): void {
+		$this->capabilities->method('getSummaryModes')->willReturn(['analyze-images']);
+		$this->scratchImages->expects($this->once())
+			->method('store')
+			->with('alice', $this->anything(), $this->countOf(SummaryService::MAX_IMAGES))
+			->willReturn([1]);
+		$this->captureTask();
+
+		$this->schedule([], array_fill(0, 30, 'png'));
+	}
+
+	/**
+	 * A task that never got scheduled will never settle, so the completion listener
+	 * will never fire — the staged pages have to be cleaned up here or they leak
+	 * into the user's files permanently.
+	 */
+	public function testDiscardsStagedPagesWhenSchedulingFails(): void {
+		$this->capabilities->method('getSummaryModes')->willReturn(['analyze-images']);
+		$this->scratchImages->method('store')->willReturn([501]);
+		$this->taskProcessing->method('scheduleTask')
+			->willThrowException(new \RuntimeException('queue is down'));
+		$this->scratchImages->expects($this->once())
+			->method('discard')
+			->with('alice', 'scratchtoken1234');
+
+		$this->expectException(SummaryException::class);
+		$this->schedule([], ['png-1']);
+	}
+
+	/**
+	 * A vision provider with nothing to look at is not a failure: the request falls
+	 * through to the text tier rather than erroring.
+	 */
+	public function testFallsBackToTextWhenNoPagesWereSupplied(): void {
+		$this->capabilities->method('getSummaryModes')->willReturn(['analyze-images', 'text2text']);
+		$this->client->method('getChunkContext')->willReturn(['chunk_text' => 'body']);
+		$this->scratchImages->expects($this->never())->method('store');
+		$this->expectScheduled(9);
+
+		$this->assertSame(
+			['task_id' => 9, 'mode' => 'text2text'],
+			$this->schedule(),
+		);
 	}
 
 	public function testMcpErrorSurfacesAsBadGateway(): void {
