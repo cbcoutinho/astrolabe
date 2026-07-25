@@ -343,10 +343,13 @@ final class AgentLoopTest extends TestCase {
 		$this->assertCount(2, $sent);
 		$this->assertStringContainsString('What is in my cluster note?', $sent[0]);
 
-		// The turn is appended so the next call sees it.
-		$this->assertCount(4, $result['history']);
-		$this->assertSame(['role' => 'human', 'content' => 'Which CNI?'], $result['history'][2]);
-		$this->assertSame(['role' => 'assistant', 'content' => 'Cilium.'], $result['history'][3]);
+		// Only this turn is returned, not the extended history: the caller appends
+		// it to whatever the row holds at write time, so a turn that raced with
+		// another adds to it rather than replacing it.
+		$this->assertSame([
+			['role' => 'human', 'content' => 'Which CNI?'],
+			['role' => 'assistant', 'content' => 'Cilium.'],
+		], $result['turns']);
 	}
 
 	/**
@@ -355,27 +358,20 @@ final class AgentLoopTest extends TestCase {
 	 * otherwise grow its own prompt until it hit the provider's context window,
 	 * paying for the excess on every call before it did.
 	 */
-	public function testBoundsHowMuchHistoryIsSentAndStored(): void {
+	public function testBoundsHowMuchHistoryIsSent(): void {
 		$tasks = $this->withModelTurns([['output' => 'ok', 'tool_calls' => '']]);
 		$history = [];
 		for ($i = 0; $i < 60; $i++) {
 			$history[] = ['role' => $i % 2 === 0 ? 'human' : 'assistant', 'content' => 'turn ' . $i];
 		}
 
-		$result = $this->loop()->run('alice', 'and now?', $history);
+		$this->loop()->run('alice', 'and now?', $history);
 
 		/** @var list<string> $sent */
 		$sent = ($tasks())[0]->getInput()['history'];
-		$this->assertLessThanOrEqual(20, count($sent));
+		$this->assertLessThanOrEqual(AgentLoop::MAX_HISTORY_TURNS, count($sent));
 		// The tail is kept, because that is where a follow-up's referents live.
 		$this->assertStringContainsString('turn 59', $sent[count($sent) - 1]);
-
-		// Storage is trimmed too, or the row grows forever regardless.
-		$this->assertLessThanOrEqual(20, count($result['history']));
-		$this->assertSame(
-			['role' => 'assistant', 'content' => 'ok'],
-			$result['history'][count($result['history']) - 1],
-		);
 	}
 
 	/**

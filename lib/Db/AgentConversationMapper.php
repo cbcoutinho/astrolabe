@@ -65,6 +65,84 @@ final class AgentConversationMapper extends QBMapper {
 	}
 
 	/**
+	 * Append a turn to a conversation without losing one written concurrently.
+	 *
+	 * A turn takes as long as the model does, so two turns on the same token
+	 * overlap easily — a double submit, a retry, a second tab. Both would read
+	 * the same history and the later write would replace a history it never saw,
+	 * silently dropping the other turn. The whole point of this table is not
+	 * losing context, so the update is guarded on the revision it read: if
+	 * someone else wrote first, this re-reads their history and appends on top
+	 * of it, keeping both turns.
+	 *
+	 * Gives up after a few attempts rather than looping: the answer has already
+	 * been produced and is being returned regardless, so a lost history costs
+	 * the user context on their next message, not this one.
+	 *
+	 * @param list<array{role: string, content: string}> $turns
+	 */
+	public function appendTurns(AgentConversation $conversation, array $turns, int $keep): bool {
+		for ($attempt = 0; $attempt < 3; $attempt++) {
+			$conversation->appendTurns($turns, $keep);
+			$conversation->setUpdatedAt(time());
+
+			if ($this->writeIfUnchanged($conversation)) {
+				return true;
+			}
+
+			$fresh = $this->findById($conversation->getId());
+			if ($fresh === null) {
+				// Expired or deleted mid-turn; there is nothing left to append to.
+				return false;
+			}
+			$conversation = $fresh;
+		}
+
+		return false;
+	}
+
+	private function findById(?int $id): ?AgentConversation {
+		if ($id === null) {
+			return null;
+		}
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+
+		try {
+			return $this->findEntity($qb);
+		} catch (DoesNotExistException) {
+			return null;
+		}
+	}
+
+	/**
+	 * Write the row only if nobody has written it since it was read.
+	 *
+	 * @return bool false when the revision moved on, i.e. this write lost a race
+	 */
+	private function writeIfUnchanged(AgentConversation $conversation): bool {
+		$revision = $conversation->getRevision();
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->update($this->getTableName())
+			->set('history', $qb->createNamedParameter($conversation->getHistory(), IQueryBuilder::PARAM_STR))
+			->set('updated_at', $qb->createNamedParameter($conversation->getUpdatedAt(), IQueryBuilder::PARAM_INT))
+			->set('revision', $qb->createNamedParameter($revision + 1, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($conversation->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('revision', $qb->createNamedParameter($revision, IQueryBuilder::PARAM_INT)));
+
+		if ($qb->executeStatement() === 0) {
+			return false;
+		}
+
+		$conversation->setRevision($revision + 1);
+		return true;
+	}
+
+	/**
 	 * Delete conversations untouched for longer than $maxAge seconds.
 	 *
 	 * @return int rows removed

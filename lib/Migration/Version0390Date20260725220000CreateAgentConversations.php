@@ -43,7 +43,19 @@ final class Version0390Date20260725220000CreateAgentConversations extends Simple
 		$schema = $schemaClosure();
 
 		if ($schema->hasTable('astrolabe_agent_conv')) {
-			return null;
+			// The table predates `revision`, so add it rather than returning early:
+			// an instance that ran an earlier build of this migration would
+			// otherwise keep a table the mapper's guarded update cannot write to.
+			$existing = $schema->getTable('astrolabe_agent_conv');
+			if ($existing->hasColumn('revision')) {
+				return null;
+			}
+			$existing->addColumn('revision', Types::INTEGER, [
+				'notnull' => true,
+				'default' => 0,
+			]);
+
+			return $schema;
 		}
 
 		$table = $schema->createTable('astrolabe_agent_conv');
@@ -67,6 +79,16 @@ final class Version0390Date20260725220000CreateAgentConversations extends Simple
 			'default' => '[]',
 		]);
 		$table->addColumn('updated_at', Types::INTEGER, [
+			'notnull' => true,
+			'default' => 0,
+		]);
+		// Bumped on every write, and checked in the WHERE clause of the update.
+		// A turn takes as long as the model does, so two turns on the same token
+		// (a double submit, a retry, a second tab) can easily overlap; without
+		// this the later write replaces a history it never read, silently losing
+		// the other turn. `updated_at` cannot serve here — it is second-granular,
+		// and overlapping turns routinely finish within the same second.
+		$table->addColumn('revision', Types::INTEGER, [
 			'notnull' => true,
 			'default' => 0,
 		]);

@@ -51,7 +51,7 @@ final class AgentLoop {
 	 * Trimming keeps the most recent turns, which is where a follow-up's
 	 * referents live.
 	 */
-	private const MAX_HISTORY_TURNS = 20;
+	public const MAX_HISTORY_TURNS = 20;
 
 	/**
 	 * Deliberately minimal, and confined to things the model cannot infer.
@@ -97,7 +97,7 @@ final class AgentLoop {
 
 	/**
 	 * @param list<array{role: string, content: string}> $history
-	 * @return array{output: string, sources: list<string>, history: list<array{role: string, content: string}>}
+	 * @return array{output: string, sources: list<string>, turns: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
 	public function run(string $userId, string $prompt, array $history, string $memories = ''): array {
@@ -128,7 +128,7 @@ final class AgentLoop {
 
 	/**
 	 * @param list<array{role: string, content: string}> $history
-	 * @return array{output: string, sources: list<string>, history: list<array{role: string, content: string}>}
+	 * @return array{output: string, sources: list<string>, turns: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
 	private function drive(Client $client, CitationCollector $citations, string $userId, string $prompt, array $history, string $memories): array {
@@ -214,18 +214,18 @@ final class AgentLoop {
 			]);
 		}
 
-		$history[] = ['role' => 'human', 'content' => $prompt];
-		$history[] = ['role' => 'assistant', 'content' => $output];
-		// Trim what is stored as well as what is sent: otherwise the row grows
-		// forever even though only the tail is ever used.
-		$history = $this->recentTurns($history);
-
 		return [
 			'output' => $output,
 			// Document titles, not tool names: Assistant renders this list as plain
 			// text, where a title informs the reader and a tool name does not.
 			'sources' => $citations->titles(),
-			'history' => $history,
+			// Just this turn, not the whole conversation. The caller appends it to
+			// whatever is in the row at write time, so a turn that raced with
+			// another adds to it instead of replacing it.
+			'turns' => [
+				['role' => 'human', 'content' => $prompt],
+				['role' => 'assistant', 'content' => $output],
+			],
 		];
 	}
 

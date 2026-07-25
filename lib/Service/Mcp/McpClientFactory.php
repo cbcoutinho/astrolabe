@@ -117,7 +117,15 @@ class McpClientFactory {
 		try {
 			$token = $this->tokenMinter->mintForUser($userId, $scopes);
 		} catch (McpTokenMintException $e) {
-			throw new McpUnavailableException('Could not mint an MCP access token: ' . $e->getMessage(), $e);
+			$this->logger->warning('Astrolabe could not mint an MCP access token: ' . $e->getMessage(), [
+				'exception' => $e,
+				'app' => Application::APP_ID,
+			]);
+			throw new McpUnavailableException(
+				'Astrolabe could not obtain access to the MCP server on your behalf. '
+				. 'An administrator needs to check the OpenID Connect configuration.',
+				$e,
+			);
 		}
 
 		$client = Client::builder()
@@ -145,7 +153,20 @@ class McpClientFactory {
 		try {
 			$client->connect($transport);
 		} catch (\Throwable $e) {
-			throw new McpUnavailableException($this->explainFailure($e), $e);
+			// Two audiences, two messages. The diagnosis names system config keys,
+			// which is exactly what the admin who broke the connection needs and
+			// exactly what an ordinary user — who is the one actually sitting in
+			// the chat when this fires — can do nothing with. The detail goes to
+			// the log; the chat gets a sentence that says who can fix it.
+			$this->logger->warning('Astrolabe could not connect to the MCP server. ' . $this->explainFailure($e), [
+				'exception' => $e,
+				'app' => Application::APP_ID,
+			]);
+			throw new McpUnavailableException(
+				'Astrolabe could not reach the MCP server, so it cannot search your content. '
+				. 'An administrator needs to check the connection settings.',
+				$e,
+			);
 		}
 
 		return $client;
@@ -167,7 +188,9 @@ class McpClientFactory {
 	}
 
 	/**
-	 * Turn a connect failure into something an admin can act on.
+	 * Turn a connect failure into something an admin can act on, for the log.
+	 *
+	 * Deliberately not the message the user sees — see the caller.
 	 *
 	 * A 401 here is almost never a broken token — it is the audience or issuer
 	 * disagreeing, and it is genuinely hard to spot because the management API

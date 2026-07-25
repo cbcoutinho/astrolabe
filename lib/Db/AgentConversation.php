@@ -17,6 +17,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setHistory(string $history)
  * @method int getUpdatedAt()
  * @method void setUpdatedAt(int $updatedAt)
+ * @method int getRevision()
+ * @method void setRevision(int $revision)
  *
  * @psalm-suppress PropertyNotSetInConstructor — Entity populates via setters.
  */
@@ -29,12 +31,15 @@ final class AgentConversation extends Entity {
 	protected string $history = '[]';
 	/** @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors. */
 	protected int $updatedAt = 0;
+	/** @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors. */
+	protected int $revision = 0;
 
 	public function __construct() {
 		$this->addType('token', 'string');
 		$this->addType('userId', 'string');
 		$this->addType('history', 'string');
 		$this->addType('updatedAt', 'integer');
+		$this->addType('revision', 'integer');
 	}
 
 	/**
@@ -78,5 +83,26 @@ final class AgentConversation extends Entity {
 	 */
 	public function setDecodedHistory(array $turns): void {
 		$this->setHistory(json_encode($turns, JSON_THROW_ON_ERROR));
+	}
+
+	/**
+	 * Add a turn to whatever this row already holds, keeping the last $keep.
+	 *
+	 * Appending rather than replacing is what makes the write safe to retry
+	 * against a row someone else has since changed: re-reading and re-appending
+	 * keeps both turns, where re-writing a history computed before their write
+	 * would drop theirs.
+	 *
+	 * Trimming here bounds what is *stored*, mirroring the bound the agent loop
+	 * applies to what it *sends*; without it the row grows forever even though
+	 * only the tail is ever read.
+	 *
+	 * @param list<array{role: string, content: string}> $turns
+	 */
+	public function appendTurns(array $turns, int $keep): void {
+		$this->setDecodedHistory(array_slice(
+			[...$this->getDecodedHistory(), ...$turns],
+			-$keep,
+		));
 	}
 }

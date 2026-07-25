@@ -227,9 +227,14 @@ final class ContextAgentProvider implements ISynchronousProvider {
 
 		$reportProgress(0.9);
 
-		$conversation->setDecodedHistory($result['history']);
-		$conversation->setUpdatedAt(time());
-		$this->conversations->update($conversation);
+		// Guarded against a turn that raced this one on the same token; if it
+		// still cannot be stored, the answer is returned anyway and the cost is
+		// context on the *next* message, not this one.
+		if (!$this->conversations->appendTurns($conversation, $result['turns'], AgentLoop::MAX_HISTORY_TURNS)) {
+			$this->logger->warning('Could not store an agent turn; the conversation may lose context', [
+				'app' => Application::APP_ID,
+			]);
+		}
 
 		return [
 			'output' => $result['output'],
