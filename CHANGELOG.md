@@ -25,6 +25,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.39.0 (2026-07-26)
+
+### Feat
+
+- **assistant**: cite documents Astrolabe can verify, with links
+- **assistant**: back the Assistant's agent chat with Astrolabe
+- **mcp**: add an MCP client and a probe to inspect it
+- **assistant**: add a Summarize action to the chunk viewer
+- **assistant**: stage browser-rendered pages for multimodal summaries
+- **assistant**: schedule document summaries from the chunk viewer
+- **assistant**: advertise which AI features an instance can serve
+
+### Fix
+
+- **assistant**: frame retrieved content as quoted, not as instruction
+- **assistant**: keep provider error text out of the chat, and test the retry
+- **assistant**: keep concurrent agent turns from clobbering each other
+- **assistant**: bound conversation history and add an admin UI for the agent
+- **assistant**: stop the agent competing with the Assistant's own voice
+- **mcp**: patch the SDK to parse CRLF-delimited SSE events
+- **assistant**: describe the summary as a section, not a document
+- **deps**: update next monorepo to v16.2.11
+- **assistant**: space the chunk-viewer header actions
+- **assistant**: share one image budget across both sources
+- **assistant**: guard summary state against document switches
+
 ## v0.38.0 (2026-07-19)
 
 ### Feat
