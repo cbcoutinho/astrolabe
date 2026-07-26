@@ -14,6 +14,8 @@ use OCA\Astrolabe\Search\SemanticSearchProvider;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin;
 use OCA\Astrolabe\Settings\AstrolabeAdminSettings;
+use OCA\Astrolabe\Settings\AstrolabeAgentSettings;
+use OCA\Astrolabe\TaskProcessing\ContextAgentProvider;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -29,6 +31,7 @@ use Psr\Container\ContainerInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'astrolabe';
@@ -61,6 +64,7 @@ class Application extends App implements IBootstrap {
 
 		// Register declarative admin settings
 		$context->registerDeclarativeSettings(AstrolabeAdminSettings::class);
+		$context->registerDeclarativeSettings(AstrolabeAgentSettings::class);
 
 		// Register event listeners for declarative settings
 		$context->registerEventListener(
@@ -78,6 +82,47 @@ class Application extends App implements IBootstrap {
 		// both clutter and a slow leak.
 		$context->registerEventListener(TaskSuccessfulEvent::class, SummaryCleanupListener::class);
 		$context->registerEventListener(TaskFailedEvent::class, SummaryCleanupListener::class);
+
+		// Take over the Assistant's agent chat — but only when the admin has asked
+		// for it. Assistant treats the task type as available the moment any
+		// provider registers, so registering unconditionally would silently
+		// rewire every chat on the instance. Read directly from app config rather
+		// than via AssistantCapabilities: asking IManager which task types exist
+		// while it is still collecting providers would recurse.
+		if ($this->agentEnabled()) {
+			$context->registerTaskProcessingProvider(ContextAgentProvider::class);
+		}
+	}
+
+	private function agentEnabled(): bool {
+		try {
+			$appConfig = \OCP\Server::get(IAppConfig::class);
+			return $appConfig->getValueBool(
+				self::APP_ID,
+				Admin::SETTING_AGENT_ENABLED,
+				Admin::DEFAULT_AGENT_ENABLED,
+			);
+		} catch (\Throwable $e) {
+			// register() runs on every request including installation, when the
+			// config table may not be readable yet. Defaulting to off means a
+			// failure here cannot hijack the Assistant.
+			//
+			// Logged because "not installed yet" and "the container is broken"
+			// look identical from here, and the second one would otherwise
+			// disable the agent permanently without ever saying so. Best effort:
+			// during installation the logger may be no more available than the
+			// config was.
+			try {
+				\OCP\Server::get(LoggerInterface::class)->debug(
+					'Could not read the Astrolabe agent toggle; leaving the provider unregistered',
+					['exception' => $e, 'app' => self::APP_ID],
+				);
+			} catch (\Throwable) {
+				// Nothing left to report with.
+			}
+
+			return false;
+		}
 	}
 
 	public function boot(IBootContext $context): void {

@@ -207,11 +207,16 @@ class SummaryService {
 			throw new SummaryException($e->getMessage(), Http::STATUS_SERVICE_UNAVAILABLE, $e);
 		}
 
-		// Widest window the server will serve. This is a bounded excerpt, not the
-		// whole document: the MCP server exposes no document-listing endpoint, so
-		// there is no way to walk every chunk and reduce over them. Long documents
-		// are therefore summarized from the neighbourhood of the selected chunk —
-		// whole-document summarization needs a new server endpoint first.
+		// Asks for the widest window the endpoint accepts, but be clear about what
+		// that actually buys: chunk-context is *page-scoped*, so this is a passage,
+		// not a document. Measured against a 216k-character, 289-chunk PDF, the
+		// widest window returned ~4k characters and reported has_more_after=false —
+		// "more" means more of this page. Arbitrary offsets are rejected (404), so
+		// the document cannot be walked a window at a time either.
+		//
+		// Whole-document summarization therefore is not a matter of asking for a
+		// bigger window here. It needs the model to fetch the file itself through
+		// MCP tools, with this app orchestrating rather than moving the bytes.
 		$context = $this->client->getChunkContext(
 			$docType,
 			$docId,

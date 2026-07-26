@@ -46,10 +46,18 @@ See [documentation](https://github.com/cbcoutinho/astrolabe) for configuration d
 		     If the `oidc` app is missing, the token-mint path raises. -->
 		<app>oidc</app>
 	</dependencies>
+	<commands>
+		<!-- Diagnostic: the MCP tool catalogue is filtered server-side per token,
+		     so what a user can actually do is only answerable by asking. -->
+		<command>OCA\Astrolabe\Command\McpProbe</command>
+	</commands>
 	<background-jobs>
 		<!-- Backstop for summary scratch pages whose task never reached a terminal
 		     state; SummaryCleanupListener handles the normal path. -->
 		<job>OCA\Astrolabe\BackgroundJob\SweepSummaryScratchJob</job>
+		<!-- Agent chats are never explicitly ended, so nothing else would ever
+		     delete the stored transcripts. -->
+		<job>OCA\Astrolabe\BackgroundJob\ExpireAgentConversationsJob</job>
 	</background-jobs>
 	<settings>
 		<personal>OCA\Astrolabe\Settings\Personal</personal>

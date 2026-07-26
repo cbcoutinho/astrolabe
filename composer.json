@@ -38,8 +38,11 @@
 		"rector": "rector && composer cs:fix"
 	},
 	"require": {
+		"php": "^8.2",
 		"bamarni/composer-bin-plugin": "^1.8",
-		"php": "^8.2"
+		"cweagans/composer-patches": "^1.7",
+		"mcp/sdk": "^0.7.0",
+		"symfony/uid": "^6.4"
 	},
 	"require-dev": {
 		"doctrine/dbal": "^4.0",
@@ -52,12 +55,20 @@
 	"config": {
 		"allow-plugins": {
 			"bamarni/composer-bin-plugin": true,
-			"pact-foundation/composer-downloads-plugin": true
+			"pact-foundation/composer-downloads-plugin": true,
+			"cweagans/composer-patches": true
 		},
 		"optimize-autoloader": true,
 		"sort-packages": true,
 		"platform": {
 			"php": "8.2"
+		}
+	},
+	"extra": {
+		"patches": {
+			"mcp/sdk": {
+				"Client: parse CRLF/CR-delimited SSE events (upstream bug, unreleased)": "patches/mcp-sdk-client-sse-crlf-framing.patch"
+			}
 		}
 	}
 }

@@ -63,6 +63,42 @@ class Admin implements ISettings {
 	public const SETTING_ENABLED_SYNC_PRESETS = 'enabled_sync_presets';
 	public const DEFAULT_ENABLED_SYNC_PRESETS = '[]';
 
+	// Registers Astrolabe as a TaskProcessing provider for the core
+	// `core:contextagent:interaction` task type, which makes the Assistant's
+	// "Chat with AI" route every message through Astrolabe.
+	//
+	// Deliberately OFF by default. A task type counts as available the moment any
+	// provider registers for it, so registering unconditionally would silently
+	// rewire every Assistant chat on the instance the moment this app is
+	// installed. If context_agent is also present both providers claim the same
+	// task type and the admin picks between them in the AI settings.
+	public const SETTING_AGENT_ENABLED = 'agent_enabled';
+	public const DEFAULT_AGENT_ENABLED = false;
+
+	// OAuth scopes requested for the agent's MCP token, space-separated. The MCP
+	// server filters `tools/list` by these, so this is the real boundary on what
+	// the agent can do — not a UI preference.
+	//
+	// Read-only by default and deliberately so: every tool in this set carries
+	// `readOnlyHint`, which is what lets the loop execute tool calls immediately
+	// without a confirmation round-trip. Adding a write scope here without
+	// implementing that round-trip would let the model change user data unasked.
+	public const SETTING_AGENT_SCOPES = 'agent_scopes';
+	public const DEFAULT_AGENT_SCOPES = 'semantic.read files.read notes.read webdav.read calendar.read contacts.read deck.read';
+
+	// Ceiling on tool-calling rounds in one agent turn. Each round is a model
+	// call plus its tool calls, so this bounds both spend and latency. Reached
+	// means "answer with what you have", not "fail".
+	public const SETTING_AGENT_MAX_ITERATIONS = 'agent_max_iterations';
+	public const DEFAULT_AGENT_MAX_ITERATIONS = 8;
+
+	// Wall-clock ceiling for one agent turn, in seconds. Needed alongside the
+	// iteration cap because IManager::runTask() falls back to a sleep(1) poll for
+	// asynchronous providers, so a single slow round can hold a worker far longer
+	// than the iteration count suggests.
+	public const SETTING_AGENT_TIMEOUT = 'agent_timeout';
+	public const DEFAULT_AGENT_TIMEOUT = 120;
+
 	private $config;
 	private $appConfig;
 	private $initialState;

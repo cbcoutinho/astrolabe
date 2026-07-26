@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Tests\Unit\Listener;
 
 use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Listener\AstrolabeAdminSettingsListener;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IUser;
 use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
@@ -22,14 +23,20 @@ use Psr\Log\LoggerInterface;
  */
 final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	private IConfig&MockObject $config;
+	private IAppConfig&MockObject $appConfig;
 	private LoggerInterface&MockObject $logger;
 	private AstrolabeAdminSettingsListener $listener;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->config = $this->createMock(IConfig::class);
+		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
-		$this->listener = new AstrolabeAdminSettingsListener($this->config, $this->logger);
+		$this->listener = new AstrolabeAdminSettingsListener(
+			$this->config,
+			$this->appConfig,
+			$this->logger,
+		);
 	}
 
 	/**
@@ -178,5 +185,73 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 			'astrolabe-admin-settings',
 			$fieldId,
 		);
+	}
+
+	/**
+	 * Agent settings live in app config, not system config, and are handled here
+	 * only because DeclarativeManager resolves an app's storage type from its
+	 * first schema — a second form cannot pick a different one.
+	 */
+	public function testReadsAnAgentSettingFromAppConfig(): void {
+		$this->appConfig->method('getValueBool')->willReturn(true);
+
+		$event = new DeclarativeSettingsGetValueEvent(
+			$this->createMock(IUser::class),
+			'astrolabe',
+			'astrolabe-agent-settings',
+			'agent_enabled',
+		);
+		$this->listener->handle($event);
+
+		$this->assertTrue($event->getValue());
+	}
+
+	public function testWritesAnAgentSettingToAppConfig(): void {
+		$this->appConfig->expects($this->once())
+			->method('setValueString')
+			->with('astrolabe', 'agent_scopes', 'semantic.read notes.read');
+
+		$event = new DeclarativeSettingsSetValueEvent(
+			$this->createMock(IUser::class),
+			'astrolabe',
+			'astrolabe-agent-settings',
+			'agent_scopes',
+			'semantic.read notes.read',
+		);
+		$this->listener->handle($event);
+	}
+
+	/**
+	 * A checkbox arrives as a bool from the UI but as "0" from other callers, and
+	 * (bool)"0" is true — so unchecking must not silently enable the agent.
+	 */
+	public function testAStringZeroDisablesRatherThanEnables(): void {
+		$this->appConfig->expects($this->once())
+			->method('setValueBool')
+			->with('astrolabe', 'agent_enabled', false);
+
+		$event = new DeclarativeSettingsSetValueEvent(
+			$this->createMock(IUser::class),
+			'astrolabe',
+			'astrolabe-agent-settings',
+			'agent_enabled',
+			'0',
+		);
+		$this->listener->handle($event);
+	}
+
+	public function testAgentIterationCapIsStoredAsAnInteger(): void {
+		$this->appConfig->expects($this->once())
+			->method('setValueInt')
+			->with('astrolabe', 'agent_max_iterations', 5);
+
+		$event = new DeclarativeSettingsSetValueEvent(
+			$this->createMock(IUser::class),
+			'astrolabe',
+			'astrolabe-agent-settings',
+			'agent_max_iterations',
+			'5',
+		);
+		$this->listener->handle($event);
 	}
 }

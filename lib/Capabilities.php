@@ -40,7 +40,7 @@ final class Capabilities implements ICapability {
 	 *     enabled_doc_types: list<string>,
 	 *     sources: list<array{app: string, doc_types: list<string>, enabled: bool}>
 	 *   },
-	 *   assistant: array{summary_modes: list<string>}
+	 *   assistant: array{summary_modes: list<string>, agent_available: bool}
 	 * }}
 	 */
 	#[\Override]
@@ -74,6 +74,9 @@ final class Capabilities implements ICapability {
 				// assume the feature exists.
 				'assistant' => [
 					'summary_modes' => $this->assistant->getSummaryModes(),
+					// Whether Astrolabe is currently answering Assistant's agent
+					// chat: admin opt-in plus a tool-calling model.
+					'agent_available' => $this->assistant->isAgentAvailable(),
 				],
 			],
 		];
