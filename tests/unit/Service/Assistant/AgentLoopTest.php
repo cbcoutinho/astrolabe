@@ -379,6 +379,38 @@ final class AgentLoopTest extends TestCase {
 	 * is context about the user — appended to our tool instructions, not
 	 * replacing them.
 	 */
+	/**
+	 * Documentation quotes its own placeholder host — the Nextcloud admin manual
+	 * really does print `https://your-nextcloud-domain.com/…` — so a model that
+	 * repeats an example faithfully hands back a command the reader cannot run
+	 * unless it knows which instance it is speaking for.
+	 */
+	public function testTellsTheModelWhichNextcloudItIsSpeakingFor(): void {
+		$tasks = $this->withModelTurns([['output' => 'ok', 'tool_calls' => '']]);
+
+		$this->loop()->run('alice', 'q', []);
+
+		$systemPrompt = (string)($tasks())[0]->getInput()['system_prompt'];
+		$this->assertStringContainsString('https://cloud.example', $systemPrompt);
+		// Trailing slash trimmed: it is quoted as an address, not a path.
+		$this->assertStringNotContainsString('https://cloud.example/ ', $systemPrompt);
+	}
+
+	/**
+	 * A model asked to name its sources reaches for a link to them, and invents
+	 * one when it has no URL. Astrolabe attaches verified links itself, so the
+	 * prompt asks for titles and forbids the model's own source list.
+	 */
+	public function testForbidsTheModelFromWritingItsOwnLinksAndSourceList(): void {
+		$tasks = $this->withModelTurns([['output' => 'ok', 'tool_calls' => '']]);
+
+		$this->loop()->run('alice', 'q', []);
+
+		$systemPrompt = (string)($tasks())[0]->getInput()['system_prompt'];
+		$this->assertStringContainsString('Do not write links', $systemPrompt);
+		$this->assertStringContainsString('do not add your own list of sources', $systemPrompt);
+	}
+
 	public function testAppendsAssistantMemoriesToTheSystemPrompt(): void {
 		$tasks = $this->withModelTurns([['output' => 'ok', 'tool_calls' => '']]);
 
