@@ -20,6 +20,16 @@
       "description": "Keep @mdx-js/* aligned with @next/mdx — @next/mdx pins a peer range on these, so update them together to avoid peer-dep drift.",
       "matchPackageNames": ["@mdx-js/**"],
       "groupName": "next monorepo"
+    },
+    {
+      "description": "Keep react, react-dom and their @types on the same version across website/ and docs/ — they are released in lockstep, and grouping also folds the in-range lockfile-only updates into the same PR instead of one per package file.",
+      "matchPackageNames": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ],
+      "groupName": "react monorepo"
     }
   ],
   "customManagers": [
