@@ -1,0 +1,321 @@
+---
+title: Answer Assistant chats with Astrolabe
+description: Let the Nextcloud Assistant's "Chat with AI" answer from your own indexed content — no Context Agent ExApp, no AppAPI, no Context Chat.
+---
+
+Nextcloud's Assistant has an agent chat — **Chat with AI** — that can search and
+act on your data instead of answering from the model alone. Out of the box that
+needs the **Context Agent** ExApp, which means running AppAPI and a separate
+container.
+
+Astrolabe can answer those chats instead. When you turn it on, Astrolabe
+registers as the provider for Nextcloud's agent task type and drives your
+tenant's MCP server on each message: the assistant searches your indexed
+content, reads what it needs, and answers with **citations you can open**.
+
+<Callout title="What it replaces">
+
+Nothing else is required — no **AppAPI**, no **Context Agent** ExApp, no
+**Context Chat**. Astrolabe registers for the *core* task type
+`core:contextagent:interaction`, and the Assistant treats its agent as available
+the moment any provider claims that type.
+
+If the **Context Agent** app happens to be installed too, both claim the task
+type and you choose between them under **Administration → Artificial
+intelligence**.
+
+</Callout>
+
+## What you need
+
+- **Astrolabe 0.39.0 or newer**, connected to your tenant, with content
+  **indexed** — see [setup](/getting-started/setup) and
+  [indexing](/getting-started/indexing). Semantic search only finds what
+  background sync has already indexed.
+- The **Assistant** app enabled (it provides the chat UI).
+- A **text-generation provider that supports tool calling** — the task type
+  `core:text2text:chatwithtools`. The OpenAI/LocalAI integration
+  (`integration_openai`) is the usual choice; a provider without tool calling
+  cannot drive the search tools, so Astrolabe stays unavailable and the toggle
+  has no effect.
+
+<Callout title="Astrolabe never generates text">
+
+Astrolabe supplies **retrieval**, not generation. Every generated word comes
+from the TaskProcessing provider you installed, using your own API key or your
+own local model. Your tenant's MCP server has no LLM on its request path.
+
+</Callout>
+
+## Turn it on
+
+<Steps>
+
+<Step n="01" title="Install a tool-calling text provider">
+
+In **Apps**, install and configure a provider that offers **chat with tools** —
+for example the **OpenAI and LocalAI integration**, pointed at OpenAI, at a
+compatible endpoint, or at your own LocalAI/Ollama deployment.
+
+Confirm it registered under **Administration → Artificial intelligence**: the
+task type **Chat with tools** should list at least one provider.
+
+<Screenshot
+  label="Nextcloud's Artificial intelligence admin settings: the Chat with tools task type served by a provider, and ContextAgent served by Astrolabe."
+  src="/assistant-ai-settings.png"
+  width={950}
+  height={172}
+  caption="The same page is where you pick Astrolabe for ContextAgent (step 03)."
+/>
+
+<Callout title="AI tasks also need workers">
+
+Nextcloud picks scheduled AI tasks off a queue. If nothing is consuming that
+queue, a chat message simply sits there and the reply never arrives. Confirm you
+run **task-processing workers** (or a fast cron) — see Nextcloud's
+[Improve AI task pickup speed](https://docs.nextcloud.com/server/latest/admin_manual/ai/overview.html#improve-ai-task-pickup-speed).
+This is unrelated to Astrolabe, but it is the most common reason a correctly
+configured agent appears to hang.
+
+</Callout>
+
+</Step>
+
+<Step n="02" title="Let Astrolabe answer Assistant chats">
+
+Open **Settings → Administration → Astrolabe** and find the **Assistant agent**
+section. Tick **“Answer Assistant chats with Astrolabe.”**
+
+It is **off by default**, deliberately: registering the provider silently would
+rewire every chat on the instance the moment the app updated.
+
+<Screenshot
+  label="The Assistant agent section of Astrolabe's admin settings, with 'Answer Assistant chats with Astrolabe' enabled and the scope, tool-round and timeout fields below it."
+  src="/astrolabe-agent-settings.png"
+  width={1075}
+  height={485}
+/>
+
+</Step>
+
+<Step n="03" title="Pick the provider if Context Agent is also installed">
+
+Only relevant when Nextcloud's **Context Agent** app is installed as well. Both
+providers claim the same task type, so go to **Administration → Artificial
+intelligence**, find the **ContextAgent** task type, and select **Astrolabe** as
+its provider.
+
+</Step>
+
+<Step n="04" title="Check what a user's agent can actually see">
+
+The MCP server filters the tool catalogue **per token**, so what the agent can
+do is a per-user question. Ask it directly, from the command line — passing the
+same scopes the agent uses:
+
+```bash
+# What alice's agent actually sees. Pass the configured scopes:
+occ astrolabe:mcp-probe alice \
+  --scopes "semantic.read files.read notes.read webdav.read calendar.read contacts.read deck.read"
+# → connected to Nextcloud MCP 1.28.1
+#   39 tool(s) visible to alice
+
+# Narrow the list, or call one tool and inspect its output
+occ astrolabe:mcp-probe alice --filter search --scopes "semantic.read"
+occ astrolabe:mcp-probe alice --scopes "semantic.read" \
+  --call nc_semantic_search --args '{"query":"quarterly report"}'
+```
+
+<Callout title="Always pass --scopes">
+
+Without `--scopes` the probe mints a token carrying only `openid profile email`,
+so it reports a handful of sign-in and provisioning tools and **none** of the
+content tools — which looks like a broken integration when it isn't. The agent
+always sends the scopes from its settings, so pass the same ones to see what it
+sees.
+
+</Callout>
+
+If this connects and lists tools, the agent will work for that user. If it
+fails, the error names the cause — see [Troubleshooting](#troubleshooting).
+
+</Step>
+
+<Step n="05" title="Ask something in Chat with AI">
+
+Open **Assistant → Chat with AI** and ask about your own content. The answer
+carries an **“Information sources & actions”** popover — the ℹ button next to
+“Nextcloud Assistant” — listing the documents it used, each linking to the file,
+note, event or card it came from.
+
+<Screenshot
+  label="Assistant's Chat with AI answering a question about rollout waves from indexed notes and PDFs, with the Information sources popover listing the cited documents."
+  src="/assistant-chat-citations.png"
+  width={1190}
+  height={790}
+  caption="The answer is assembled from the user's own notes and PDFs; every cited document opens in Astrolabe at the passage that matched."
+/>
+
+</Step>
+
+</Steps>
+
+## Summarize a section without opening the Assistant
+
+The agent chat is not the only way to get AI help on a document. Open any search
+result's **Show Chunk** view and the chunk viewer shows *why* it matched — for a
+PDF, the page is rendered with the matched passage highlighted — with a
+**Summarize section** button in its header.
+
+That button summarizes **the passage you are looking at**, in place. No Assistant
+modal, no chat conversation, no re-finding the document: you are already looking
+at the right part of it.
+
+<Screenshot
+  label="Astrolabe's chunk viewer showing a PDF page with the matched passage highlighted, and a Summarize section button in the header."
+  src="/chunk-viewer-summarize.png"
+  width={904}
+  height={724}
+  caption="The summary appears inline, below the header, and says which tier produced it."
+/>
+
+Two tiers, picked automatically from what your instance can serve:
+
+- **Layout-aware** (`core:analyze-images`) — the pages go to a multimodal model
+  as images, so tables, figures and stamps survive.
+- **Text** (`core:text2text:summary`) — built from the already-extracted text.
+  The fallback when no vision model is installed.
+
+The summary states which tier it used, so a text-tier summary tells you plainly
+that layout and images were not read. With no summarization provider installed at
+all, the button is hidden rather than offered and then failing.
+
+## Per-user prerequisites
+
+Each user's chat runs as **that user**. Astrolabe mints a short-lived token
+scoped to them, and the MCP server resolves every tool call against that
+identity — so the agent can reach exactly what its user can reach, and one
+user's chat can never surface another's content.
+
+Two consequences worth knowing:
+
+- A user gets useful answers once they have **background indexing** enabled (or
+  have been provisioned by an administrator). Semantic search finds only indexed
+  content, so a user with nothing indexed gets an assistant that searches and
+  comes back empty-handed.
+- The other read scopes are not limited to the index. With `files.read` /
+  `webdav.read`, for instance, the agent can open a file the user has access to
+  but has never tagged for indexing. That is the user's own data either way, but
+  it is the reason the scope list — not the index — is the boundary that
+  matters.
+
+## Settings reference
+
+Under **Administration → Astrolabe → Assistant agent**:
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Answer Assistant chats with Astrolabe** | Off | Registers Astrolabe as the agent provider. Off means Nextcloud's own agent (or none) keeps the chat. |
+| **Permissions requested for the agent** | `semantic.read files.read notes.read webdav.read calendar.read contacts.read deck.read` | Space-separated scopes. The MCP server hides every tool these do not grant, so this is the real limit on what the agent can do. |
+| **Maximum tool rounds per message** | 8 | How many times the assistant may search before it must answer. Each round costs a model call. |
+| **Time limit per message (seconds)** | 120 | Answers with whatever it has once this elapses, and says that it stopped early. Raise it for slower models. |
+
+<Callout title="Read-only by design">
+
+The default scopes are all `*.read`, so the tool catalogue the model sees
+contains **nothing that writes** — the assistant cannot change your content, and
+the "actions" half of the agent contract stays empty. Adding a write scope would
+let it modify data without asking first. Don't, unless you have decided you want
+exactly that.
+
+</Callout>
+
+## Self-hosting the backend
+
+<Callout title="Cloud tenants can skip this">
+
+These docs cover the managed Cloud backend, where the audience, issuer and
+management-client settings are configured for you at provisioning. This section
+is only for people running
+[`nextcloud-mcp-server`](https://github.com/cbcoutinho/nextcloud-mcp-server)
+themselves.
+
+</Callout>
+
+The agent chat is the first feature that drives the MCP server's `/mcp`
+endpoint rather than only its management API, and `/mcp` validates two things
+the management API deliberately ignores — the token's **audience** and its
+**issuer**. A mismatch shows up as a chat that cannot reach the server while the
+Astrolabe admin page still reports the backend healthy.
+
+Check all of these on a self-hosted backend:
+
+- **MCP Server URL (public)** in Astrolabe's admin settings must equal the
+  server's `NEXTCLOUD_MCP_SERVER_URL`. That string becomes the `aud` of every
+  minted token, and `/mcp` rejects anything else. Left blank, Astrolabe falls
+  back to the internal URL — fine when the two are the same, wrong the moment
+  they differ (a container service name internally, a public hostname in `aud`).
+- Your Nextcloud's issuer must appear in the server's `OIDC_ISSUER` or
+  `NEXTCLOUD_HOST` — and mind the **port**. The `oidc` app builds the `iss` of a
+  minted token from the instance URL's *host only*, so a Nextcloud served on
+  `http://localhost:8080` mints `iss: http://localhost` even though its own
+  discovery document advertises `issuer: http://localhost:8080`. If `/mcp` logs
+  `Invalid issuer`, set `OIDC_ISSUER` to the form the token actually carries.
+  (Instances served on 443 or 80 never see this, because the port is implicit.)
+- The `oidc` app must issue **JWT** access tokens — `/mcp` has no opaque-token
+  fallback.
+- `ALLOWED_MGMT_CLIENT` must contain your Astrolabe **OIDC client identifier**,
+  for the management API the rest of the app uses.
+- Each user must have completed provisioning, so the server holds a credential
+  to call Nextcloud with on their behalf.
+
+You do **not** need to add Astrolabe to `ALLOWED_MCP_CLIENTS`. That list gates
+the MCP server's own OAuth authorization-server endpoints, which Astrolabe never
+uses — it mints tokens through your Nextcloud's `oidc` app instead, and `/mcp`
+authorizes by audience and user, not by client identity. The reasoning is
+recorded in
+[ADR-005 → *Client Identity Is Not an Authorization Gate on `/mcp`*](https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/docs/ADR-005-token-audience-validation.md#client-identity-is-not-an-authorization-gate-on-mcp).
+
+## Troubleshooting
+
+### Chat with AI still answers without my content
+
+The agent isn't registered. Either the **Assistant agent** toggle is off, or no
+installed provider offers **chat with tools** (`core:text2text:chatwithtools`) —
+check **Administration → Artificial intelligence**. With **Context Agent** also
+installed, confirm **Astrolabe** is the selected provider there.
+
+### The message is sent but no reply ever arrives
+
+Not an Astrolabe problem: nothing is consuming Nextcloud's AI task queue. Run
+task-processing workers (or a fast cron) as described in
+[Improve AI task pickup speed](https://docs.nextcloud.com/server/latest/admin_manual/ai/overview.html#improve-ai-task-pickup-speed).
+With only the default background-job schedule, a reply can take minutes or never
+appear at all.
+
+### “Astrolabe could not obtain access to the MCP server on your behalf”
+
+Token minting failed. Confirm the **OpenID Connect** (`oidc`) app is enabled and
+that Astrolabe's **OIDC client identifier** matches a client that still exists
+in it. Dynamically registered clients expire after about an hour — use a client
+you created by hand.
+
+### “Astrolabe could not reach the MCP server”
+
+For a Cloud tenant, recheck the **MCP Server URL** against your provisioning
+email. Self-hosted, this is usually the audience or issuer mismatch described
+above — the server logs a 401 and Astrolabe logs the diagnosis, naming the
+config keys to check:
+
+```bash
+# occ log:file prints where the log lives, if you don't already know
+cat /var/www/html/data/nextcloud.log \
+  | jq 'select(.app == "astrolabe")' | tail
+```
+
+### The answer stops early or ignores an obvious document
+
+Raise **Maximum tool rounds per message** and **Time limit per message** — a
+slow model can exhaust the budget mid-search, and the answer says so when it
+does. If the document is simply never found, confirm it is indexed: open the
+**Astrolabe** app and search for it directly.
