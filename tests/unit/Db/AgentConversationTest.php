@@ -86,4 +86,35 @@ final class AgentConversationTest extends TestCase {
 
 		$this->assertSame([['role' => 'human', 'content' => 'hello']], $conversation->getDecodedHistory());
 	}
+
+	/**
+	 * An unwritten row reads as no turns, not as a decode failure the caller has
+	 * to reason about — the initial value is deliberately not valid JSON.
+	 */
+	public function testAFreshConversationHasNoTurns(): void {
+		$this->assertSame([], (new AgentConversation())->getDecodedHistory());
+	}
+
+	/**
+	 * `QBMapper::insert()` writes only the fields `Entity::setter()` marked as
+	 * updated, and the setter skips a value that already equals the property. An
+	 * initial value of '[]' therefore dropped `history` from the INSERT of an
+	 * empty conversation, which MySQL and MariaDB reject outright: Doctrine
+	 * strips the declared default from every TEXT column before creating the
+	 * table, so it ends up NOT NULL with nothing to fall back on. Postgres and
+	 * SQLite kept the default and hid it, which is why it only ever failed in
+	 * production.
+	 */
+	public function testStoringAnEmptyHistoryStillWritesTheColumn(): void {
+		$conversation = new AgentConversation();
+
+		$conversation->setDecodedHistory([]);
+
+		$this->assertArrayHasKey(
+			'history',
+			$conversation->getUpdatedFields(),
+			'an empty history must still be written, or MySQL rejects the insert',
+		);
+		$this->assertSame('[]', $conversation->getHistory());
+	}
 }

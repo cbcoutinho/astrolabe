@@ -18,6 +18,12 @@ description: Common issues connecting Astrolabe to your Cloud tenant, indexing c
   the management client id) and the **confidential** Astrolabe Cloud client.
 - Check that the management client id entered in the admin page matches the one
   you gave Astrolabe Cloud during tenant creation.
+- Give the **confidential** client a **resource URL** equal to your MCP Server
+  URL — the bare address, with no `/mcp` suffix. It is compared to the token
+  audience as an exact string, so a trailing `/mcp` fails just as an empty field
+  does. The symptom is `Token introspection denied: requesting client not
+  authorized` in the log; see [the Assistant
+  docs](/using/assistant#give-the-backends-oidc-client-a-resource-url).
 
 ## Search returns nothing yet
 
@@ -39,6 +45,19 @@ re-enable **“Allow users to self-provision background indexing.”**
 Astrolabe only answers those chats once an admin enables it and a tool-calling
 text provider is installed — see
 [Answer Assistant chats with Astrolabe](/using/assistant#troubleshooting).
+
+## Search works, but only the Assistant can't reach the backend
+
+If everything else is healthy — the admin page connects, search returns results
+— and only the Assistant chat fails, check `overwritehost` and
+`overwriteprotocol` in `config.php`.
+
+The agent is the only feature that runs in a background worker rather than a web
+request, so it is the only one that cannot read your hostname off an incoming
+request. Without those two settings it mints a token claiming to come from
+`http://localhost`, which the backend rejects. `overwrite.cli.url` does not
+cover this. See [Nextcloud must know its own
+URL](/using/assistant#nextcloud-must-know-its-own-url).
 
 ## Tag changes aren't picked up
 

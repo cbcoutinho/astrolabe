@@ -27,8 +27,25 @@ final class AgentConversation extends Entity {
 	protected string $token = '';
 	/** @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors. */
 	protected string $userId = '';
-	/** @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors. */
-	protected string $history = '[]';
+	/**
+	 * Empty rather than '[]', so that setting it on a fresh row is a *change*.
+	 *
+	 * `Entity::setter()` returns early when the new value already equals the
+	 * property, which leaves the field out of `getUpdatedFields()` and so out of
+	 * the INSERT that `QBMapper` builds. A default of '[]' therefore made
+	 * `AgentConversationMapper::start()` write a row with no `history` column at
+	 * all — fine where the column carries a database default, but on MySQL and
+	 * MariaDB it does not: Doctrine's `AbstractMySQLPlatform` nulls the default
+	 * of every TEXT and BLOB column before emitting the DDL, so the default the
+	 * migration declares never reaches the database. Under STRICT_TRANS_TABLES
+	 * the insert then failed outright with "Field 'history' doesn't have a
+	 * default value", and every Assistant chat turn died before reaching the
+	 * agent. Keeping the initial value distinct from any value we would store
+	 * means the column is always written explicitly.
+	 *
+	 * @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors.
+	 */
+	protected string $history = '';
 	/** @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors. */
 	protected int $updatedAt = 0;
 	/** @psalm-suppress PossiblyUnusedProperty — read and written by QBMapper via the magic accessors. */
@@ -46,7 +63,8 @@ final class AgentConversation extends Entity {
 	 * The stored turns, or an empty list if the column is unreadable.
 	 *
 	 * Decoding defensively rather than throwing: a corrupt row should cost the
-	 * user their context, not their ability to send the next message.
+	 * user their context, not their ability to send the next message. The same
+	 * path covers the unwritten default above, which is not valid JSON.
 	 *
 	 * @return list<array{role: string, content: string}>
 	 */
