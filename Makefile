@@ -107,6 +107,19 @@ validate-signing:
 appstore: assemble validate-signing
 	# Sign the app
 	$(sign_cmd) --path=$(package_name)
+	# Signing is verified by its output, because its exit code cannot be
+	# trusted: `occ` returns 0 even when it fails to boot at all, so a server
+	# checkout missing its `3rdparty` submodule signs nothing and reports
+	# success. This ran before the tarball existed only after 0.39.2 — until
+	# then the check came afterwards and was written `cat … | head`, which
+	# takes its status from `head` and so could not fail either way. Three
+	# releases went out unsigned behind those two mistakes.
+	@test -s $(package_name)/appinfo/signature.json || { \
+		echo "Error: signing produced no appinfo/signature.json — the package is unsigned."; \
+		echo "Check that '$(occ)' can run: a bare nextcloud/server checkout needs its"; \
+		echo "3rdparty submodule, and prints 'Composer autoloader not found' without it."; \
+		exit 1; \
+	}
 	# Create tarball
 	cd $(appstore_dir) && \
 		tar -czf $(app_name).tar.gz $(app_name)
@@ -116,5 +129,5 @@ appstore: assemble validate-signing
 	@echo "  $(appstore_dir)/$(app_name).tar.gz"
 	@echo ""
 	@echo "Signature:"
-	@cat $(package_name)/appinfo/signature.json | head -n 5
+	@head -n 5 $(package_name)/appinfo/signature.json
 	@echo "========================================="

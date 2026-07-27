@@ -57,12 +57,19 @@ jobs:
           php-version: 8.2
           coverage: none
 
+      # `submodules` is load-bearing, not tidiness: `occ` boots through
+      # `3rdparty/autoload.php`, which lives in a submodule. Without it every
+      # `occ` invocation prints "Composer autoloader not found, unable to
+      # continue" and — the part that made this expensive — **exits 0**, so
+      # `make` carried on and signing silently produced nothing. Releases
+      # 0.39.0 through 0.39.2 shipped unsigned as a result.
       - name: Checkout Nextcloud server (for signing)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: nextcloud/server
           ref: stable30
           path: server
+          submodules: true
 
       - name: Install dependencies and build
         run: |
