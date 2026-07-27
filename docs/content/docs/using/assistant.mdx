@@ -276,6 +276,39 @@ is the usual reason to configure them. The symptom is otherwise confusing: the
 Astrolabe admin page reports the backend healthy and search works normally,
 because neither goes through `/mcp` — only the Assistant chat fails.
 
+## Give the backend's OIDC client a resource URL
+
+The confidential client you registered for the backend — the one whose
+credentials you handed over at tenant creation — should carry a **resource URL**
+equal to your **MCP Server URL (public)**: the bare server address, with **no
+`/mcp` on the end**.
+
+That field decides whether the backend is allowed to *introspect* a token, and
+the `oidc` app compares it to the token's audience as an exact string. `/mcp` is
+the transport path, not the audience, so a resource URL ending in `/mcp` fails
+the comparison exactly as an empty one does:
+
+| Client resource URL | Token audience | Introspection |
+|---|---|---|
+| *(empty)* | `https://tenant.example.com` | denied |
+| `https://tenant.example.com/mcp` | `https://tenant.example.com` | denied |
+| `https://tenant.example.com` | `https://tenant.example.com` | allowed |
+
+<Callout title="Why the chat can work without this">
+
+The backend verifies a JWT access token by signature and only falls back to
+introspection when it cannot — so an instance issuing JWTs, with the URL
+settings above correct, never exercises this path and works with the field
+empty. It stops being optional the moment introspection is reached: an opaque
+token, or a JWT the backend cannot verify locally. When that happens the
+`oidc` app logs `Token introspection denied: requesting client not authorized`
+and `/mcp` returns 401.
+
+Setting it costs nothing and removes a failure that only appears later, under
+conditions that have nothing obvious to do with the client registration.
+
+</Callout>
+
 ## Self-hosting the backend
 
 <Callout title="Cloud tenants can skip this">
@@ -351,6 +384,14 @@ Token minting failed. Confirm the **OpenID Connect** (`oidc`) app is enabled and
 that Astrolabe's **OIDC client identifier** matches a client that still exists
 in it. Dynamically registered clients expire after about an hour — use a client
 you created by hand.
+
+### `Token introspection denied: requesting client not authorized`
+
+In your Nextcloud log, with a 401 from `/mcp`. The backend's confidential client
+has no **resource URL**, or one that doesn't exactly match the token audience —
+most often because it has `/mcp` appended. Set it to the bare **MCP Server URL
+(public)**; see [Give the backend's OIDC client a resource
+URL](#give-the-backends-oidc-client-a-resource-url).
 
 ### “Astrolabe could not reach the MCP server”
 

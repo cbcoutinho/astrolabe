@@ -200,6 +200,12 @@ Astrolabe integrates directly with Nextcloud's **Unified Search**:
 - Note `Initialization failed: Request timed out` is usually a rejected token
   rather than a real timeout; the MCP server logs it as a `401` on `POST /mcp`
 
+**`Token introspection denied: requesting client not authorized`:**
+- Set the **resource URL** of the backend's confidential OIDC client to your MCP
+  server URL — the bare address, no `/mcp` suffix. It is matched against the
+  token audience as an exact string, so a trailing `/mcp` fails like an empty
+  field does.
+
 **Authorization fails:**
 - Ensure MCP server is in OAuth mode
 - Verify identity provider is accessible
