@@ -46,7 +46,7 @@ if (!is_file($autoload)) {
  *
  * @return array{dirs: list<string>, files: list<string>}
  */
-function mapped_paths(string $vendorDir): array {
+function mappedPaths(string $vendorDir): array {
 	$dirs = [];
 	$files = [];
 
@@ -55,12 +55,12 @@ function mapped_paths(string $vendorDir): array {
 		if (!is_file($path)) {
 			continue;
 		}
+		// `require` is deliberate here and below: these files are data, read for
+		// the array they return. `require_once` would evaluate to `true` rather
+		// than the map if the file had already been included — exactly the case
+		// this check exists to survive.
 		/** @var array<string, list<string>|string> $map */
-		// NOSONAR (php:S2003) — `require` is deliberate: these files are data,
-		// read for the array they return. `require_once` would evaluate to
-		// `true` rather than the map if the file were already included, which
-		// is exactly the case this check exists to survive.
-		$map = require $path;
+		$map = require $path; // NOSONAR (php:S2003) — needs the returned map.
 		foreach ($map as $paths) {
 			foreach ((array)$paths as $dir) {
 				$dirs[] = (string)$dir;
@@ -96,7 +96,7 @@ function mapped_paths(string $vendorDir): array {
 // including the `autoload-dev` ones pointing at `tests/`, which the package is
 // meant to leave behind. `lib/` is checked on its own below.
 $vendorDir = $package . '/vendor/';
-$mapped = mapped_paths($package . '/vendor');
+$mapped = mappedPaths($package . '/vendor');
 $missing = [
 	...array_filter(
 		$mapped['dirs'],
@@ -136,6 +136,10 @@ if ($missing !== []) {
 const REQUIRED_CLASSES = [
 	'Mcp\Client',
 	'Symfony\Component\Uid\Uuid',
+	// A transitive dependency rather than a direct one — `mcp/sdk` requires it
+	// for schema validation — and so exactly the kind of tree that can go
+	// missing without anything this app imports naming it.
+	'Opis\JsonSchema\Validator',
 ];
 
 // Unlike the map reads above, nothing is returned here — this registers
