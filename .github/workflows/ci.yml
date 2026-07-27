@@ -262,8 +262,14 @@ jobs:
         with:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
 
+      # `--ignore-scripts`: installing npm itself has no lifecycle scripts we
+      # want to run, and the app's own dependencies come from `npm ci` against
+      # the committed lockfile. The version is a range rather than a pin
+      # because it is read from `package.json`'s `engines`, which is this
+      # project's single source of truth for it — hardcoding an exact version
+      # here would duplicate that and drift from it silently.
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
-        run: npm i -g 'npm@${{ steps.versions.outputs.npmVersion }}'
+        run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
 
       # The 8.2 floor, matching psalm above: the package is built once and is
       # not PHP-version specific, so there is nothing to gain from a matrix.

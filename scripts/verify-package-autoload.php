@@ -132,6 +132,13 @@ if ($missing !== []) {
  *
  * Checked by loading them for real: a stripped package leaves the maps intact,
  * so only an actual resolution proves the files behind them survived.
+ *
+ * Hand-maintained, so keep it in step with the runtime `require` entries in
+ * `composer.json`: a dependency added there and not here simply stops being
+ * covered, silently. That is a weaker failure than it sounds — the path check
+ * above walks every entry composer generated, so a directory vanishing from the
+ * package is still caught for dependencies missing from this list. What is lost
+ * is only the "present but hollow" case.
  */
 const REQUIRED_CLASSES = [
 	'Mcp\Client',
