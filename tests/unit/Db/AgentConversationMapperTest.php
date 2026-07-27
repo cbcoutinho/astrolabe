@@ -66,6 +66,52 @@ final class AgentConversationMapperTest extends TestCase {
 		};
 	}
 
+	/**
+	 * Everything a new conversation needs must reach the INSERT.
+	 *
+	 * `QBMapper::insert()` writes only the fields whose setters marked them
+	 * updated, so a value that happens to equal the entity's initial one is left
+	 * out of the statement entirely. That is what broke `history` on MySQL and
+	 * MariaDB, where the column has no usable default to fall back on: the first
+	 * Assistant message on a fresh install died here, before the agent ran.
+	 * Asserting on the columns rather than on `history` alone keeps the next
+	 * field added to this table from repeating it.
+	 */
+	public function testStartWritesEveryColumnOfTheNewRow(): void {
+		$random = $this->createMock(ISecureRandom::class);
+		$random->method('generate')->willReturn('a-token');
+
+		$mapper = new class($this->createMock(IDBConnection::class), $random) extends AgentConversationMapper {
+			public ?AgentConversation $inserted = null;
+
+			#[\Override]
+			public function insert(\OCP\AppFramework\Db\Entity $entity): \OCP\AppFramework\Db\Entity {
+				$this->inserted = $entity;
+				return $entity;
+			}
+		};
+
+		$conversation = $mapper->start('alice');
+
+		$this->assertSame($conversation, $mapper->inserted);
+		$this->assertSame(
+			['history', 'token', 'updatedAt', 'userId'],
+			$this->sorted(array_keys($conversation->getUpdatedFields())),
+			'a column left unwritten falls back to a database default that MySQL does not have',
+		);
+		$this->assertSame('[]', $conversation->getHistory());
+		$this->assertSame('alice', $conversation->getUserId());
+	}
+
+	/**
+	 * @param list<string> $values
+	 * @return list<string>
+	 */
+	private function sorted(array $values): array {
+		sort($values);
+		return $values;
+	}
+
 	public function testWritesOnceWhenNothingElseTouchedTheRow(): void {
 		$mapper = $this->mapper([true]);
 		$conversation = $this->conversation(1, 0, [['role' => 'human', 'content' => 'earlier']]);

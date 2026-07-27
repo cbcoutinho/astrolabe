@@ -50,30 +50,49 @@ lint:
 	npm run lint
 	npm run stylelint
 
-# Assemble app files into build directory (exclude dev files)
+# Assemble app files into build directory
+#
+# An allowlist, not an exclude list. This used to enumerate what to leave
+# behind, which fails in both directions and did: `--exclude='src/'` was meant
+# for this repo's Vue sources, but an rsync pattern without a leading slash
+# matches that basename at *any* depth, so it also deleted `vendor/*/*/src` —
+# every PSR-4 root composer had just written into the autoload map. The package
+# still carried a plausible `vendor/` tree and passed every check we had; it
+# failed in production on the first Assistant message, with
+# `Class "Mcp\Client" not found`. In the other direction the same list silently
+# shipped whatever was added to the repo later: the released 0.39.1 is 327 MB,
+# carrying `vendor-bin/` (the dev toolchain), `website/`, `docs/`, and a whole
+# `server/` checkout that only exists to run `occ` at signing time.
+#
+# Naming what ships fixes both. Each entry is anchored and copied whole with
+# `***`, so no pattern can reach inside `vendor/`, and anything new added to the
+# repo stays out of the package until it is listed here deliberately.
 .PHONY: assemble
 assemble: clean install-deps build-frontend
 	mkdir -p $(package_name)
 	# Copy app files
 	rsync -av \
-		--exclude='.git*' \
-		--exclude='build/' \
-		--exclude='tests/' \
-		--exclude='node_modules/' \
-		--exclude='*.log' \
-		--exclude='.github/' \
-		--exclude='composer.json' \
-		--exclude='composer.lock' \
-		--exclude='package.json' \
-		--exclude='package-lock.json' \
-		--exclude='vite.config.js' \
-		--exclude='.eslintrc.js' \
-		--exclude='.php-cs-fixer.*' \
-		--exclude='psalm.xml' \
-		--exclude='*.iml' \
-		--exclude='.idea' \
-		--exclude='src/' \
+		--include='/appinfo/***' \
+		--include='/lib/***' \
+		--include='/templates/***' \
+		--include='/vendor/***' \
+		--include='/js/***' \
+		--include='/css/***' \
+		--include='/img/***' \
+		--include='/assets/***' \
+		--include='/pdfjs/***' \
+		--include='/l10n/***' \
+		--include='/openapi.json' \
+		--include='/README.md' \
+		--include='/CHANGELOG.md' \
+		--include='/LICENSE' \
+		--include='/CODE_OF_CONDUCT.md' \
+		--exclude='*' \
 		./ $(package_name)/
+	# Fail loudly rather than publishing a package whose autoloader points at
+	# directories that are not in it — the failure mode this replaced only
+	# surfaced once a user sent an Assistant message on an installed release.
+	@php scripts/verify-package-autoload.php $(package_name)
 
 # Validate signing prerequisites
 .PHONY: validate-signing

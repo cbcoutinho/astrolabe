@@ -74,6 +74,15 @@ final class Version0390Date20260725220000CreateAgentConversations extends Simple
 		]);
 		// The turn history as JSON. Text rather than a child table: it is only
 		// ever read and written whole, and never queried across rows.
+		//
+		// The default is honoured on Postgres and SQLite but never reaches MySQL
+		// or MariaDB: Doctrine's `AbstractMySQLPlatform::getDefaultValueDeclarationSQL()`
+		// nulls the default of every TEXT and BLOB column before generating the
+		// DDL, so the column is created NOT NULL with nothing to fall back on.
+		// It is kept as a backstop where it works; what makes the insert
+		// portable is `AgentConversation` always writing the column (see the
+		// note on its `$history` property), so do not rely on this line holding
+		// on every supported database.
 		$table->addColumn('history', Types::TEXT, [
 			'notnull' => true,
 			'default' => '[]',
