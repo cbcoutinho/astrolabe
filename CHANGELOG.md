@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.39.3 (2026-07-27)
+
+### Fix
+
+- **release**: push the version bump and its tag atomically
+- **release**: sign the app for real, and fail when it is not signed
+
 ## v0.39.2 (2026-07-27)
 
 ### Fix
