@@ -56,6 +56,10 @@ function mapped_paths(string $vendorDir): array {
 			continue;
 		}
 		/** @var array<string, list<string>|string> $map */
+		// NOSONAR (php:S2003) — `require` is deliberate: these files are data,
+		// read for the array they return. `require_once` would evaluate to
+		// `true` rather than the map if the file were already included, which
+		// is exactly the case this check exists to survive.
 		$map = require $path;
 		foreach ($map as $paths) {
 			foreach ((array)$paths as $dir) {
@@ -67,7 +71,7 @@ function mapped_paths(string $vendorDir): array {
 	$classmap = $vendorDir . '/composer/autoload_classmap.php';
 	if (is_file($classmap)) {
 		/** @var array<string, string> $map */
-		$map = require $classmap;
+		$map = require $classmap; // NOSONAR (php:S2003) — see above; needs the returned map.
 		foreach ($map as $file) {
 			$dirs[] = dirname((string)$file);
 		}
@@ -76,7 +80,7 @@ function mapped_paths(string $vendorDir): array {
 	$includes = $vendorDir . '/composer/autoload_files.php';
 	if (is_file($includes)) {
 		/** @var array<string, string> $map */
-		$map = require $includes;
+		$map = require $includes; // NOSONAR (php:S2003) — see above; needs the returned map.
 		foreach ($map as $file) {
 			$files[] = (string)$file;
 		}
@@ -134,7 +138,9 @@ const REQUIRED_CLASSES = [
 	'Symfony\Component\Uid\Uuid',
 ];
 
-require $autoload;
+// Unlike the map reads above, nothing is returned here — this registers
+// composer's autoloader, and doing that twice is never what we want.
+require_once $autoload;
 
 foreach (REQUIRED_CLASSES as $class) {
 	if (!class_exists($class)) {
