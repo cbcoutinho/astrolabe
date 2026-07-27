@@ -64,11 +64,19 @@ jobs:
           tag=$(git tag --sort=-creatordate | head -n 1)
           echo "tag=$tag" >> $GITHUB_OUTPUT
 
+      # One atomic push, so the bump commit and its tag land together or not at
+      # all. As two commands the branch could land while the tag failed — which
+      # happened on 0.39.2, when the tag ref hit a transient GitHub 500 — and
+      # that state cannot be repaired by re-running: `actions/checkout` pins to
+      # the event SHA, so every attempt rebuilds the same bump commit and is
+      # rejected non-fast-forward against the `main` the first attempt already
+      # moved. The tag had to be pushed by hand. Atomically, a rejected tag
+      # leaves `main` untouched and a re-run simply works.
       - name: Push tags
         if: steps.bump.outputs.bumped == 'true'
-        run: |
-          git push
-          git push --tags
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
+        run: git push --atomic origin "HEAD:refs/heads/main" "refs/tags/${TAG}"
 
       - name: Summary
         run: |
