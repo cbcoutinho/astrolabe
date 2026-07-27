@@ -38,6 +38,12 @@ intelligence**.
   (`integration_openai`) is the usual choice; a provider without tool calling
   cannot drive the search tools, so Astrolabe stays unavailable and the toggle
   has no effect.
+- **`overwritehost` and `overwriteprotocol` set in `config.php`**, matching how
+  users actually reach your Nextcloud. Unlike the rest of the app, the agent
+  runs in a background worker with no incoming web request to learn the hostname
+  from — see [Nextcloud must know its own
+  URL](#nextcloud-must-know-its-own-url) below. This one bites Cloud tenants
+  too, not only self-hosted backends.
 
 <Callout title="Astrolabe never generates text">
 
@@ -230,6 +236,46 @@ exactly that.
 
 </Callout>
 
+## Nextcloud must know its own URL
+
+The agent is the one part of Astrolabe that runs **outside a web request**. Every
+other feature is driven by a browser: someone opens the app, and Nextcloud reads
+the hostname straight off the incoming request. The agent instead runs wherever
+your task-processing workers run — `occ taskprocessing:worker`, or the
+background-job cron — and there is no request there to read a hostname from.
+
+That matters because the token Astrolabe mints for `/mcp` carries an **issuer**,
+which the `oidc` app builds from what Nextcloud believes its own address to be.
+With nothing configured, that lookup falls back to a hardcoded `localhost`, so
+the worker mints `iss: http://localhost`, and the MCP server — which expects
+your real hostname — rejects it.
+
+Set both:
+
+```bash
+occ config:system:set overwritehost     --value="cloud.example.com"
+occ config:system:set overwriteprotocol --value=https
+```
+
+<Callout type="warn" title="overwrite.cli.url is not enough">
+
+It is the obvious candidate and it does **not** cover this. `overwrite.cli.url`
+feeds URL *generation* (the links in emails and notifications); the issuer is
+built from the request host, which only `overwritehost` overrides. An instance
+with a correct `overwrite.cli.url` and no `overwritehost` still mints
+`iss: http://localhost`.
+
+`overwriteprotocol` is equally required, and easy to miss because fixing only
+the host moves the error rather than clearing it — the issuer becomes
+`http://cloud.example.com`, still rejected for the scheme.
+
+</Callout>
+
+You will already have set these if Nextcloud sits behind a reverse proxy, which
+is the usual reason to configure them. The symptom is otherwise confusing: the
+Astrolabe admin page reports the backend healthy and search works normally,
+because neither goes through `/mcp` — only the Assistant chat fails.
+
 ## Self-hosting the backend
 
 <Callout title="Cloud tenants can skip this">
@@ -238,7 +284,9 @@ These docs cover the managed Cloud backend, where the audience, issuer and
 management-client settings are configured for you at provisioning. This section
 is only for people running
 [`nextcloud-mcp-server`](https://github.com/cbcoutinho/nextcloud-mcp-server)
-themselves.
+themselves. The
+[URL settings above](#nextcloud-must-know-its-own-url) apply either way — those
+are your Nextcloud's own configuration, not the backend's.
 
 </Callout>
 
@@ -262,6 +310,10 @@ Check all of these on a self-hosted backend:
   discovery document advertises `issuer: http://localhost:8080`. If `/mcp` logs
   `Invalid issuer`, set `OIDC_ISSUER` to the form the token actually carries.
   (Instances served on 443 or 80 never see this, because the port is implicit.)
+  Note that `Invalid issuer 'http://localhost'` has a second, unrelated cause —
+  [the URL settings above](#nextcloud-must-know-its-own-url) — which no amount
+  of `OIDC_ISSUER` tuning fixes, since it is your Nextcloud minting the wrong
+  issuer rather than the backend expecting the wrong one.
 - The `oidc` app must issue **JWT** access tokens — `/mcp` has no opaque-token
   fallback.
 - `ALLOWED_MGMT_CLIENT` must contain your Astrolabe **OIDC client identifier**,
@@ -302,16 +354,32 @@ you created by hand.
 
 ### “Astrolabe could not reach the MCP server”
 
-For a Cloud tenant, recheck the **MCP Server URL** against your provisioning
-email. Self-hosted, this is usually the audience or issuer mismatch described
-above — the server logs a 401 and Astrolabe logs the diagnosis, naming the
-config keys to check:
+Check `overwritehost` and `overwriteprotocol` first — on **any** install, Cloud
+or self-hosted. If they are unset, the worker mints a token for
+`iss: http://localhost` and `/mcp` returns 401; see [Nextcloud must know its own
+URL](#nextcloud-must-know-its-own-url). Search works and the admin page looks
+healthy throughout, because neither uses `/mcp`.
+
+Beyond that: for a Cloud tenant, recheck the **MCP Server URL** against your
+provisioning email. Self-hosted, it is usually the audience or issuer mismatch
+described above — the server logs a 401 and Astrolabe logs the diagnosis,
+naming the config keys to check:
 
 ```bash
 # occ log:file prints where the log lives, if you don't already know
 cat /var/www/html/data/nextcloud.log \
   | jq 'select(.app == "astrolabe")' | tail
 ```
+
+<Callout title="“Request timed out” usually is not a timeout">
+
+Astrolabe reports a failed handshake as `Initialization failed: Request timed
+out`, which reads like a network problem and rarely is — a fast 401, retried,
+looks the same from this side. Confirm against the backend before chasing
+connectivity: a rejected token shows up there as `401` on `POST /mcp`, with the
+reason (`Invalid issuer …`, audience mismatch) named in the line above it.
+
+</Callout>
 
 ### The answer stops early or ignores an obvious document
 

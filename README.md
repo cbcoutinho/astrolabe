@@ -71,6 +71,21 @@ Add this to your Nextcloud `config/config.php`:
 'mcp_server_url' => 'http://localhost:8000',
 ```
 
+If you plan to use the Assistant agent, also make sure Nextcloud knows its own
+public address:
+
+```php
+'overwritehost' => 'cloud.example.com',
+'overwriteprotocol' => 'https',
+```
+
+The agent runs in a background worker rather than a web request, so it cannot
+read the hostname from an incoming request the way the rest of the app does.
+Without these it mints access tokens claiming to come from `http://localhost`,
+which the MCP server rejects — while search and the admin page keep working,
+since neither goes through `/mcp`. `overwrite.cli.url` does **not** cover this.
+See [the Assistant docs](https://docs.astrolabecloud.com/using/assistant#nextcloud-must-know-its-own-url).
+
 ### 2. Start the MCP Server
 
 The MCP server handles semantic search and AI agent connections. See the [MCP Server Installation Guide](https://github.com/cbcoutinho/nextcloud-mcp-server/blob/master/docs/installation.md) for details.
@@ -178,6 +193,12 @@ Astrolabe integrates directly with Nextcloud's **Unified Search**:
 - Verify `mcp_server_url` in `config.php`
 - Check MCP server is running: `curl http://localhost:8000/health`
 - Review logs: `tail -f data/nextcloud.log`
+
+**Only the Assistant agent cannot connect (search and admin page are fine):**
+- Set `overwritehost` and `overwriteprotocol` in `config.php` — the agent runs in
+  a background worker and otherwise mints tokens for `http://localhost`
+- Note `Initialization failed: Request timed out` is usually a rejected token
+  rather than a real timeout; the MCP server logs it as a `401` on `POST /mcp`
 
 **Authorization fails:**
 - Ensure MCP server is in OAuth mode

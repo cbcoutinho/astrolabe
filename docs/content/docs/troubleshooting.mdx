@@ -40,6 +40,19 @@ Astrolabe only answers those chats once an admin enables it and a tool-calling
 text provider is installed — see
 [Answer Assistant chats with Astrolabe](/using/assistant#troubleshooting).
 
+## Search works, but only the Assistant can't reach the backend
+
+If everything else is healthy — the admin page connects, search returns results
+— and only the Assistant chat fails, check `overwritehost` and
+`overwriteprotocol` in `config.php`.
+
+The agent is the only feature that runs in a background worker rather than a web
+request, so it is the only one that cannot read your hostname off an incoming
+request. Without those two settings it mints a token claiming to come from
+`http://localhost`, which the backend rejects. `overwrite.cli.url` does not
+cover this. See [Nextcloud must know its own
+URL](/using/assistant#nextcloud-must-know-its-own-url).
+
 ## Tag changes aren't picked up
 
 Tag-change reindexing requires **Nextcloud 32+**. On older versions, retag and
