@@ -61,8 +61,12 @@ the four standard OIDC scopes plus one scope per capability you want Mistral to
 have.
 
 ```
-openid profile email offline_access notes.read files.read calendar.read
+openid profile email offline_access semantic.read notes.read files.read calendar.read
 ```
+
+`semantic.read` gates `nc_semantic_search` — without it the connector can read
+individual items but can't search your knowledge bank, which is usually the
+whole point.
 
 Leaving the field empty allows **all** scopes — fine for a trusted admin
 client, but prefer listing only what the connector needs.
@@ -71,8 +75,9 @@ Available application scopes:
 
 | Area | Scopes |
 | --- | --- |
+| Semantic search | `semantic.read` |
 | Notes | `notes.read`, `notes.write` |
-| Files | `files.read`, `files.write` |
+| Files (incl. WebDAV) | `files.read`, `files.write` |
 | Calendar | `calendar.read`, `calendar.write` |
 | Tasks | `todo.read`, `todo.write` |
 | Contacts | `contacts.read`, `contacts.write` |
@@ -80,9 +85,10 @@ Available application scopes:
 | Tables | `tables.read`, `tables.write` |
 | Collectives | `collectives.read`, `collectives.write` |
 | Cookbook | `cookbook.read`, `cookbook.write` |
-| Sharing | `sharing.read`, `sharing.write` |
-| News | `news.read`, `news.write` |
-| Mail | `mail.read` |
+| Talk | `talk.read`, `talk.write` |
+| Sharing | `sharing.write` |
+| News | `news.read` |
+| Mail | `mail.read`, `mail.send` |
 
 Tools whose scope isn't granted simply don't appear to the client, so a
 read-only scope set is a safe starting point.
