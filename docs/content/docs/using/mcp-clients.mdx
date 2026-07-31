@@ -37,9 +37,82 @@ content as you, scoped to what background sync has indexed.
 
 ## Mistral (Le Chat)
 
-1. In Le Chat, open **Connectors / Integrations** and add an **MCP server**.
-2. Enter your tenant's **MCP server URL** and save.
-3. Authorize access when prompted, then enable the connector in a conversation.
+Le Chat does not register itself dynamically, so its OIDC client has to be
+created by hand in your Nextcloud and then allowed on your tenant.
+
+<Steps>
+
+<Step n="01" title="Create a confidential OIDC client in Nextcloud">
+
+Go to **Settings → Administration → OpenID Connect Provider** and add a client:
+
+- **Type:** Confidential
+- **Redirection URI:** `https://callback.mistral.ai/v1/integrations_auth/oauth2_callback`
+
+Nextcloud shows a **Client ID** and a **Client secret** — capture the secret
+now, it isn't shown again.
+
+</Step>
+
+<Step n="02" title="Set the client's allowed scopes">
+
+On the same client, fill in **Allowed Scopes** with a space-separated list:
+the four standard OIDC scopes plus one scope per capability you want Mistral to
+have.
+
+```
+openid profile email offline_access notes.read files.read calendar.read
+```
+
+Leaving the field empty allows **all** scopes — fine for a trusted admin
+client, but prefer listing only what the connector needs.
+
+Available application scopes:
+
+| Area | Scopes |
+| --- | --- |
+| Notes | `notes.read`, `notes.write` |
+| Files | `files.read`, `files.write` |
+| Calendar | `calendar.read`, `calendar.write` |
+| Tasks | `todo.read`, `todo.write` |
+| Contacts | `contacts.read`, `contacts.write` |
+| Deck | `deck.read`, `deck.write` |
+| Tables | `tables.read`, `tables.write` |
+| Collectives | `collectives.read`, `collectives.write` |
+| Cookbook | `cookbook.read`, `cookbook.write` |
+| Sharing | `sharing.read`, `sharing.write` |
+| News | `news.read`, `news.write` |
+| Mail | `mail.read` |
+
+Tools whose scope isn't granted simply don't appear to the client, so a
+read-only scope set is a safe starting point.
+
+</Step>
+
+<Step n="03" title="Allow the client on your tenant">
+
+In the Astrolabe Cloud portal, open your tenant and find **MCP clients →
+Add MCP client**:
+
+- **Client ID:** the id from step 1
+- **Friendly name:** e.g. `Mistral Le Chat`
+- **Redirect URI:** `https://callback.mistral.ai/v1/integrations_auth/oauth2_callback`
+
+Your tenant's MCP server rejects client ids that aren't on this list, so this
+step is required — the redirect URI must match the one registered in Nextcloud.
+
+</Step>
+
+<Step n="04" title="Add the connector in Le Chat">
+
+In Le Chat, open **Connectors / Integrations** and add an **MCP server** with
+your tenant's **MCP server URL**, the **Client ID**, and the **Client secret**
+from step 1. Authorize access when prompted, then enable the connector in a
+conversation.
+
+</Step>
+
+</Steps>
 
 <Screenshot label="Mistral Le Chat connector configuration with the tenant MCP server URL." />
 
