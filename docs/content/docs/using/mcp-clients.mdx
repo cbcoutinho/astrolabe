@@ -49,8 +49,9 @@ Go to **Settings → Administration → OpenID Connect Provider** and add a clie
 - **Type:** Confidential
 - **Redirection URI:** `https://callback.mistral.ai/v1/integrations_auth/oauth2_callback`
 
-Nextcloud shows a **Client ID** and a **Client secret** — capture the secret
-now — it isn't shown again.
+The client now has a **Client ID** and a **Client secret**. Both stay
+readable on the client's detail panel, so you can come back for them at any
+time.
 
 </Step>
 
@@ -109,12 +110,17 @@ step is required — the redirect URI must match the one registered in Nextcloud
 
 </Step>
 
-<Step n="04" title="Add the connector in Le Chat">
+<Step n="04" title="Add the connector in the Mistral console">
 
-In Le Chat, open **Connectors / Integrations** and add an **MCP server** with
-your tenant's **MCP server URL**, the **Client ID**, and the **Client secret**
-from step 1. Authorize access when prompted, then enable the connector in a
-conversation.
+This is an admin task in the Mistral console, not something you do from a Le
+Chat conversation. Go to [console.mistral.ai](https://console.mistral.ai) →
+**Connectors** → **+ Add Connector** → **Custom MCP Connector**, and supply:
+
+- your tenant's **MCP server URL**
+- the **Client ID** and **Client secret** from step 1
+
+Authorize access when prompted. The connector is then available to enable in
+Le Chat conversations.
 
 </Step>
 
