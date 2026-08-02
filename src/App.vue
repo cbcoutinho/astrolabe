@@ -115,7 +115,7 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label for="mcp-minimum-score">{{ t('astrolabe', 'Minimum Score') }}: {{ scoreThreshold }}%</label>
+								<label for="mcp-minimum-score">{{ t('astrolabe', 'Minimum relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
 								<input
 									id="mcp-minimum-score"
 									v-model="scoreThreshold"
@@ -247,7 +247,6 @@
 										</template>
 										{{ t('astrolabe', 'Show Chunk') }}
 									</NcButton>
-									<span class="mcp-result-score">{{ formatScore(result.score) }}%</span>
 								</div>
 							</div>
 							<a
@@ -759,13 +758,45 @@ export default {
 			return chips
 		},
 
-		scoreThresholdRatio() {
-			return this.scoreThreshold / 100
+		// Rank key for the relevance filter: the cross-encoder score when the
+		// server reranked, else the retrieval score. Matches the order the
+		// server returned rows in, so the filter always removes a suffix of the
+		// list rather than punching holes in it.
+		//
+		// Reranking is NOT required for any of this. This app never requests it
+		// (no `rerank` field is sent), and the server defaults it off, so today
+		// `rerank_score` is absent from every row and this falls through to
+		// `score` on every result. The branch is here so the filter keeps
+		// ranking on the better key if a rerank toggle is added later -- it must
+		// stay a fallback, never a requirement.
+		rankScore() {
+			return (r) => r.rerank_score ?? r.score ?? 0
+		},
+
+		// Highest rank score on this page of results, i.e. the denominator the
+		// slider is relative to. 0 when there are no results.
+		topScore() {
+			return this.results.reduce((m, r) => Math.max(m, this.rankScore(r)), 0)
+		},
+
+		// The slider is RELATIVE, not absolute. An absolute cut cannot work:
+		// the three things a row's `score` might be are on incomparable scales
+		// -- cosine similarity in [0,1] for semantic search, an RRF fused score
+		// bounded by 2/VECTOR_SEARCH_RRF_K (~0.033 at the server's default
+		// k=60) for bm25/hybrid, or an unbounded DBSF score. A [0,100]%
+		// control against the RRF range is inert above ~3%, and a near-perfect
+		// hit legitimately scores 0.033.
+		//
+		// Relative-to-top is scale-invariant, so this control keeps working
+		// across all three, and survives the server retuning k or switching
+		// fusion without going inert again.
+		scoreCut() {
+			return (this.scoreThreshold / 100) * this.topScore
 		},
 
 		filteredResults() {
-			const threshold = this.scoreThresholdRatio
-			return this.results.filter((r) => (r.score || 0) >= threshold)
+			const cut = this.scoreCut
+			return this.results.filter((r) => this.rankScore(r) >= cut)
 		},
 
 		// Parallel arrays used by renderPlot. The coordinate guard is
@@ -773,9 +804,9 @@ export default {
 		// list view (filteredResults) intentionally stays independent so
 		// it still renders when PCA coordinates are unavailable.
 		filteredResultsAndCoords() {
-			const threshold = this.scoreThresholdRatio
+			const cut = this.scoreCut
 			return this.results.reduce((acc, r, i) => {
-				if ((r.score || 0) >= threshold && this.coordinates[i] !== undefined) {
+				if (this.rankScore(r) >= cut && this.coordinates[i] !== undefined) {
 					acc.results.push(r)
 					acc.coordinates.push(this.coordinates[i])
 				}
@@ -1091,10 +1122,6 @@ export default {
 			} finally {
 				this.statusLoading = false
 			}
-		},
-
-		formatScore(score) {
-			return Math.round((score || 0) * 100)
 		},
 
 		toggleExcerpt(index) {
@@ -1965,12 +1992,6 @@ export default {
 .mcp-doc-type-mail_message {
 	border-inline-start-color: #5e35b1;
 	.mcp-result-type { background: #ede7f6; color: #5e35b1; }
-}
-
-.mcp-result-score {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--color-text-maxcontrast);
 }
 
 .mcp-result-title {
