@@ -51,8 +51,11 @@ test.describe('Astrolabe search', () => {
 		// Result limit field
 		await expect(mainContent.getByText('Result Limit')).toBeVisible()
 
-		// Score threshold slider
-		await expect(mainContent.getByText('Minimum Score')).toBeVisible()
+		// Relevance slider. Labelled relative to the best result, not as an
+		// absolute score — the server's `score` is on a different scale per
+		// algorithm (cosine for semantic, an RRF fused score bounded by
+		// ~2/k for bm25/hybrid), so an absolute cut cannot mean one thing.
+		await expect(mainContent.getByText('Minimum relevance')).toBeVisible()
 	})
 
 	test('complete authorization and perform search with Plotly visualization', async ({ authenticatedPage: page }) => {
@@ -134,6 +137,13 @@ test.describe('Astrolabe search', () => {
 		const firstResult = resultItems.first()
 		await expect(firstResult.locator('.mcp-result-type')).toBeVisible()
 		await expect(firstResult.locator('.mcp-result-title')).toBeVisible()
-		await expect(firstResult.locator('.mcp-result-score')).toBeVisible()
+
+		// No per-result score badge. Asserted ABSENT rather than simply dropped,
+		// because the number it used to show was misleading rather than merely
+		// redundant: the server's `score` for the default algorithm is an RRF
+		// rank artifact bounded by ~2/VECTOR_SEARCH_RRF_K (about 0.033 at k=60),
+		// so a near-perfect hit rendered as "3%". Re-adding any raw `score`
+		// percentage should fail here.
+		await expect(firstResult.locator('.mcp-result-score')).toHaveCount(0)
 	})
 })

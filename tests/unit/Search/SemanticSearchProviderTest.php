@@ -100,10 +100,16 @@ final class SemanticSearchProviderTest extends TestCase {
 		);
 	}
 
-	private function stubStoredAlgorithm(string $algorithm): void {
+	private function stubStoredAlgorithm(string $algorithm, ?string $scoreThreshold = null): void {
 		$this->config->method('getAppValue')->willReturnCallback(
-			function (string $app, string $key, string $default) use ($algorithm): string {
-				return $key === AdminSettings::SETTING_SEARCH_ALGORITHM ? $algorithm : $default;
+			function (string $app, string $key, string $default) use ($algorithm, $scoreThreshold): string {
+				if ($key === AdminSettings::SETTING_SEARCH_ALGORITHM) {
+					return $algorithm;
+				}
+				if ($scoreThreshold !== null && $key === AdminSettings::SETTING_SEARCH_SCORE_THRESHOLD) {
+					return $scoreThreshold;
+				}
+				return $default;
 			},
 		);
 	}
@@ -122,8 +128,15 @@ final class SemanticSearchProviderTest extends TestCase {
 		return $user;
 	}
 
-	/** @return string the algorithm actually sent to searchForUnifiedSearch */
-	private function capturedAlgorithm(SemanticSearchProvider $provider): string {
+	/**
+	 * Run one search and return the args sent to searchForUnifiedSearch.
+	 *
+	 * Named args arrive positionally in declaration order:
+	 * (query, token, limit, offset, algorithm, fusion, scoreThreshold, docTypes)
+	 *
+	 * @return list<mixed>
+	 */
+	private function capturedCall(SemanticSearchProvider $provider): array {
 		$captured = null;
 		$this->client->method('searchForUnifiedSearch')->willReturnCallback(
 			function (...$args) use (&$captured): array {
@@ -132,14 +145,55 @@ final class SemanticSearchProviderTest extends TestCase {
 			},
 		);
 		$provider->search($this->user(), $this->query());
-		// Named args arrive positionally in declaration order:
-		// (query, token, limit, offset, algorithm, fusion, scoreThreshold, docTypes)
-		return $captured[4];
+		return $captured;
+	}
+
+	/** @return string the algorithm actually sent to searchForUnifiedSearch */
+	private function capturedAlgorithm(SemanticSearchProvider $provider): string {
+		return $this->capturedCall($provider)[4];
+	}
+
+	/** @return float the score threshold actually sent to searchForUnifiedSearch */
+	private function capturedScoreThreshold(SemanticSearchProvider $provider): float {
+		return $this->capturedCall($provider)[6];
 	}
 
 	public function testLeavesSupportedAlgorithmUntouchedInHybridMode(): void {
 		$this->stubStoredAlgorithm('semantic');
 		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid']);
 		$this->assertSame('semantic', $this->capturedAlgorithm($provider));
+	}
+
+	/**
+	 * Dense-only search scores by cosine similarity, which genuinely is in
+	 * [0, 1], so the admin's percentage converts to a meaningful cut.
+	 */
+	public function testSendsAdminScoreThresholdForSemanticSearch(): void {
+		$this->stubStoredAlgorithm('semantic', '25');
+		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid']);
+		$this->assertEqualsWithDelta(0.25, $this->capturedScoreThreshold($provider), 0.0001);
+	}
+
+	/**
+	 * The fused-score algorithms must NOT receive it. Their score is an RRF rank
+	 * artifact bounded by 2/VECTOR_SEARCH_RRF_K — about 0.033 at the server's
+	 * default k=60 — so forwarding an admin setting of 25% would mean 0.25
+	 * against a 0.033 ceiling and return ZERO results for every query, with no
+	 * error to explain it. Regression guard for a silent, total search outage.
+	 *
+	 * @dataProvider fusedAlgorithms
+	 */
+	public function testSuppressesAdminScoreThresholdForFusedAlgorithms(string $algorithm): void {
+		$this->stubStoredAlgorithm($algorithm, '25');
+		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid']);
+		$this->assertSame(0.0, $this->capturedScoreThreshold($provider));
+	}
+
+	/** @return iterable<string, list<string>> */
+	public static function fusedAlgorithms(): iterable {
+		// Both route to the server's BM25HybridSearchAlgorithm and return a
+		// fused score — `bm25` is not a sparse-only path.
+		yield 'hybrid' => ['hybrid'];
+		yield 'bm25' => ['bm25'];
 	}
 }
