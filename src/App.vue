@@ -773,10 +773,24 @@ export default {
 			return (r) => r.rerank_score ?? r.score ?? 0
 		},
 
-		// Highest rank score on this page of results, i.e. the denominator the
-		// slider is relative to. 0 when there are no results.
-		topScore() {
-			return this.results.reduce((m, r) => Math.max(m, this.rankScore(r)), 0)
+		// Score RANGE over this page of results -- both ends, not just the
+		// ceiling. Anchoring the cut at 0 would be wrong wherever a score can go
+		// negative, and one of the offered fusions does: DBSF is
+		// admin-selectable and normalises against mean +/- 3 standard
+		// deviations, so points in the lower tail come back below zero. With a 0
+		// anchor the LOOSEST setting (0%) computes a cut of exactly 0 and
+		// silently drops every negative-scored row -- the precise opposite of
+		// "0% shows everything" -- and raising the slider against a negative top
+		// score moves the cut toward zero rather than away from it, inverting
+		// the ordering this control exists to respect.
+		scoreRange() {
+			return this.results.reduce(
+				(acc, r) => {
+					const s = this.rankScore(r)
+					return { min: Math.min(acc.min, s), max: Math.max(acc.max, s) }
+				},
+				{ min: Infinity, max: -Infinity },
+			)
 		},
 
 		// The slider is RELATIVE, not absolute. An absolute cut cannot work:
@@ -790,8 +804,16 @@ export default {
 		// Relative-to-top is scale-invariant, so this control keeps working
 		// across all three, and survives the server retuning k or switching
 		// fusion without going inert again.
+		// Interpolate across the observed range: 0% keeps everything, 100% keeps
+		// only rows tied with the best. Both scale- AND offset-invariant, so it
+		// behaves identically for a cosine similarity, an RRF fused score and a
+		// DBSF score that may be negative.
+		//
+		// -Infinity when there are no results, which admits nothing and is
+		// filtering an empty list anyway.
 		scoreCut() {
-			return (this.scoreThreshold / 100) * this.topScore
+			const { min, max } = this.scoreRange
+			return min + (this.scoreThreshold / 100) * (max - min)
 		},
 
 		filteredResults() {
