@@ -188,7 +188,24 @@ class SemanticSearchProvider implements IProvider {
 			offset: $offset,
 			algorithm: $algorithm,
 			fusion: $fusion,
-			scoreThreshold: (float)$scoreThreshold / 100.0, // Convert percentage to 0-1 range
+			// Only send the admin threshold for dense-only search, where the
+			// server's score is a cosine similarity genuinely in [0, 1] and a
+			// percentage converts meaningfully.
+			//
+			// On 'bm25'/'hybrid' the server returns an RRF *fused* score bounded
+			// by 2/VECTOR_SEARCH_RRF_K -- about 0.033 at its default k=60 -- so
+			// sending 5% here means 0.05 against a 0.033 ceiling and silently
+			// returns NOTHING for every query. The default is 0, so this has
+			// been latent rather than firing, but it is armed: any admin who
+			// moves the slider off zero disables Unified Search results
+			// entirely, with no error to explain it.
+			//
+			// The server applies this inside Qdrant before dedup, reranking and
+			// verify-on-read, so it is also a recall cut taken before ranking is
+			// final -- another reason not to drive it from a UI percentage.
+			// Cross-algorithm relevance filtering is done client-side in
+			// App.vue, relative to the best result, which is scale-invariant.
+			scoreThreshold: $algorithm === 'semantic' ? (float)$scoreThreshold / 100.0 : 0.0,
 			docTypes: $enabledDocTypes,
 		);
 

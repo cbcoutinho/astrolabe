@@ -256,9 +256,21 @@
 							min="0"
 							max="100"
 							step="5"
-							class="score-slider">
+							class="score-slider"
+							:disabled="settings.algorithm !== 'semantic'">
 						<p class="help-text">
 							{{ t('astrolabe', 'Filter out results below this relevance score. Set to 0 to show all results.') }}
+						</p>
+						<!--
+							Only dense-only search scores on a scale a percentage can address
+							(cosine similarity, genuinely 0-1). Keyword and hybrid return a
+							fused rank artifact whose whole range is a few percent, so a
+							non-zero value there would return NOTHING for every query. The
+							provider suppresses it for those algorithms, and this says so
+							rather than leaving the control looking effective.
+						-->
+						<p v-if="settings.algorithm !== 'semantic'" class="help-text">
+							{{ t('astrolabe', 'Not applicable to the selected search algorithm — this threshold applies to Semantic search only, and is ignored for Keyword and Hybrid. Use the relevance slider on the search page instead.') }}
 						</p>
 					</div>
 
