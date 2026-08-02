@@ -13,7 +13,7 @@
 
 services:
   db:
-    image: docker.io/library/mariadb:lts
+    image: docker.io/library/mariadb:lts@sha256:628f228f0fd5913a220438693576b29b6fe4dc1fa0a1298c0e98579fae28635f
     restart: "no"
     command: --transaction-isolation=READ-COMMITTED
     environment:
@@ -23,11 +23,11 @@ services:
       MYSQL_USER: nextcloud
 
   redis:
-    image: docker.io/library/redis:alpine
+    image: docker.io/library/redis:alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241
     restart: "no"
 
   app:
-    image: docker.io/library/nextcloud:32
+    image: docker.io/library/nextcloud:32@sha256:babc1c0990f246a687dbce71805c9d1c3564d6dd00c5c0cdc338fddfcc05e668
     restart: "no"
     ports:
       - "127.0.0.1:8080:80"
