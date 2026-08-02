@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.39.5 (2026-08-02)
+
+### Fix
+
+- **search**: anchor the relevance cut at the score floor, not at zero
+- **search**: make the relevance filter scale-invariant, stop showing a fake %
+
 ## v0.39.4 (2026-07-28)
 
 ### Fix
