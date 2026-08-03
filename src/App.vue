@@ -266,13 +266,17 @@
 								number behind it.
 							-->
 							<div v-if="typeof result.relevance === 'number'" class="mcp-relevance">
-								<div class="mcp-relevance-bar" :title="relevanceTitle(result)">
+								<div
+									class="mcp-relevance-bar"
+									role="img"
+									:title="relevanceTitle(result)"
+									:aria-label="relevanceTitle(result)">
 									<div
 										class="mcp-relevance-fill"
-										:style="{ width: Math.round(result.relevance * 100) + '%' }" />
+										:style="{ width: relevancePercent(result) + '%' }" />
 								</div>
 								<span v-if="relevanceIsCalibrated(result)" class="mcp-relevance-value">
-									{{ Math.round(result.relevance * 100) }}%
+									{{ relevancePercent(result) }}%
 								</span>
 							</div>
 							<div class="mcp-result-metadata">
@@ -857,13 +861,21 @@ export default {
 		// because that value means the same thing on every query and every
 		// deployment -- which is precisely what the old relative cut could not
 		// offer, and why it had to be relative.
-		filteredResults() {
+		// THE cut, in one place. The list and the plot both consume this, so
+		// their agreement is structural rather than two branches that happen to
+		// match -- which is exactly the drift the comment on
+		// filteredResultsAndCoords warns about.
+		isRelevant() {
 			if (this.hasRelevance) {
 				const cut = this.scoreThreshold / 100
-				return this.results.filter((r) => (r.relevance ?? 0) >= cut)
+				return (r) => (r.relevance ?? 0) >= cut
 			}
 			const cut = this.scoreCut
-			return this.results.filter((r) => this.rankScore(r) >= cut)
+			return (r) => this.rankScore(r) >= cut
+		},
+
+		filteredResults() {
+			return this.results.filter(this.isRelevant)
 		},
 
 		// Parallel arrays used by renderPlot. The coordinate guard is
@@ -871,11 +883,9 @@ export default {
 		// list view (filteredResults) intentionally stays independent so
 		// it still renders when PCA coordinates are unavailable.
 		filteredResultsAndCoords() {
-			// Must apply the SAME cut as filteredResults, or the plot and the
-			// list disagree about which results exist.
-			const absolute = this.hasRelevance
-			const cut = absolute ? this.scoreThreshold / 100 : this.scoreCut
-			const keep = (r) => (absolute ? (r.relevance ?? 0) : this.rankScore(r)) >= cut
+			// Same predicate as filteredResults by construction, so the plot and
+			// the list cannot disagree about which results exist.
+			const keep = this.isRelevant
 			return this.results.reduce((acc, r, i) => {
 				if (keep(r) && this.coordinates[i] !== undefined) {
 					acc.results.push(r)
@@ -1211,11 +1221,23 @@ export default {
 		// alone would otherwise read as a confidence to anyone who has seen one
 		// before.
 		relevanceTitle(result) {
-			const pct = Math.round((result.relevance ?? 0) * 100)
+			// this.t, not a bare t(): App.vue never imports it — main.js wires
+			// it onto globalProperties. A bare call would resolve only via
+			// Nextcloud's legacy l10n global, and since this runs from the
+			// template for every rendered row, its absence would throw during
+			// render rather than just return an untranslated string.
+			const pct = this.relevancePercent(result)
 			if (this.relevanceIsCalibrated(result)) {
-				return t('astrolabe', 'Relevance {pct}% — an estimated probability this result is relevant to your query. Relative to what was found: search always returns its best matches, even when nothing in your files answers the question.', { pct })
+				return this.t('astrolabe', 'Relevance {pct}% — an estimated probability this result is relevant to your query. Relative to what was found: search always returns its best matches, even when nothing in your files answers the question.', { pct })
 			}
-			return t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. Enable reranking for a calibrated score.', { pct })
+			return this.t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. Enable reranking for a calibrated score.', { pct })
+		},
+
+		// Clamped rather than trusting the [0,1] contract: an out-of-range value
+		// from a future server would otherwise render a negative-width or
+		// >100% bar, which looks like a UI bug rather than a data problem.
+		relevancePercent(result) {
+			return Math.round(Math.min(1, Math.max(0, result.relevance ?? 0)) * 100)
 		},
 
 		getDocumentUrl(result) {
