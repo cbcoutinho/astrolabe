@@ -115,7 +115,7 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label for="mcp-minimum-score">{{ t('astrolabe', 'Minimum relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
+								<label for="mcp-minimum-score">{{ hasRelevance ? t('astrolabe', 'Minimum relevance') : t('astrolabe', 'Minimum relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
 								<input
 									id="mcp-minimum-score"
 									v-model="scoreThreshold"
@@ -256,6 +256,25 @@
 								{{ result.title || t('astrolabe', 'Untitled') }}
 								<OpenInNew :size="14" class="mcp-external-icon" />
 							</a>
+							<!--
+								Relevance. The bar is drawn for every source because
+								all of them are monotone in whatever ordered the
+								results; the NUMBER is shown only when the server
+								says the value is a calibrated probability. Showing
+								a percentage for `fusion_ordinal` would be the same
+								mistake as the old score badge, with a better
+								number behind it.
+							-->
+							<div v-if="typeof result.relevance === 'number'" class="mcp-relevance">
+								<div class="mcp-relevance-bar" :title="relevanceTitle(result)">
+									<div
+										class="mcp-relevance-fill"
+										:style="{ width: Math.round(result.relevance * 100) + '%' }" />
+								</div>
+								<span v-if="relevanceIsCalibrated(result)" class="mcp-relevance-value">
+									{{ Math.round(result.relevance * 100) }}%
+								</span>
+							</div>
 							<div class="mcp-result-metadata">
 								<span v-if="result.chunk_index !== undefined && result.total_chunks">
 									{{ t('astrolabe', 'Chunk {chunk}/{total}', { chunk: result.chunk_index + 1, total: result.total_chunks }) }}
@@ -816,7 +835,33 @@ export default {
 			return min + (this.scoreThreshold / 100) * (max - min)
 		},
 
+		// Does this server report `relevance` (ADR-034)? Detected from the
+		// response rather than negotiated: the field is self-describing, so a
+		// server that has it says so by sending it. No capability call, no
+		// version check, and no deploy-order dependency in either direction --
+		// an older server simply keeps the relative-to-top behaviour below.
+		hasRelevance() {
+			return this.results.some((r) => typeof r.relevance === 'number')
+		},
+
+		// Only the calibrated source is a probability. `fusion_ordinal` orders
+		// results honestly but is NOT one, and rendering it as a percentage
+		// would recreate the exact bug this whole change exists to remove --
+		// just with a better-behaved number behind it.
+		relevanceIsCalibrated() {
+			return (r) => r.relevance_source === 'cross_encoder_calibrated'
+		},
+
+		// The cut the slider applies, and the one thing it must agree with is
+		// what the row displays. Absolute when the server reports `relevance`,
+		// because that value means the same thing on every query and every
+		// deployment -- which is precisely what the old relative cut could not
+		// offer, and why it had to be relative.
 		filteredResults() {
+			if (this.hasRelevance) {
+				const cut = this.scoreThreshold / 100
+				return this.results.filter((r) => (r.relevance ?? 0) >= cut)
+			}
 			const cut = this.scoreCut
 			return this.results.filter((r) => this.rankScore(r) >= cut)
 		},
@@ -826,9 +871,13 @@ export default {
 		// list view (filteredResults) intentionally stays independent so
 		// it still renders when PCA coordinates are unavailable.
 		filteredResultsAndCoords() {
-			const cut = this.scoreCut
+			// Must apply the SAME cut as filteredResults, or the plot and the
+			// list disagree about which results exist.
+			const absolute = this.hasRelevance
+			const cut = absolute ? this.scoreThreshold / 100 : this.scoreCut
+			const keep = (r) => (absolute ? (r.relevance ?? 0) : this.rankScore(r)) >= cut
 			return this.results.reduce((acc, r, i) => {
-				if (this.rankScore(r) >= cut && this.coordinates[i] !== undefined) {
+				if (keep(r) && this.coordinates[i] !== undefined) {
 					acc.results.push(r)
 					acc.coordinates.push(this.coordinates[i])
 				}
@@ -1155,6 +1204,18 @@ export default {
 				return text
 			}
 			return text.substring(0, maxLength).trim() + '...'
+		},
+
+		// Tooltip for the relevance bar. Says plainly what the number is and,
+		// for the sources that are not probabilities, what it is not -- the bar
+		// alone would otherwise read as a confidence to anyone who has seen one
+		// before.
+		relevanceTitle(result) {
+			const pct = Math.round((result.relevance ?? 0) * 100)
+			if (this.relevanceIsCalibrated(result)) {
+				return t('astrolabe', 'Relevance {pct}% — an estimated probability this result is relevant to your query. Relative to what was found: search always returns its best matches, even when nothing in your files answers the question.', { pct })
+			}
+			return t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. Enable reranking for a calibrated score.', { pct })
 		},
 
 		getDocumentUrl(result) {
@@ -2032,6 +2093,33 @@ export default {
 
 a.mcp-result-title {
 	cursor: pointer;
+}
+
+.mcp-relevance {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 6px;
+}
+
+.mcp-relevance-bar {
+	flex: 0 0 96px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--color-background-darker);
+	overflow: hidden;
+}
+
+.mcp-relevance-fill {
+	height: 100%;
+	border-radius: 2px;
+	background: var(--color-primary-element);
+}
+
+.mcp-relevance-value {
+	font-size: 0.8em;
+	color: var(--color-text-maxcontrast);
+	font-variant-numeric: tabular-nums;
 }
 
 .mcp-result-metadata {
