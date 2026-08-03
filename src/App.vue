@@ -268,7 +268,10 @@
 							<div v-if="typeof result.relevance === 'number'" class="mcp-relevance">
 								<div
 									class="mcp-relevance-bar"
-									role="img"
+									role="meter"
+									aria-valuemin="0"
+									aria-valuemax="100"
+									:aria-valuenow="relevancePercent(result)"
 									:title="relevanceTitle(result)"
 									:aria-label="relevanceTitle(result)">
 									<div
@@ -868,7 +871,13 @@ export default {
 		isRelevant() {
 			if (this.hasRelevance) {
 				const cut = this.scoreThreshold / 100
-				return (r) => (r.relevance ?? 0) >= cut
+				// A row with no `relevance` is UNKNOWN, not zero, so it is never
+				// dropped by the cut. hasRelevance is true when *some* row has
+				// the field, and treating a missing one as 0 would silently
+				// hide it the moment the slider left 0 -- the same "never hide
+				// what you could not score" rule the server applies to rows the
+				// reranker did not reach.
+				return (r) => typeof r.relevance !== 'number' || r.relevance >= cut
 			}
 			const cut = this.scoreCut
 			return (r) => this.rankScore(r) >= cut
