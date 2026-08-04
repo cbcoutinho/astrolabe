@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.40.0 (2026-08-04)
+
+### Feat
+
+- **search**: filter and display the server's relevance value
+
+### Fix
+
+- **search**: expose the relevance value to AT, and never hide an unscored row
+- **search**: resolve t() through the app instance, and share one cut
+
 ## v0.39.6 (2026-08-04)
 
 ### Fix
