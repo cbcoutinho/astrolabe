@@ -51,10 +51,14 @@ test.describe('Astrolabe search', () => {
 		// Result limit field
 		await expect(mainContent.getByText('Result Limit')).toBeVisible()
 
-		// Relevance slider. Labelled relative to the best result, not as an
-		// absolute score — the server's `score` is on a different scale per
-		// algorithm (cosine for semantic, an RRF fused score bounded by
-		// ~2/k for bm25/hybrid), so an absolute cut cannot mean one thing.
+		// Relevance slider. The label has two forms and this matches the prefix
+		// common to both, deliberately: against a server that reports
+		// `relevance` (ADR-034) the cut is ABSOLUTE, because that value means
+		// the same thing on every query; against an older server it falls back
+		// to "relative to the best result", since the raw `score` is on a
+		// different scale per algorithm (cosine for semantic, an RRF fused
+		// score bounded by ~2/k for bm25/hybrid) and no absolute cut can mean
+		// one thing across them.
 		await expect(mainContent.getByText('Minimum relevance')).toBeVisible()
 	})
 
