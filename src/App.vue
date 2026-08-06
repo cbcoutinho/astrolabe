@@ -1696,14 +1696,32 @@ export default {
 			if (result.doc_type !== 'file') {
 				return false
 			}
-			const mime = result.metadata?.mime_type
-			if (typeof mime === 'string' && mime) {
-				return mime.split(';')[0].trim().toLowerCase() === 'application/pdf'
+			const mime = this.normalizedMimeType(result)
+			if (mime) {
+				return mime === 'application/pdf'
 			}
 			// Older index entries predate mime_type in the payload; fall back to
 			// the path so they keep rendering instead of silently degrading.
 			const path = result.metadata?.path
 			return typeof path === 'string' && /\.pdf$/i.test(path.trim())
+		},
+
+		/**
+		 * A result's mime type with parameters stripped and case normalized.
+		 *
+		 * Shared by every mime check so they cannot disagree: a server returning
+		 * `application/pdf; charset=binary` or `IMAGE/PNG` must be read the same
+		 * way whichever call site sees it first.
+		 *
+		 * @param {object} result The search result to inspect.
+		 * @return {string} The bare lowercase mime type, or '' when absent.
+		 */
+		normalizedMimeType(result) {
+			const mime = result.metadata?.mime_type
+			if (typeof mime !== 'string' || !mime) {
+				return ''
+			}
+			return mime.split(';')[0].trim().toLowerCase()
 		},
 
 		/**
@@ -1715,8 +1733,7 @@ export default {
 		 */
 		imageFileIdsForSummary(result) {
 			const isImage = result.doc_type === 'file'
-				&& typeof result.metadata?.mime_type === 'string'
-				&& result.metadata.mime_type.startsWith('image/')
+				&& this.normalizedMimeType(result).startsWith('image/')
 			const fileId = Number(result.id)
 			return isImage && Number.isInteger(fileId) && fileId > 0 ? [fileId] : []
 		},
