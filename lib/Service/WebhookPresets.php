@@ -193,7 +193,7 @@ class WebhookPresets {
 		foreach (self::getPresets() as $presetId => $preset) {
 			$appName = $preset['app'];
 			// "files" is always available (core functionality)
-			if ($appName === 'files' || in_array($appName, $installedApps)) {
+			if ($appName === 'files' || in_array($appName, $installedApps, true)) {
 				$filtered[$presetId] = $preset;
 			}
 		}
