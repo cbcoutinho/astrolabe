@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.41.0 (2026-08-16)
+
+### Feat
+
+- **website**: point sign-in at the production portal, rework pricing page
+
 ## v0.40.1 (2026-08-08)
 
 ### Fix
