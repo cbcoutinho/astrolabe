@@ -132,7 +132,7 @@ class WebhookPresets {
 	/**
 	 * Get a webhook preset by ID.
 	 *
-	 * @param string $presetId Preset identifier (e.g., "notes_sync", "calendar_sync")
+	 * @param string $presetId Preset identifier (e.g., "notes_sync", "files_sync")
 	 * @return array|null Preset configuration or null if not found
 	 */
 	public static function getPreset(string $presetId): ?array {

@@ -133,7 +133,7 @@
 				<template v-else>
 					<div v-if="webhookPresets.length === 0" class="empty-state">
 						<NcNoteCard type="info">
-							<p>{{ t('astrolabe', 'No sync presets available. Install supported apps (Notes, Calendar, Tables, Forms) to enable synchronization.') }}</p>
+							<p>{{ t('astrolabe', 'No sync presets available. Install Notes or Deck to enable synchronization; file sync is always available.') }}</p>
 						</NcNoteCard>
 					</div>
 
