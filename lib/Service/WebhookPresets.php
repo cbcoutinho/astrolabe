@@ -5,10 +5,18 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Service;
 
 /**
- * Webhook preset configurations for common sync scenarios.
+ * Sync preset configurations: the event bundles an admin can turn on so
+ * {@see \OCA\Astrolabe\Listener\SyncEventListener} delivers them to the MCP
+ * server's webhook ingress.
  *
- * Defines pre-configured webhook bundles that simplify webhook setup
- * for common use cases like Notes sync, Calendar sync, etc.
+ * A preset only exists for content the MCP server actually indexes — notes,
+ * files carrying an index tag, and Deck cards. Presets for content with no
+ * index (calendar objects, Tables rows, Forms submissions) were removed in
+ * 0.42.0: they cost a background job per change and the server dropped the
+ * envelope on arrival. Those types stay in sync through the polling scanner.
+ *
+ * Before adding a preset, check that the server's
+ * ``vector/webhook_parser.py`` turns the event into a DocumentTask.
  */
 class WebhookPresets {
 	// File/Notes webhook events
@@ -24,19 +32,6 @@ class WebhookPresets {
 	// instead of waiting for the hourly scan. Requires NC >= 32 — MapperEvent
 	// gained getWebhookSerializable() in 32.0.0; older servers never deliver it.
 	public const SYSTEMTAG_EVENT_MAPPER = 'OCP\\SystemTag\\MapperEvent';
-
-	// Calendar webhook events
-	public const CALENDAR_EVENT_CREATED = 'OCP\\Calendar\\Events\\CalendarObjectCreatedEvent';
-	public const CALENDAR_EVENT_UPDATED = 'OCP\\Calendar\\Events\\CalendarObjectUpdatedEvent';
-	public const CALENDAR_EVENT_DELETED = 'OCP\\Calendar\\Events\\CalendarObjectDeletedEvent';
-
-	// Tables webhook events (Nextcloud 30+)
-	public const TABLES_EVENT_ROW_ADDED = 'OCA\\Tables\\Event\\RowAddedEvent';
-	public const TABLES_EVENT_ROW_UPDATED = 'OCA\\Tables\\Event\\RowUpdatedEvent';
-	public const TABLES_EVENT_ROW_DELETED = 'OCA\\Tables\\Event\\RowDeletedEvent';
-
-	// Forms webhook events (Nextcloud 30+)
-	public const FORMS_EVENT_FORM_SUBMITTED = 'OCA\\Forms\\Events\\FormSubmittedEvent';
 
 	// Deck webhook events (require nextcloud/deck PR #7910, which adds
 	// IWebhookCompatibleEvent to these event classes). BoardUpdatedEvent only
@@ -82,58 +77,9 @@ class WebhookPresets {
 					],
 				],
 			],
-			'calendar_sync' => [
-				'name' => 'Calendar Sync',
-				'description' => 'Real-time synchronization for Calendar events (create, update, delete)',
-				'app' => 'calendar',
-				'events' => [
-					[
-						'event' => self::CALENDAR_EVENT_CREATED,
-						'filter' => [],
-					],
-					[
-						'event' => self::CALENDAR_EVENT_UPDATED,
-						'filter' => [],
-					],
-					[
-						'event' => self::CALENDAR_EVENT_DELETED,
-						'filter' => [],
-					],
-				],
-			],
-			'tables_sync' => [
-				'name' => 'Tables Sync',
-				'description' => 'Real-time synchronization for Tables rows (add, update, delete)',
-				'app' => 'tables',
-				'events' => [
-					[
-						'event' => self::TABLES_EVENT_ROW_ADDED,
-						'filter' => [],
-					],
-					[
-						'event' => self::TABLES_EVENT_ROW_UPDATED,
-						'filter' => [],
-					],
-					[
-						'event' => self::TABLES_EVENT_ROW_DELETED,
-						'filter' => [],
-					],
-				],
-			],
-			'forms_sync' => [
-				'name' => 'Forms Sync',
-				'description' => 'Real-time synchronization for Forms submissions',
-				'app' => 'forms',
-				'events' => [
-					[
-						'event' => self::FORMS_EVENT_FORM_SUBMITTED,
-						'filter' => [],
-					],
-				],
-			],
 			'files_sync' => [
-				'name' => 'All Files Sync',
-				'description' => 'Real-time synchronization for all file operations (create, update, delete) and tag changes (Nextcloud 32+)',
+				'name' => 'Files Sync',
+				'description' => 'Real-time synchronization for indexed files: content changes to tagged documents, deletions, and index-tag changes (Nextcloud 32+)',
 				'app' => 'files',
 				'events' => [
 					[
