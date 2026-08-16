@@ -96,6 +96,33 @@ final class ApiControllerWebhookPresetsTest extends AbstractApiControllerTestCas
 		$this->assertFalse($response->getData()['success']);
 	}
 
+	/**
+	 * The removed presets are the ids an admin is most likely to still have in
+	 * a stale config or a bookmarked request, so pin that they are now rejected
+	 * like any other unknown id — not silently accepted into the enabled list.
+	 *
+	 * @dataProvider removedPresetIdProvider
+	 */
+	public function testEnableRemovedPresetReturns400(string $presetId): void {
+		$this->appConfig->expects($this->never())->method('setValueString');
+
+		$response = $this->controller->enableWebhookPreset($presetId);
+
+		$this->assertEquals(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertFalse($response->getData()['success']);
+	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function removedPresetIdProvider(): array {
+		return [
+			'calendar' => ['calendar_sync'],
+			'tables' => ['tables_sync'],
+			'forms' => ['forms_sync'],
+		];
+	}
+
 	public function testDisablePresetRemovesIdFromConfig(): void {
 		$this->appConfig->method('getValueString')->willReturn('["notes_sync","files_sync"]');
 		$this->appConfig->expects($this->once())
