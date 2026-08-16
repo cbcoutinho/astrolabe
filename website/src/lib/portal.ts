@@ -3,8 +3,8 @@
 // cloudfleet). So every auth affordance links cross-domain to the portal's own
 // /api/auth route. NEXT_PUBLIC_PORTAL_URL is the portal origin; it MUST be
 // inlined at build time (NEXT_PUBLIC_ prefix) because these links render into
-// statically-exported HTML. The Pages workflow sets it to the dev portal for
-// now (https://app.dev.astrolabecloud.com); flip to the prod portal at launch.
+// statically-exported HTML. The Pages workflow sets it to the production portal
+// (https://app.astrolabecloud.com).
 // Defaults to the local portal dev server (apps/web on :3000) for local runs.
 const PORTAL_URL = (
   process.env.NEXT_PUBLIC_PORTAL_URL ?? "http://localhost:3000"
