@@ -65,9 +65,8 @@ jobs:
 
       - name: Build static export
         env:
-          # Portal origin baked into the static build. Dev portal for now; flip
-          # to https://app.astrolabecloud.com at production launch.
-          NEXT_PUBLIC_PORTAL_URL: https://app.dev.astrolabecloud.com
+          # Portal origin baked into the static build (production portal).
+          NEXT_PUBLIC_PORTAL_URL: https://app.astrolabecloud.com
         run: |
           # Bake the build year into the static HTML so the footer copyright
           # tracks the deploy date rather than whenever the source last
