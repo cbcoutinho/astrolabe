@@ -1,0 +1,73 @@
+# External-IdP overlay for the E2E stack (GH #324).
+#
+# Applied on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.external-idp.yml up -d
+#
+# It swaps the deployment from "Nextcloud is the IdP" (the `oidc` app) to
+# "Keycloak is the IdP" (the `user_oidc` app): the `oidc` app is never
+# installed, Nextcloud logins go through Keycloak, and the MCP server validates
+# Keycloak-issued tokens. That is the deployment reported in GH #324, where
+# Astrolabe's token mint dispatches an `oidc` event class that does not exist.
+#
+# EXTERNAL_IDP=1 is what the shared app-hooks branch on.
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    restart: "no"
+    command:
+      - start-dev
+      - --import-realm
+      # The browser reaches Keycloak on :8888, Nextcloud reaches it on
+      # keycloak:8080. Backchannel-dynamic keeps the internal calls (token,
+      # JWKS, userinfo) on the hostname they were dialled with, so the
+      # discovery document is usable from both sides.
+      - --hostname=http://localhost:8888
+      - --hostname-strict=false
+      - --hostname-backchannel-dynamic=true
+    ports:
+      - "127.0.0.1:8888:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/astrolabe-e2e HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 'HTTP/1.1 200'"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  app:
+    environment:
+      # Hooks branch on this: install user_oidc + register the Keycloak
+      # provider instead of installing the `oidc` identity-provider app.
+      EXTERNAL_IDP: "1"
+      KEYCLOAK_REALM_URL: http://keycloak:8080/realms/astrolabe-e2e
+      KEYCLOAK_CLIENT_ID: nextcloud
+      KEYCLOAK_CLIENT_SECRET: nextcloud-secret-e2e
+      # Target audience Astrolabe asks user_oidc to exchange the login token
+      # for — the MCP server's Keycloak client.
+      MCP_TOKEN_AUDIENCE: nextcloud-mcp-server
+
+  mcp:
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      # External-IdP mode: the OAuth issuer is Keycloak, not Nextcloud.
+      OIDC_DISCOVERY_URL: http://keycloak:8080/realms/astrolabe-e2e/.well-known/openid-configuration
+      OIDC_JWKS_URI: http://keycloak:8080/realms/astrolabe-e2e/protocol/openid-connect/certs
+      OIDC_ISSUER: http://keycloak:8080/realms/astrolabe-e2e
+      NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8888/realms/astrolabe-e2e
+      NEXTCLOUD_OIDC_CLIENT_ID: nextcloud-mcp-server
+      NEXTCLOUD_OIDC_CLIENT_SECRET: mcp-secret-e2e
+      # Keycloak uses client IDs as audiences, not URLs (ADR-005).
+      NEXTCLOUD_RESOURCE_URI: nextcloud
+      # Login Flow v2 must still send the browser to Nextcloud, not Keycloak.
+      NEXTCLOUD_PUBLIC_URL: http://localhost:8080
+      # Management-API allowlist: the `azp` of whatever Astrolabe presents.
+      # `nextcloud` is the user_oidc login client (login-token path);
+      # `nextcloud-mcp-server` is the exchange target (token-exchange path).
+      ALLOWED_MGMT_CLIENT: nextcloud,nextcloud-mcp-server

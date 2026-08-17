@@ -14,7 +14,25 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const composeFile = join(__dirname, 'docker-compose.yml')
+
+// Base stack, plus any overlays named in E2E_COMPOSE_OVERLAY (space-separated
+// file names relative to this directory) — e.g. the external-IdP lane passes
+// docker-compose.external-idp.yml.
+//
+// The names are interpolated into a shell command below, so they are
+// constrained to bare filenames here rather than trusted. Today the only
+// writer is playwright.external-idp.config.ts, but a plain filename is all
+// this was ever meant to accept, so reject anything else at the boundary
+// instead of relying on where the value came from.
+const overlays = (process.env.E2E_COMPOSE_OVERLAY ?? '').split(/\s+/).filter(Boolean)
+for (const overlay of overlays) {
+	if (!/^[\w.-]+\.ya?ml$/.test(overlay) || overlay.includes('..')) {
+		throw new Error(`E2E_COMPOSE_OVERLAY must be bare compose filenames; got ${JSON.stringify(overlay)}`)
+	}
+}
+
+const composeFiles = ['docker-compose.yml', ...overlays]
+const fileArgs = composeFiles.map((f) => `-f "${join(__dirname, f)}"`).join(' ')
 
 function log(msg) {
 	process.stderr.write(`[start-server] ${msg}\n`)
@@ -26,7 +44,7 @@ function log(msg) {
  */
 function compose(args) {
 	try {
-		const output = execSync(`docker compose -f "${composeFile}" ${args}`, {
+		const output = execSync(`docker compose ${fileArgs} ${args}`, {
 			stdio: 'pipe',
 			encoding: 'utf-8',
 		})
@@ -44,7 +62,7 @@ function compose(args) {
 function stopServices() {
 	log('Stopping docker-compose services...')
 	try {
-		execSync(`docker compose -f "${composeFile}" down -v --remove-orphans --timeout 30`, {
+		execSync(`docker compose ${fileArgs} down -v --remove-orphans --timeout 30`, {
 			stdio: 'pipe',
 		})
 	} catch {

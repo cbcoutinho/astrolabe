@@ -24,6 +24,22 @@ MCP_PUBLIC_URL="http://localhost:8000"
 echo "Configuring MCP server public URL: $MCP_PUBLIC_URL"
 php /var/www/html/occ config:system:set mcp_server_public_url --value="$MCP_PUBLIC_URL"
 
+if [ "${EXTERNAL_IDP:-0}" = "1" ]; then
+    # External-IdP lane (GH #324): there is no `oidc` app to register a client
+    # in. Astrolabe has to obtain the user's token from `user_oidc` instead.
+    # `astrolabe_client_id` is still the one knob the admin sets — here it names
+    # the IdP client the token is meant for (the token-exchange audience)
+    # rather than a locally registered `oidc` client. Setting it is also what
+    # makes this lane reproduce GH #324 exactly: with it unset the mint bails
+    # earlier, before it ever touches the missing `oidc` event class.
+    php /var/www/html/occ config:system:set astrolabe_client_id \
+        --value="${MCP_TOKEN_AUDIENCE:-nextcloud-mcp-server}"
+    php /var/www/html/occ config:system:set mcp_webhook_secret \
+        --value="astrolabe-e2e-webhook-secret"
+    echo "External-IdP lane: skipped oidc client registration"
+    exit 0
+fi
+
 # OIDC app requires the client identifier to be A-Za-z0-9, 32-64 chars.
 CLIENT_ID="astrolabeE2eTestOidcClientId00001"
 

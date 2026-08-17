@@ -41,10 +41,13 @@ See [documentation](https://github.com/cbcoutinho/astrolabe) for configuration d
 	<screenshot>https://github.com/cbcoutinho/astrolabe/blob/main/screenshots/03-chunk-viewer-open.png?raw=1</screenshot>
 	<dependencies>
 		<nextcloud min-version="32" max-version="34"/>
-		<!-- Required: Astrolabe mints session-derived JWTs by dispatching
-		     OCA\OIDCIdentityProvider\Event\TokenGenerationRequestEvent.
-		     If the `oidc` app is missing, the token-mint path raises. -->
-		<app>oidc</app>
+		<!-- Astrolabe needs ONE of two OIDC integrations to derive a per-user
+		     token from the session: `oidc` (Nextcloud as identity provider,
+		     dispatching TokenGenerationRequestEvent) or `user_oidc` (Nextcloud
+		     as a client of an external IdP, handing out the user's own token).
+		     <app> dependencies are AND-ed and cannot express that choice, so
+		     neither is declared here; McpTokenMinter picks whichever is enabled
+		     and fails with an actionable message when neither is. -->
 	</dependencies>
 	<commands>
 		<!-- Diagnostic: the MCP tool catalogue is filtered server-side per token,

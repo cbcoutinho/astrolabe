@@ -1,0 +1,75 @@
+{
+  "realm": "astrolabe-e2e",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 1800,
+  "ssoSessionIdleTimeout": 3600,
+  "clients": [
+    {
+      "clientId": "nextcloud",
+      "name": "Nextcloud (user_oidc login client)",
+      "description": "Browser login client for the user_oidc app. Also the client that requests token exchange towards nextcloud-mcp-server.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "nextcloud-secret-e2e",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8080/*", "http://app/*"],
+      "webOrigins": ["http://localhost:8080"],
+      "fullScopeAllowed": true,
+      "attributes": {
+        "use.refresh.tokens": "true",
+        "display.on.consent.screen": "false",
+        "standard.token.exchange.enabled": "true",
+        "client.token.exchange.standard.enabled": "true",
+        "token.exchange.grant.enabled": "true"
+      }
+    },
+    {
+      "clientId": "nextcloud-mcp-server",
+      "name": "Nextcloud MCP Server",
+      "description": "Resource server. Target audience of the token exchange Astrolabe asks user_oidc for.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "mcp-secret-e2e",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "fullScopeAllowed": true,
+      "attributes": {
+        "display.on.consent.screen": "false",
+        "standard.token.exchange.enabled": "true",
+        "client.token.exchange.standard.enabled": "true",
+        "token.exchange.grant.enabled": "true"
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["default-roles-astrolabe-e2e"]
+    }
+  ]
+}

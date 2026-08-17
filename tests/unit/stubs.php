@@ -91,3 +91,71 @@ namespace OCA\OIDCIdentityProvider\Event {
 		}
 	}
 }
+
+namespace OCA\UserOIDC\Model {
+	/*
+	 * Stub for the user_oidc app's Token model — only the accessor
+	 * McpTokenMinter reads.
+	 * Real implementation: https://github.com/nextcloud/user_oidc/blob/main/lib/Model/Token.php
+	 */
+	if (!class_exists(Token::class)) {
+		class Token {
+			public function __construct(
+				private string $accessToken = '',
+			) {
+			}
+
+			public function getAccessToken(): string {
+				return $this->accessToken;
+			}
+		}
+	}
+}
+
+namespace OCA\UserOIDC\Event {
+	use OCA\UserOIDC\Model\Token;
+
+	/*
+	 * Stubs for the user_oidc events Astrolabe dispatches when Nextcloud is a
+	 * client of an external identity provider (GH #324).
+	 * Real implementations: https://github.com/nextcloud/user_oidc/tree/main/lib/Event
+	 */
+	if (!class_exists(ExchangedTokenRequestedEvent::class)) {
+		class ExchangedTokenRequestedEvent extends \OCP\EventDispatcher\Event {
+			private ?Token $token = null;
+
+			public function __construct(
+				private string $targetAudience,
+				private array $extraScopes = [],
+			) {
+				parent::__construct();
+			}
+
+			public function getTargetAudience(): string {
+				return $this->targetAudience;
+			}
+			public function getExtraScopes(): array {
+				return $this->extraScopes;
+			}
+			public function getToken(): ?Token {
+				return $this->token;
+			}
+			public function setToken(?Token $token): void {
+				$this->token = $token;
+			}
+		}
+	}
+
+	if (!class_exists(ExternalTokenRequestedEvent::class)) {
+		class ExternalTokenRequestedEvent extends \OCP\EventDispatcher\Event {
+			private ?Token $token = null;
+
+			public function getToken(): ?Token {
+				return $this->token;
+			}
+			public function setToken(?Token $token): void {
+				$this->token = $token;
+			}
+		}
+	}
+}
