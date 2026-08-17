@@ -10,6 +10,7 @@ use OCA\UserOIDC\Event\ExternalTokenRequestedEvent;
 use OCP\App\IAppManager;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
+use OCP\IUserManager;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
@@ -44,9 +45,27 @@ class McpTokenMinter {
 		private IEventDispatcher $eventDispatcher,
 		private IConfig $config,
 		private IAppManager $appManager,
+		private IUserManager $userManager,
 		private IUserSession $userSession,
 		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Is $appId enabled for the user we are minting for?
+	 *
+	 * Resolved against that user explicitly rather than letting IAppManager
+	 * fall back to the session. Without a session it only recognises apps
+	 * enabled for *everyone*, so a group-restricted `oidc` install would look
+	 * absent and send us down the external-IdP branch — which is reachable
+	 * today from `occ astrolabe:mcp-probe` and any task-processing path, where
+	 * there is no session at all.
+	 *
+	 * A UID with no account falls back to the session user, matching
+	 * IAppManager's own default.
+	 */
+	private function isAppEnabledFor(string $appId, string $userId): bool {
+		return $this->appManager->isEnabledForUser($appId, $this->userManager->get($userId));
 	}
 
 	/**
@@ -81,7 +100,7 @@ class McpTokenMinter {
 			);
 		}
 
-		$token = $this->appManager->isEnabledForUser('oidc')
+		$token = $this->isAppEnabledFor('oidc', $userId)
 			? $this->mintFromInternalIdp($userId, $extraScopes, $clientId)
 			: $this->mintFromExternalIdp($userId, $extraScopes, $clientId);
 
@@ -139,7 +158,7 @@ class McpTokenMinter {
 	 * @throws McpTokenMintException
 	 */
 	private function mintFromExternalIdp(string $userId, string $extraScopes, string $audience): string {
-		if (!$this->appManager->isEnabledForUser('user_oidc')) {
+		if (!$this->isAppEnabledFor('user_oidc', $userId)) {
 			throw new McpTokenMintException(
 				'Astrolabe needs an OIDC integration to authenticate you against the '
 				. "MCP server: install the 'oidc' app (Nextcloud as identity provider) "
@@ -160,9 +179,9 @@ class McpTokenMinter {
 		$scopes = $extraScopes === '' ? [] : array_values(array_filter(explode(' ', trim($extraScopes))));
 
 		// Preferred: a token minted for the MCP server's audience only.
-		// ponytail: an IdP without token exchange logs one user_oidc error per
-		// request before the fallback wins. Add an opt-out config if that noise
-		// bothers anyone; the mint itself is memoized per request already.
+		// Note: an IdP without token exchange makes user_oidc log one error per
+		// request before the fallback wins. Bounded (the mint is memoized per
+		// request); add an opt-out config if that noise ever bothers anyone.
 		try {
 			$exchange = new ExchangedTokenRequestedEvent($audience, $scopes);
 			$this->eventDispatcher->dispatchTyped($exchange);

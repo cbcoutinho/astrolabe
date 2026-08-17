@@ -22,11 +22,19 @@ test.describe('Astrolabe search behind an external IdP', () => {
 		await loginViaKeycloak(page)
 	})
 
-	test('the oidc identity-provider app really is absent', async ({ page }) => {
-		// Guards the premise: if a future change installs `oidc` in this lane,
-		// the test below would pass for the wrong reason.
-		const response = await page.request.get('/apps/user_oidc/api/v1/provider')
-		expect(response.status(), 'user_oidc must be installed in this lane').toBeLessThan(500)
+	test('this lane really is running on user_oidc, not oidc', async ({ page }) => {
+		// Guards the premise of the test below: if a future change flipped this
+		// lane back to the `oidc` app, search would pass for the wrong reason.
+		const userOidc = await page.request.get('/apps/user_oidc/api/v1/provider')
+		expect(userOidc.status(), 'user_oidc must be installed in this lane').toBeLessThan(500)
+
+		// Nextcloud 404s routes belonging to a disabled app. `GET
+		// /apps/oidc/authorize` (LoginRedirector#authorize) is registered
+		// whenever the oidc app is enabled — with no query parameters it
+		// answers 4xx-but-not-404 — so a 404 here means the app is genuinely
+		// absent rather than merely unhappy with the request.
+		const oidc = await page.request.get('/apps/oidc/authorize')
+		expect(oidc.status(), 'the oidc identity-provider app must be absent').toBe(404)
 	})
 
 	test('search returns a result set rather than a token-mint failure', async ({ page }) => {

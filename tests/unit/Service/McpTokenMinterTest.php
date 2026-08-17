@@ -14,6 +14,7 @@ use OCP\App\IAppManager;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
 use OCP\IUser;
+use OCP\IUserManager;
 use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -23,6 +24,7 @@ class McpTokenMinterTest extends TestCase {
 	private IEventDispatcher&MockObject $eventDispatcher;
 	private IConfig&MockObject $config;
 	private IAppManager&MockObject $appManager;
+	private IUserManager&MockObject $userManager;
 	private IUserSession&MockObject $userSession;
 	private LoggerInterface&MockObject $logger;
 	private McpTokenMinter $minter;
@@ -32,15 +34,21 @@ class McpTokenMinterTest extends TestCase {
 		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->appManager = $this->createMock(IAppManager::class);
+		$this->userManager = $this->createMock(IUserManager::class);
 		$this->userSession = $this->createMock(IUserSession::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		// Default deployment for the existing tests: Nextcloud is the IdP.
 		$this->appManager->method('isEnabledForUser')
 			->willReturnCallback(static fn (string $app): bool => $app === 'oidc');
-		$this->minter = new McpTokenMinter(
+		$this->minter = $this->buildMinter($this->appManager);
+	}
+
+	private function buildMinter(IAppManager&MockObject $appManager): McpTokenMinter {
+		return new McpTokenMinter(
 			$this->eventDispatcher,
 			$this->config,
-			$this->appManager,
+			$appManager,
+			$this->userManager,
 			$this->userSession,
 			$this->logger,
 		);
@@ -61,13 +69,7 @@ class McpTokenMinterTest extends TestCase {
 			$this->userSession->method('getUser')->willReturn($user);
 		}
 
-		$this->minter = new McpTokenMinter(
-			$this->eventDispatcher,
-			$this->config,
-			$appManager,
-			$this->userSession,
-			$this->logger,
-		);
+		$this->minter = $this->buildMinter($appManager);
 	}
 
 	private function configureClientId(string $clientId = 'astrolabe-client'): void {
@@ -236,13 +238,7 @@ class McpTokenMinterTest extends TestCase {
 	public function testThrowsCleanlyWhenNeitherOidcAppIsEnabled(): void {
 		$appManager = $this->createMock(IAppManager::class);
 		$appManager->method('isEnabledForUser')->willReturn(false);
-		$this->minter = new McpTokenMinter(
-			$this->eventDispatcher,
-			$this->config,
-			$appManager,
-			$this->userSession,
-			$this->logger,
-		);
+		$this->minter = $this->buildMinter($appManager);
 		$this->configureClientId();
 
 		// GH #324: this used to be a PHP fatal ("Class ... not found"), which
@@ -250,5 +246,33 @@ class McpTokenMinterTest extends TestCase {
 		$this->expectException(McpTokenMintException::class);
 		$this->expectExceptionMessageMatches('/user_oidc/');
 		$this->minter->mintForUser('alice');
+	}
+
+	public function testResolvesAppEnablementAgainstTheTargetUserNotTheSession(): void {
+		// Without an explicit IUser, IAppManager answers for the *session* user
+		// — and with no session it only sees apps enabled for everyone. That
+		// sends a group-restricted `oidc` install down the external-IdP branch
+		// from sessionless callers like `occ astrolabe:mcp-probe`.
+		$alice = $this->createMock(IUser::class);
+		$this->userManager->method('get')->with('alice')->willReturn($alice);
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->expects($this->once())
+			->method('isEnabledForUser')
+			->with('oidc', $alice)
+			->willReturn(true);
+
+		$this->minter = $this->buildMinter($appManager);
+		$this->configureClientId();
+
+		$this->eventDispatcher->expects($this->once())
+			->method('dispatchTyped')
+			->willReturnCallback(function (object $event): void {
+				$this->assertInstanceOf(TokenGenerationRequestEvent::class, $event);
+				/** @var TokenGenerationRequestEvent $event */
+				$event->setAccessToken('minted-for-alice');
+			});
+
+		$this->assertSame('minted-for-alice', $this->minter->mintForUser('alice'));
 	}
 }
