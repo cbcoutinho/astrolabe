@@ -24,10 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     name: e2e (${{ matrix.lane }})
-    # The external-IdP lane also needs the MCP server to read `azp` when a token
-    # carries no `client_id` claim (Keycloak stamps only the former), so it stays
-    # non-blocking until an image with that fix is pinned in docker-compose.yml.
-    continue-on-error: ${{ matrix.allow-failure }}
 
     strategy:
       fail-fast: false
@@ -37,12 +33,13 @@ jobs:
           - lane: internal-idp
             config: ''
             compose: '-f tests/e2e/docker-compose.yml'
-            allow-failure: false
           # Nextcloud is a client of Keycloak (`user_oidc` app) — GH #324.
+          # Gating, as of MCP server 0.176.3: before that the server read only
+          # the `client_id` claim, so it refused the Keycloak tokens (which
+          # carry `azp`) this lane presents.
           - lane: external-idp
             config: '--config playwright.external-idp.config.ts'
             compose: '-f tests/e2e/docker-compose.yml -f tests/e2e/docker-compose.external-idp.yml'
-            allow-failure: true
 
     steps:
       - name: Checkout
