@@ -25,6 +25,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.42.0 (2026-08-17)
+
+### BREAKING CHANGE
+
+- the `calendar_sync`, `tables_sync` and `forms_sync` presets are
+removed from the admin UI and the `/apps/astrolabe/api/admin/webhooks/presets` API;
+enabling them now returns 400. Calendar events, Tables rows and Forms submissions
+were never indexed by the MCP server and continue to be reconciled by its polling
+scanner.
+
+### Feat
+
+- **sync**: drop sync presets for content the MCP server cannot index
+
+### Fix
+
+- **admin**: stop pointing admins at apps that no longer gate a preset
+
+### Refactor
+
+- **sync**: compare app ids strictly when filtering presets
+
 ## v0.41.0 (2026-08-16)
 
 ### Feat
