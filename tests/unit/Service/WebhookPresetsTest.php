@@ -37,4 +37,27 @@ final class WebhookPresetsTest extends TestCase {
 			WebhookPresets::decodeEnabledPresetIds('["notes_sync", 42, null, {"x":1}]'),
 		);
 	}
+
+	/**
+	 * Guard: a preset must map to content the MCP server indexes, otherwise
+	 * enabling it only burns a background job per change — the server drops the
+	 * envelope on arrival (see its ``vector/webhook_parser.py``). Calendar,
+	 * Tables and Forms presets were removed for exactly that reason; re-adding
+	 * one needs a parser on the other side first.
+	 */
+	public function testCatalogueOnlyOffersIndexedContent(): void {
+		$this->assertSame(
+			['notes_sync', 'files_sync', 'deck_sync'],
+			array_keys(WebhookPresets::getPresets()),
+		);
+	}
+
+	public function testEveryPresetDeclaresAtLeastOneEvent(): void {
+		foreach (array_keys(WebhookPresets::getPresets()) as $presetId) {
+			$this->assertNotEmpty(
+				WebhookPresets::getPresetEvents($presetId),
+				"Preset $presetId declares no events",
+			);
+		}
+	}
 }
