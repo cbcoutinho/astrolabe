@@ -23,7 +23,26 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    name: e2e
+    name: e2e (${{ matrix.lane }})
+    # The external-IdP lane also needs the MCP server to read `azp` when a token
+    # carries no `client_id` claim (Keycloak stamps only the former), so it stays
+    # non-blocking until an image with that fix is pinned in docker-compose.yml.
+    continue-on-error: ${{ matrix.allow-failure }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Nextcloud is the IdP (`oidc` app).
+          - lane: internal-idp
+            config: ''
+            compose: '-f tests/e2e/docker-compose.yml'
+            allow-failure: false
+          # Nextcloud is a client of Keycloak (`user_oidc` app) — GH #324.
+          - lane: external-idp
+            config: '--config playwright.external-idp.config.ts'
+            compose: '-f tests/e2e/docker-compose.yml -f tests/e2e/docker-compose.external-idp.yml'
+            allow-failure: true
 
     steps:
       - name: Checkout
@@ -117,23 +136,23 @@ jobs:
 
       - name: Run E2E tests
         timeout-minutes: 30
-        run: npx playwright test
+        run: npx playwright test ${{ matrix.config }}
 
       - name: Collect service logs
         if: always()
         run: |
-          docker compose -f tests/e2e/docker-compose.yml logs --tail=500 > /tmp/docker-compose-logs.txt 2>&1 || true
+          docker compose ${{ matrix.compose }} logs --tail=500 > /tmp/docker-compose-logs.txt 2>&1 || true
 
       - name: Tear down services
         if: always()
         run: |
-          docker compose -f tests/e2e/docker-compose.yml down -v --remove-orphans || true
+          docker compose ${{ matrix.compose }} down -v --remove-orphans || true
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: e2e-report
+          name: e2e-report-${{ matrix.lane }}
           path: |
             test-results/
             playwright-report/

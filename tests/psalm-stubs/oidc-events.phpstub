@@ -3,12 +3,13 @@
 declare(strict_types=1);
 
 /**
- * Psalm stub for the Nextcloud `oidc` app's event(s) that Astrolabe dispatches.
+ * Psalm stubs for the IdP-app events Astrolabe dispatches: the `oidc` app's
+ * (Nextcloud as identity provider) and `user_oidc`'s (Nextcloud as a client of
+ * an external identity provider, GH #324).
  *
- * The `oidc` app is a runtime dependency (declared in appinfo/info.xml) but is
- * NOT a Composer/static-analysis dependency, so Psalm cannot see this class and
- * would otherwise infer `mixed` for the event and its return values. This stub
- * gives Psalm the real shape used by McpTokenMinter.
+ * Neither app is a Composer/static-analysis dependency, so Psalm cannot see
+ * these classes and would otherwise infer `mixed` for the events and their
+ * return values. These stubs give Psalm the real shapes used by McpTokenMinter.
  */
 
 namespace OCA\OIDCIdentityProvider\Event;
@@ -46,5 +47,59 @@ class TokenGenerationRequestEvent extends Event {
 	}
 
 	public function setExpiresIn(?int $expiresIn): void {
+	}
+}
+
+namespace OCA\UserOIDC\Model;
+
+class Token {
+	public function getAccessToken(): string {
+	}
+
+	public function getIdToken(): ?string {
+	}
+
+	public function getExpiresIn(): int {
+	}
+
+	public function isExpired(): bool {
+	}
+}
+
+namespace OCA\UserOIDC\Event;
+
+use OCA\UserOIDC\Model\Token;
+use OCP\EventDispatcher\Event;
+
+class ExchangedTokenRequestedEvent extends Event {
+	/** @param list<string> $extraScopes */
+	public function __construct(
+		string $targetAudience,
+		array $extraScopes = [],
+	) {
+	}
+
+	public function getTargetAudience(): string {
+	}
+
+	/** @return list<string> */
+	public function getExtraScopes(): array {
+	}
+
+	public function getToken(): ?Token {
+	}
+
+	public function setToken(?Token $token): void {
+	}
+}
+
+class ExternalTokenRequestedEvent extends Event {
+	public function __construct() {
+	}
+
+	public function getToken(): ?Token {
+	}
+
+	public function setToken(?Token $token): void {
 	}
 }

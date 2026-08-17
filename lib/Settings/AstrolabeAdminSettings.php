@@ -23,10 +23,13 @@ class AstrolabeAdminSettings implements IDeclarativeSettingsForm {
 			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL,
 			'title' => $this->l->t('MCP Server Configuration'),
 			'description' => $this->l->t(
-				'Astrolabe authenticates to the MCP server with short-lived JWTs '
-				. "minted by the Nextcloud 'oidc' app for the current session user. "
-				. "Register an OIDC client in the 'oidc' app whose resource URL "
-				. 'matches your MCP server, then enter its client ID below.'
+				'Astrolabe authenticates to the MCP server on behalf of the current '
+				. "session user. With the 'oidc' app (Nextcloud is the identity "
+				. 'provider) it mints a short-lived JWT: register an OIDC client whose '
+				. "resource URL matches your MCP server. With the 'user_oidc' app "
+				. '(Nextcloud signs users in through an external identity provider such '
+				. "as Keycloak) it uses the user's own token from that provider. Either "
+				. 'way, enter the client identifier the token is for below.'
 			),
 			'doc_url' => 'https://github.com/cbcoutinho/nextcloud-mcp-server',
 
@@ -59,9 +62,11 @@ class AstrolabeAdminSettings implements IDeclarativeSettingsForm {
 					'id' => 'astrolabe_client_id',
 					'title' => $this->l->t('OIDC client identifier'),
 					'description' => $this->l->t(
-						"Identifier of the OIDC client registered in the Nextcloud 'oidc' app. "
-						. "Astrolabe dispatches OIDCIdentityProvider's TokenGenerationRequestEvent "
-						. 'against this client to mint per-user access tokens for the MCP server.'
+						"With the 'oidc' app: the identifier of the OIDC client registered "
+						. 'there, which Astrolabe mints per-user access tokens against. '
+						. "With the 'user_oidc' app: the identifier of the client at your "
+						. 'external identity provider that the MCP server accepts tokens for '
+						. "(the token exchange's target audience)."
 					),
 					'type' => DeclarativeSettingsTypes::TEXT,
 					'placeholder' => $this->l->t('Enter OIDC client ID'),

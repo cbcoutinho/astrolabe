@@ -14,7 +14,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const composeFile = join(__dirname, 'docker-compose.yml')
+
+// Base stack, plus any overlays named in E2E_COMPOSE_OVERLAY (space-separated
+// file names relative to this directory) — e.g. the external-IdP lane passes
+// docker-compose.external-idp.yml.
+const composeFiles = ['docker-compose.yml', ...(process.env.E2E_COMPOSE_OVERLAY ?? '').split(/\s+/).filter(Boolean)]
+const fileArgs = composeFiles.map((f) => `-f "${join(__dirname, f)}"`).join(' ')
 
 function log(msg) {
 	process.stderr.write(`[start-server] ${msg}\n`)
@@ -26,7 +31,7 @@ function log(msg) {
  */
 function compose(args) {
 	try {
-		const output = execSync(`docker compose -f "${composeFile}" ${args}`, {
+		const output = execSync(`docker compose ${fileArgs} ${args}`, {
 			stdio: 'pipe',
 			encoding: 'utf-8',
 		})
@@ -44,7 +49,7 @@ function compose(args) {
 function stopServices() {
 	log('Stopping docker-compose services...')
 	try {
-		execSync(`docker compose -f "${composeFile}" down -v --remove-orphans --timeout 30`, {
+		execSync(`docker compose ${fileArgs} down -v --remove-orphans --timeout 30`, {
 			stdio: 'pipe',
 		})
 	} catch {

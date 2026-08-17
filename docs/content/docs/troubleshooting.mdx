@@ -25,6 +25,27 @@ description: Common issues connecting Astrolabe to your Cloud tenant, indexing c
   authorized` in the log; see [the Assistant
   docs](/using/assistant#give-the-backends-oidc-client-a-resource-url).
 
+## You sign in to Nextcloud through an external identity provider
+
+If your users log in through Keycloak, Authentik, Entra ID or similar — that is,
+via the **`user_oidc`** app rather than the **`oidc`** provider app — Astrolabe
+does not mint its own tokens. It asks `user_oidc` for the token that identity
+provider already issued to the signed-in user, exchanging it for your MCP
+server's audience where the provider supports RFC 8693 token exchange.
+
+For that path to work:
+
+- Enable **`store_login_token`** in `user_oidc`
+  (`occ config:app:set user_oidc store_login_token --value=1 --lazy`), otherwise
+  the token is discarded at login and Astrolabe has nothing to present.
+- Set the **OIDC client identifier** in Astrolabe's admin page to the client at
+  your identity provider that the MCP server accepts tokens for.
+- Make sure that client id is in the MCP server's `ALLOWED_MGMT_CLIENT`.
+
+Only sessions created by an OIDC login carry that token; an app password or a
+local account cannot be used for interactive search. Background indexing is
+unaffected — it uses app passwords either way.
+
 ## Search returns nothing yet
 
 - Initial indexing may still be running — open the **Astrolabe** app and check

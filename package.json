@@ -13,7 +13,8 @@
     "lint": "eslint src",
     "stylelint": "stylelint 'src/**/*.vue' 'src/**/*.scss' 'src/**/*.css'",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:external-idp": "playwright test --config playwright.external-idp.config.ts"
   },
   "type": "module",
   "browserslist": [
