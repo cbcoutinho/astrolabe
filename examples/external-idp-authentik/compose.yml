@@ -1,0 +1,226 @@
+# Astrolabe behind authentik — complete working example.
+#
+# Same shape as ../external-idp-authelia, with authentik as the identity
+# provider. Nextcloud is an OIDC *client* (the `user_oidc` app); the `oidc`
+# identity-provider app is deliberately absent. This is the deployment from
+# GH #324.
+#
+# EXAMPLE ONLY — every secret is committed on purpose. Do not reuse.
+#
+# SETUP — run ./generate-secrets.sh first, then add this line to /etc/hosts (Windows:
+# C:\Windows\System32\drivers\etc\hosts):
+#
+#   127.0.0.1  nc.astrolabe.test auth.astrolabe.test
+#
+# The OIDC issuer must be byte-identical for your browser AND for the
+# containers. Inside the network these names come from the Docker alias below;
+# in your browser they come from that hosts line. authentik is published on the
+# SAME port it listens on so the url means one thing everywhere.
+#
+# Unlike the Authelia example this one needs no TLS: authentik is happy to
+# serve OpenID Connect over plain http, which makes it the simpler of the two
+# to run locally.
+
+services:
+  db:
+    image: docker.io/library/mariadb:lts
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED
+    environment:
+      MARIADB_ROOT_PASSWORD: example
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: example
+    volumes:
+      - db:/var/lib/mysql
+
+  redis:
+    image: docker.io/library/redis:alpine
+    restart: unless-stopped
+
+  # ── authentik's own datastores ───────────────────────────────────────────
+  authentik-db:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: example
+    volumes:
+      - authentik-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik -d authentik"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  authentik-redis:
+    image: docker.io/library/redis:alpine
+    restart: unless-stopped
+
+  # ── The identity provider ────────────────────────────────────────────────
+  authentik:
+    image: ghcr.io/goauthentik/server:2025.10
+    restart: unless-stopped
+    command: server
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+    environment: &authentik_env
+      # Signs authentik's sessions — real key material, so it comes from the
+      # generated .env rather than being committed here.
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?run ./generate-secrets.sh first}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: example
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      # Lets you log in to the admin UI at /if/admin as akadmin to look around.
+      AUTHENTIK_BOOTSTRAP_PASSWORD: akadmin-example-password
+      AUTHENTIK_BOOTSTRAP_EMAIL: admin@example.com
+      # Plain http on loopback for the example.
+      AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_AVATARS: initials
+    volumes:
+      # Anything dropped in /blueprints is discovered and applied on start.
+      - ./authentik/astrolabe-blueprint.yaml:/blueprints/astrolabe-blueprint.yaml:ro
+      - authentik-media:/media
+    ports:
+      # Same port inside and out, bound to loopback (see the app service).
+      - "127.0.0.1:9000:9000"
+    networks:
+      default:
+        aliases:
+          - auth.astrolabe.test
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 15s
+      timeout: 10s
+      start_period: 120s
+      retries: 40
+
+  # The worker applies the blueprint. Without it, nothing is configured.
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2025.10
+    restart: unless-stopped
+    command: worker
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+    environment: *authentik_env
+    volumes:
+      - ./authentik/astrolabe-blueprint.yaml:/blueprints/astrolabe-blueprint.yaml:ro
+      - authentik-media:/media
+
+  # ── Nextcloud + Astrolabe ────────────────────────────────────────────────
+  app:
+    image: docker.io/library/nextcloud:32
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      authentik:
+        condition: service_healthy
+      # Best-effort only: the worker is what applies the blueprint, and it has
+      # no healthcheck to wait on. The real guard is the discovery poll in
+      # nextcloud-hooks/post-installation/10-configure.sh.
+      authentik-worker:
+        condition: service_started
+    ports:
+      # Bound to loopback deliberately. These stacks ship weak, public
+      # credentials (admin/admin, alice/password) and committed OAuth client
+      # secrets; published on 0.0.0.0 they would expose a fully logged-in
+      # Nextcloud to anything that can route to this host.
+      - "127.0.0.1:8080:80"
+    volumes:
+      - nextcloud:/var/www/html
+      - ./nextcloud-hooks:/docker-entrypoint-hooks.d:ro
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: example
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin
+      NEXTCLOUD_TRUSTED_DOMAINS: "nc.astrolabe.test localhost app"
+      # Consumed by the hooks in ./nextcloud-hooks.
+      NC_PUBLIC_URL: http://nc.astrolabe.test:8080
+      OIDC_DISCOVERY_URL: http://auth.astrolabe.test:9000/application/o/astrolabe/.well-known/openid-configuration
+      OIDC_CLIENT_ID: astrolabe-example-client
+      OIDC_CLIENT_SECRET: astrolabe-example-secret-do-not-reuse
+      MCP_SERVER_URL: http://mcp:8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/status.php | grep -q '\"installed\":true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+
+  # ── The MCP server ───────────────────────────────────────────────────────
+  mcp:
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.176.5
+    restart: unless-stopped
+    command: ["--transport", "streamable-http", "--oauth"]
+    depends_on:
+      app:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - mcp:/app/data
+    environment:
+      # 1. Where Nextcloud is, from inside this network.
+      NEXTCLOUD_HOST: http://app:80
+      # 2. Where the browser reaches Nextcloud — used by the Login Flow v2 leg
+      #    that provisions background indexing.
+      NEXTCLOUD_PUBLIC_URL: http://nc.astrolabe.test:8080
+      NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
+      MCP_DEPLOYMENT_MODE: login_flow
+
+      # 3. The identity provider. Issuer, JWKS, userinfo and introspection are
+      #    all read from this one document — you do not configure them
+      #    separately.
+      OIDC_DISCOVERY_URL: http://auth.astrolabe.test:9000/application/o/astrolabe/.well-known/openid-configuration
+      NEXTCLOUD_OIDC_CLIENT_ID: astrolabe-example-client
+      NEXTCLOUD_OIDC_CLIENT_SECRET: astrolabe-example-secret-do-not-reuse
+
+      # 4. Which OAuth clients may call the management API Astrolabe uses.
+      #    Astrolabe presents the user's authentik token, whose `azp` is the
+      #    client that obtained it. Leave this unset and EVERY management call
+      #    is rejected with a bare 401.
+      #    (Requires MCP server >= 0.176.3, which reads `azp` as well as
+      #    `client_id` — authentik stamps `azp`.)
+      ALLOWED_MGMT_CLIENT: astrolabe-example-client
+
+      # 5. Semantic search storage. Qdrant must be new enough for the query
+      #    shape the server sends; this is the version it is tested against.
+      ENABLE_SEMANTIC_SEARCH: "true"
+      QDRANT_URL: http://qdrant:6333
+      # Encrypts credentials the MCP server stores at rest — likewise generated.
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?run ./generate-secrets.sh first}
+      TOKEN_STORAGE_DB: /app/data/tokens.db
+      VECTOR_SYNC_SCAN_INTERVAL: "10"
+      VECTOR_SYNC_USER_POLL_INTERVAL: "10"
+
+  qdrant:
+    image: docker.io/qdrant/qdrant:v1.19.0
+    restart: unless-stopped
+    volumes:
+      - qdrant:/qdrant/storage
+
+volumes:
+  db:
+  nextcloud:
+  authentik-db:
+  authentik-media:
+  mcp:
+  qdrant:

@@ -1,0 +1,90 @@
+version: 1
+metadata:
+  name: Astrolabe example — Nextcloud OIDC provider
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+
+# Declares everything Nextcloud needs, so the stack comes up configured with no
+# clicking in the authentik admin UI.
+#
+# EXAMPLE ONLY. The client secret below is public. Do not reuse it.
+entries:
+  # ── The OAuth2 / OIDC provider ──────────────────────────────────────────
+  - model: authentik_providers_oauth2.oauth2provider
+    id: astrolabe-provider
+    identifiers:
+      name: Nextcloud
+    attrs:
+      # Implicit consent: the demo user is not asked to approve the app on
+      # every login. Swap to `default-provider-authorization-explicit-consent`
+      # if you want to see the consent screen.
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+
+      client_type: confidential
+      client_id: astrolabe-example-client
+      client_secret: astrolabe-example-secret-do-not-reuse
+
+      # THE most important line in this file.
+      #
+      # `signing_key` is what makes authentik sign tokens with an ASYMMETRIC
+      # key (RS256) and publish the public half in its JWKS. Leave it unset and
+      # the provider falls back to symmetric (HS256) signing: the JWKS endpoint
+      # is served but EMPTY, and the MCP server cannot verify any token —
+      # "The JWK Set did not contain any keys".
+      #
+      # authentik generates this self-signed keypair on first start.
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      # Put the username in the `sub` claim instead of an opaque hash.
+      #
+      # The MCP server uses `sub` as the Nextcloud user id. With the default
+      # (`hashed_user_id`) you get an opaque value, and unless the Nextcloud
+      # account id matches it exactly, search returns HTTP 200 with ZERO
+      # results — see the README and mcp#1326. `user_username` keeps the two
+      # aligned and readable.
+      sub_mode: user_username
+
+      # Issue JWT access tokens signed with the key above, so the MCP server
+      # can verify them against the JWKS with no round trip.
+      access_code_validity: minutes=1
+      access_token_validity: hours=1
+      refresh_token_validity: days=30
+
+      redirect_uris:
+        - matching_mode: strict
+          url: http://nc.astrolabe.test:8080/apps/user_oidc/code
+          redirect_uri_type: authorization
+
+      grant_types:
+        - authorization_code
+        - refresh_token
+
+      # The scopes Nextcloud's user_oidc asks for.
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-offline_access]]
+
+  # ── The application (its slug becomes part of the issuer URL) ───────────
+  # Issuer: http://auth.astrolabe.test:9000/application/o/astrolabe/
+  - model: authentik_core.application
+    identifiers:
+      slug: astrolabe
+    attrs:
+      name: Nextcloud (Astrolabe example)
+      provider: !KeyOf astrolabe-provider
+      open_in_new_tab: false
+
+  # ── A demo user: alice / password ──────────────────────────────────────
+  # `password` is writable only from a blueprint, which is exactly this case.
+  - model: authentik_core.user
+    identifiers:
+      username: alice
+    attrs:
+      name: Alice Example
+      email: alice@example.com
+      password: password
+      is_active: true
+      path: users
