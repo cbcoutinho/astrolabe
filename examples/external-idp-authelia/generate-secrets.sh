@@ -21,6 +21,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Create every file owner-only from the start. The chmod at the end would
+# otherwise leave a window: a run interrupted between the CA and the TLS
+# certificate leaves private keys at the default umask until the next --force
+# run completes. Narrowing that window is not as good as not having one.
+umask 077
+
 OUTPUTS=(
     authelia/oidc.issuer.key
     certs/ca.key certs/ca.pem
@@ -90,9 +96,12 @@ rand() { openssl rand -base64 "${1:-48}" | tr -d '\n=' | tr '+/' '-_'; }
     echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
 } > .env
 
-# 600 on the private keys. The containers read them through bind mounts as the
-# invoking user's files, so owner-only is enough on a normal single-user host.
+# umask 077 above already created these owner-only; this is belt-and-braces for
+# a re-run over files from an older revision of this script. The containers read
+# them through bind mounts as the invoking user's files, so owner-only is enough
+# on a normal single-user host.
 chmod 600 authelia/oidc.issuer.key certs/authelia.key certs/ca.key .env
+# The certificate and CA are public halves — readable so you can inspect them.
 chmod 644 certs/ca.pem certs/authelia.crt
 
 echo
