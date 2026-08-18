@@ -85,7 +85,10 @@ services:
       AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
       AUTHENTIK_AVATARS: initials
     volumes:
-      # Anything dropped in /blueprints is discovered and applied on start.
+      # Mounted on BOTH this container and the worker, because they share the
+      # same /blueprints path and the same config. The worker is what actually
+      # applies it (see below) — this mount is for parity, not because the
+      # server does the work.
       - ./authentik/astrolabe-blueprint.yaml:/blueprints/astrolabe-blueprint.yaml:ro
       - authentik-media:/media
     ports:
@@ -102,7 +105,11 @@ services:
       start_period: 120s
       retries: 40
 
-  # The worker applies the blueprint. Without it, nothing is configured.
+  # The worker is what applies the blueprint — blueprint discovery and
+  # application run as its scheduled tasks, which is why they show up in
+  # `docker compose logs authentik-worker` and not the server's. Without this
+  # container nothing is configured, and because it has no healthcheck, the
+  # Nextcloud hook polls the discovery URL rather than trusting startup order.
   authentik-worker:
     image: ghcr.io/goauthentik/server:2025.10
     restart: unless-stopped
