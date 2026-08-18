@@ -37,13 +37,27 @@ OUTPUTS=(
 # Check every output, not just a couple: a run interrupted midway leaves some
 # present and some missing, and short-circuiting on a partial set would hand
 # you a stack that fails much later with a confusing error.
-missing=0
+missing=()
 for f in "${OUTPUTS[@]}"; do
-    [[ -f "$f" ]] || missing=1
+    [[ -f "$f" ]] || missing+=("$f")
 done
-if [[ $missing -eq 0 && "${1:-}" != "--force" ]]; then
+
+if [[ ${#missing[@]} -eq 0 && "${1:-}" != "--force" ]]; then
     echo "Already generated. Re-run with --force to replace."
     exit 0
+fi
+
+# Note what happens when only SOME outputs are present: everything is rebuilt,
+# including files that already exist and any .env you hand-edited. That is
+# deliberate — the CA, its certificate and the key are a matched set, and
+# regenerating one without the others yields a stack that fails at TLS or token
+# verification rather than here. It is called out because "some missing" is
+# precisely when you would not expect a full overwrite.
+if [[ ${#missing[@]} -gt 0 && ${#missing[@]} -lt ${#OUTPUTS[@]} ]]; then
+    echo "Incomplete: missing ${missing[*]}"
+    echo "Regenerating ALL of: ${OUTPUTS[*]}"
+    echo "(they are a matched set; a partial regeneration would not verify)"
+    echo
 fi
 
 # `openssl req -section` is OpenSSL 3.x only — LibreSSL, which is still what
