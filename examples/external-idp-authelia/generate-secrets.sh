@@ -40,6 +40,17 @@ if [[ $missing -eq 0 && "${1:-}" != "--force" ]]; then
     exit 0
 fi
 
+# `openssl req -section` is OpenSSL 3.x only — LibreSSL, which is still what
+# /usr/bin/openssl is on macOS, does not have it. Without this check the script
+# fails with a bare "unknown option" that gives no hint the problem is the
+# openssl build rather than the config.
+if ! openssl req -help 2>&1 | grep -q -- '-section'; then
+    echo "ERROR: this script needs OpenSSL 3.x; '$(openssl version)' has no 'req -section'." >&2
+    echo "       On macOS: brew install openssl, then put it first on PATH:" >&2
+    echo '         export PATH="$(brew --prefix openssl)/bin:$PATH"' >&2
+    exit 1
+fi
+
 echo "==> OIDC token signing key (RS256)"
 openssl genrsa -out authelia/oidc.issuer.key 2048 2>/dev/null
 

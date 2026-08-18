@@ -136,6 +136,10 @@ services:
     # one-off model download the search backend does on its first query, which
     # surfaces as a confusing HTTP 500 long after auth has already succeeded.
     # With a publicly-trusted IdP certificate, delete this wrapper entirely.
+    #
+    # Worth re-checking on image bumps: this replaces the image's entrypoint
+    # rather than wrapping it, so if upstream ever does more there than exec the
+    # binary (a migration step, say), this would silently skip it.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

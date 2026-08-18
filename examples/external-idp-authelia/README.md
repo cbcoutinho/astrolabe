@@ -37,6 +37,10 @@ provider already issued to the signed-in user. That path needs Astrolabe
 ./generate-secrets.sh
 ```
 
+Needs **OpenSSL 3.x** — macOS ships LibreSSL as `/usr/bin/openssl`, which lacks
+`req -section`; the script checks and tells you. `brew install openssl` and put
+it first on `PATH`.
+
 Nothing cryptographic is committed to this repository — a private key in a
 public repo is not a secret, and shipping one would teach the wrong habit. The
 script writes three throwaway, local-only things, all git-ignored:
