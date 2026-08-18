@@ -1,0 +1,13 @@
+# Generated key material for the example stacks — never committed.
+#
+# This lives at examples/ level, not inside each example, so it protects every
+# example regardless of which one exists on a given branch. A per-example
+# .gitignore does not help when a sibling directory is created first: a broad
+# `git add examples` then sweeps up that sibling's generated secrets before its
+# own .gitignore is in the tree, which is exactly how a .env got committed once.
+**/.env
+**/*.key
+**/*.pem
+**/*.crt
+**/*.csr
+**/*.srl

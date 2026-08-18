@@ -1,0 +1,15 @@
+---
+# EXAMPLE ONLY — one user, public password.
+#
+# alice / password
+#
+# The digest below is Authelia's own test fixture for the plaintext
+# "password" (internal/suites/*/users.yml in the Authelia repo).
+users:
+  alice:
+    disabled: false
+    displayname: 'Alice Example'
+    password: '$6$rounds=500000$jgiCMRyGXzoqpxS3$w2pJeZnnH8bwW3zzvoMWtTRfQYsHbWbD/hquuQ5vUeIyl9gdwBIt6RWk2S6afBA0DPakbeWgD/4SZPiS0hYtU/'
+    email: 'alice@example.com'
+    groups:
+      - 'users'
