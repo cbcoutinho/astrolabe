@@ -1,0 +1,205 @@
+# Astrolabe behind an external identity provider — complete working example.
+#
+#   docker compose up -d
+#   → http://nc.astrolabe.test:8080   (log in as alice / password)
+#
+# Nextcloud here is an OIDC *client* of Authelia (the `user_oidc` app), NOT an
+# identity provider itself. The `oidc` app is deliberately absent. This is the
+# deployment shape from GH #324.
+#
+# EXAMPLE ONLY — the secrets in here are committed on purpose so you can read
+# them; the key material is NOT committed. Do not reuse any of it.
+#
+# SETUP — run ./generate-secrets.sh first, then add this line to /etc/hosts (Windows:
+# C:\Windows\System32\drivers\etc\hosts):
+#
+#   127.0.0.1  nc.astrolabe.test auth.astrolabe.test
+#
+# Why a hosts entry rather than plain localhost: the OIDC issuer must be
+# byte-identical for your browser AND for the containers, and "the browser and
+# the servers disagree about the IdP's URL" is the most common way an
+# otherwise-correct setup fails. Inside the network these names come from the
+# Docker alias below; in your browser they come from that hosts line.
+#
+# (*.localhost would avoid the hosts edit, but libcurl short-circuits any
+# *.localhost name to 127.0.0.1 per RFC 6761, so Nextcloud's PHP client can
+# never reach the IdP container. *.localtest.me resolves publicly to 127.0.0.1
+# and also works, if you'd rather not touch /etc/hosts and your DNS cooperates.)
+#
+# Note Authelia is published on the SAME port it listens on, so the url means
+# the same thing inside and outside the network.
+#
+# Why Authelia is https while everything else is http: it refuses to serve
+# OpenID Connect over http at all (see the note in authelia/configuration.yml).
+# ./certs holds a committed self-signed CA so that works out of the box; your
+# browser will warn once on first visit.
+
+services:
+  db:
+    image: docker.io/library/mariadb:lts
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED
+    environment:
+      MARIADB_ROOT_PASSWORD: example
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: example
+    volumes:
+      - db:/var/lib/mysql
+
+  redis:
+    image: docker.io/library/redis:alpine
+    restart: unless-stopped
+
+  # ── The identity provider ────────────────────────────────────────────────
+  authelia:
+    image: docker.io/authelia/authelia:4.39
+    restart: unless-stopped
+    environment:
+      X_AUTHELIA_CONFIG: /config/configuration.yml
+      # Required for the `{{ secret ... }}` reference to the signing key.
+      X_AUTHELIA_CONFIG_FILTERS: template
+      # Key material, from the generated .env — Authelia maps these onto
+      # session.secret, storage.encryption_key, the reset-password JWT secret
+      # and the OIDC HMAC secret.
+      AUTHELIA_SESSION_SECRET: ${AUTHELIA_SESSION_SECRET:?run ./generate-secrets.sh first}
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_ENCRYPTION_KEY:?run ./generate-secrets.sh first}
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET:?run ./generate-secrets.sh first}
+      AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET:?run ./generate-secrets.sh first}
+    volumes:
+      - ./authelia:/config:ro
+      - ./certs:/certs:ro
+      - authelia:/data
+    ports:
+      # Published on the SAME port it listens on, so https://auth.astrolabe.test:9091
+      # means the same thing inside the network and in your browser. Bound to
+      # loopback: this stack ships weak, public credentials.
+      - "127.0.0.1:9091:9091"
+    networks:
+      default:
+        aliases:
+          - auth.astrolabe.test
+    healthcheck:
+      test: ["CMD", "authelia", "storage", "schema-info", "--config", "/config/configuration.yml"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # ── Nextcloud + Astrolabe ────────────────────────────────────────────────
+  app:
+    image: docker.io/library/nextcloud:32
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      authelia:
+        condition: service_healthy
+    ports:
+      # Bound to loopback deliberately. These stacks ship weak, public
+      # credentials (admin/admin, alice/password) and committed OAuth client
+      # secrets; published on 0.0.0.0 they would expose a fully logged-in
+      # Nextcloud to anything that can route to this host.
+      - "127.0.0.1:8080:80"
+    volumes:
+      - nextcloud:/var/www/html
+      - ./nextcloud-hooks:/docker-entrypoint-hooks.d:ro
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: example
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin
+      NEXTCLOUD_TRUSTED_DOMAINS: "nc.astrolabe.test localhost app"
+      # Consumed by the hooks in ./nextcloud-hooks.
+      NC_PUBLIC_URL: http://nc.astrolabe.test:8080
+      OIDC_DISCOVERY_URL: https://auth.astrolabe.test:9091/.well-known/openid-configuration
+      OIDC_CLIENT_ID: nextcloud
+      OIDC_CLIENT_SECRET: insecure_secret
+      MCP_SERVER_URL: http://mcp:8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/status.php | grep -q '\"installed\":true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+
+  # ── The MCP server ───────────────────────────────────────────────────────
+  mcp:
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.176.5
+    restart: unless-stopped
+    # The default entrypoint is wrapped so the example CA is APPENDED to the
+    # system trust store rather than replacing it. Pointing SSL_CERT_FILE
+    # straight at ca.pem makes every *public* TLS call fail — including the
+    # one-off model download the search backend does on its first query, which
+    # surfaces as a confusing HTTP 500 long after auth has already succeeded.
+    # With a publicly-trusted IdP certificate, delete this wrapper entirely.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat /etc/ssl/certs/ca-certificates.crt /certs/ca.pem > /tmp/ca-bundle.pem
+        export SSL_CERT_FILE=/tmp/ca-bundle.pem
+        export NEXTCLOUD_CA_BUNDLE=/tmp/ca-bundle.pem
+        exec /opt/venv/bin/nextcloud-mcp-server run --host 0.0.0.0 \
+             --transport streamable-http --oauth
+    depends_on:
+      app:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - mcp:/app/data
+      - ./certs:/certs:ro
+    environment:
+      # 1. Where Nextcloud is, from inside this network.
+      NEXTCLOUD_HOST: http://app:80
+      # 2. Where the browser reaches Nextcloud — used by the Login Flow v2 leg
+      #    that provisions background indexing.
+      NEXTCLOUD_PUBLIC_URL: http://nc.astrolabe.test:8080
+      NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
+      MCP_DEPLOYMENT_MODE: login_flow
+
+      # 3. The identity provider. Everything else about the IdP — issuer,
+      #    JWKS, userinfo, introspection — is read from this one document.
+      OIDC_DISCOVERY_URL: https://auth.astrolabe.test:9091/.well-known/openid-configuration
+      NEXTCLOUD_OIDC_CLIENT_ID: nextcloud
+      NEXTCLOUD_OIDC_CLIENT_SECRET: insecure_secret
+      #    (CA trust is handled by the entrypoint wrapper above: two HTTP
+      #    stacks are in play — httpx for discovery/userinfo via
+      #    NEXTCLOUD_CA_BUNDLE, and urllib for the JWKS fetch inside PyJWT via
+      #    SSL_CERT_FILE — and both must keep trusting the public roots too.)
+
+      # 4. Which OAuth clients may call the management API that Astrolabe uses.
+      #    Astrolabe presents the user's Authelia token, whose `azp` is the
+      #    client that obtained it — the `nextcloud` client above. Leave this
+      #    unset and EVERY management call is rejected with a 401.
+      #    (Requires MCP server >= 0.176.3, which reads `azp` as well as
+      #    `client_id`; Authelia, Authentik and Keycloak all stamp `azp`.)
+      ALLOWED_MGMT_CLIENT: nextcloud
+
+      # 5. Semantic search storage.
+      ENABLE_SEMANTIC_SEARCH: "true"
+      QDRANT_URL: http://qdrant:6333
+      # Encrypts credentials the MCP server stores at rest — real key material,
+      # so it comes from the generated .env rather than being committed here.
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?run ./generate-secrets.sh first}
+      TOKEN_STORAGE_DB: /app/data/tokens.db
+      VECTOR_SYNC_SCAN_INTERVAL: "10"
+      VECTOR_SYNC_USER_POLL_INTERVAL: "10"
+
+  qdrant:
+    image: docker.io/qdrant/qdrant:v1.19.0
+    restart: unless-stopped
+    volumes:
+      - qdrant:/qdrant/storage
+
+volumes:
+  db:
+  nextcloud:
+  authelia:
+  mcp:
+  qdrant:
