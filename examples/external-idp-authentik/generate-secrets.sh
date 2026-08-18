@@ -15,6 +15,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Create .env owner-only from the start. A chmod afterwards would leave the
+# secrets on disk at the default umask (022/002 on many hosts) for the moment
+# between the redirect writing them and the chmod running. Both values here
+# sign or encrypt something, so that window is worth removing rather than
+# narrowing. Same reasoning as the Authelia example's script.
+umask 077
+
 if [[ -f .env && "${1:-}" != "--force" ]]; then
     echo "Already generated (.env). Re-run with --force to replace."
     exit 0
@@ -31,6 +38,8 @@ fi
     echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
 } > .env
 
+# umask 077 above already created it owner-only; this is belt-and-braces for a
+# re-run over a .env left by an older revision of this script.
 chmod 600 .env
 
 echo "Wrote .env"
