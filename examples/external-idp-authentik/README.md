@@ -216,6 +216,13 @@ calling `occ user_oidc:provider`. Without the poll the hook fails under `set -e`
 and takes the Nextcloud container down on first run — and the failure reads like
 a configuration error rather than a race, on a stack that is otherwise correct.
 
+There is a second, independent reason first-boot timing varies: the worker
+depends only on authentik's database and redis, not on the authentik server, so
+the two apply migrations concurrently. That mirrors authentik's own upstream
+compose file, so it is expected rather than a misconfiguration here — it just
+means "the server is healthy" says even less about the worker's progress than
+the missing healthcheck alone would suggest.
+
 The Authelia example has no equivalent problem: its configuration is a static
 file read at startup, with no separate worker applying it.
 
