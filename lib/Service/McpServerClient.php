@@ -194,6 +194,23 @@ class McpServerClient {
 				// prior http_errors=true behaviour for callers that don't run
 				// their own error detection.
 				$statusCode = $response->getStatusCode();
+				// 422 is the exception: a well-formed request this deployment
+				// cannot serve (unsupported algorithm, document granularity on
+				// a dense-only algorithm, reranking when unconfigured). The
+				// server sends a structured, actionable body; turning it into a
+				// RuntimeException discards that and surfaces to the user as an
+				// opaque 500 that reads like an outage.
+				if ($statusCode === 422) {
+					/** @var mixed $decoded */
+					$decoded = json_decode((string)$response->getBody(), true);
+					if (is_array($decoded) && isset($decoded['error']) && is_string($decoded['error'])) {
+						return $decoded + ['unsupported' => true];
+					}
+					return [
+						'error' => 'Request not supported by this server',
+						'unsupported' => true,
+					];
+				}
 				if ($statusCode < 200 || $statusCode >= 300) {
 					throw new \RuntimeException("Unexpected HTTP $statusCode from MCP server");
 				}
@@ -222,10 +239,11 @@ class McpServerClient {
 	 * this helper turns any non-2xx into an explicit error array.
 	 *
 	 * 428 → ``provisioning_required => true`` (mapped to a CTA in the UI).
+	 * 422 → the server's own structured error, plus ``unsupported => true``.
 	 * Any other non-2xx → generic error with the status code in the message.
 	 * 2xx → null (caller continues with the success path).
 	 *
-	 * @return array{error: string, provisioning_required?: true}|null
+	 * @return array{error: string, provisioning_required?: true, unsupported?: true}|null
 	 */
 	private function detectErrorResponse(ResponseInterface $response): ?array {
 		$statusCode = $response->getStatusCode();
@@ -235,6 +253,21 @@ class McpServerClient {
 				'error' => $this->extractProvisioningMessage($response),
 				'provisioning_required' => true,
 			];
+		}
+
+		// 422 = well-formed request this server cannot serve (unsupported search
+		// algorithm, document granularity on a dense-only algorithm, reranking
+		// on a deployment without it). The server sends a structured, actionable
+		// body; collapsing it into "Unexpected HTTP 422" throws that away and
+		// surfaces to the user as an opaque 500. Pass the server's own error
+		// through so the caller can act on it.
+		if ($statusCode === 422) {
+			/** @var mixed $decoded */
+			$decoded = json_decode((string)$response->getBody(), true);
+			if (is_array($decoded) && isset($decoded['error']) && is_string($decoded['error'])) {
+				return $decoded + ['unsupported' => true];
+			}
+			return ['error' => 'Request not supported by this server', 'unsupported' => true];
 		}
 
 		if ($statusCode < 200 || $statusCode >= 300) {
@@ -343,6 +376,10 @@ class McpServerClient {
 	 * @param string|null $modifiedAfter RFC 3339 lower bound on last-modified (open if null)
 	 * @param string|null $modifiedBefore RFC 3339 upper bound on last-modified (open if null)
 	 * @param list<string>|null $pathPrefixes Folder filters (files only), OR-ed; no filter if null/empty
+	 * @param bool $rerank Request the cross-encoder rerank stage (opt-in per request)
+	 * @param string $fusion Hybrid fusion algorithm: "rrf" or "dbsf"
+	 * @param string $granularity Result shape: "chunk" (passages) or "document" (one row per doc)
+	 * @param float $minRelevance Server-side relevance cut in [0,1]; 0.0 = no filter
 	 * @return array{
 	 *   results?: array,
 	 *   pca_coordinates?: array,
@@ -363,13 +400,47 @@ class McpServerClient {
 		?string $modifiedAfter = null,
 		?string $modifiedBefore = null,
 		?array $pathPrefixes = null,
+		bool $rerank = false,
+		string $fusion = 'rrf',
+		string $granularity = 'chunk',
+		float $minRelevance = 0.0,
 	): array {
 		$requestBody = [
 			'query' => $query,
 			'algorithm' => $algorithm,
 			'limit' => min($limit, 50), // Enforce max limit
 			'include_pca' => $includePca,
+			// Fusion, granularity and min_relevance were accepted by the server
+			// but never sent from this page, so the admin's fusion choice, the
+			// document-granularity result shape, and the server-side relevance
+			// cut were all unreachable from the app's search UI. Sent
+			// explicitly now rather than relying on server defaults, so what
+			// the page requests is visible in one place.
+			//
+			// `fusion` matters beyond ranking: it selects which relevance curve
+			// `relevance_for()` applies, so omitting it pinned the reported
+			// relevance to the RRF-ordinal mapping regardless of configuration.
+			'fusion' => $fusion,
+			'granularity' => $granularity,
 		];
+
+		// Only sent when actually filtering. The server treats 0.0 as "no
+		// filter" anyway, but omitting it keeps the request identical to the
+		// previous behaviour for the default case.
+		if ($minRelevance > 0.0) {
+			$requestBody['min_relevance'] = $minRelevance;
+		}
+
+		// Cross-encoder rerank stage. Opt-in PER REQUEST: the MCP server's
+		// SEARCH_RERANK_ENABLED is only a capability gate, and `rerank` defaults
+		// to false server-side, so a server with reranking fully configured
+		// still returns fusion-ordered results unless this field is sent.
+		//
+		// Only sent when true. An older MCP server rejects unknown fields on
+		// some surfaces, and omitting it is exactly the previous behaviour.
+		if ($rerank) {
+			$requestBody['rerank'] = true;
+		}
 
 		// Add doc_types filter if specified
 		if ($docTypes !== null && count($docTypes) > 0) {
