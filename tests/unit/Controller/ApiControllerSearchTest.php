@@ -261,4 +261,29 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		$this->assertArrayNotHasKey('code', $response->getData());
 	}
+
+	/**
+	 * Reranking is not a user choice: the controller asks for it exactly when
+	 * the server advertises it. search() arg 11 is $rerank (after sarCase, offset).
+	 */
+	public function testRequestsRerankIffServerAdvertisesIt(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')
+			->willReturnOnConsecutiveCalls(true, false);
+
+		$captured = [];
+		$this->client->expects($this->exactly(2))
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured[] = $args[11];
+				return ['results' => [], 'algorithm_used' => 'hybrid', 'reranked' => $args[11]];
+			});
+
+		$on = $this->controller->search(query: 'spec');
+		$off = $this->controller->search(query: 'spec');
+
+		$this->assertSame([true, false], $captured);
+		$this->assertTrue($on->getData()['reranked']);
+		$this->assertFalse($off->getData()['reranked']);
+	}
 }

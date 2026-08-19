@@ -38,6 +38,7 @@ class SearchCapabilities {
 	private const CACHE_TTL = 30;
 	private const CACHE_KEY = 'supported_search_types';
 	private const SAR_CACHE_KEY = 'sar_available';
+	private const RERANK_CACHE_KEY = 'rerank_available';
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
@@ -104,6 +105,34 @@ class SearchCapabilities {
 		}
 
 		$cache->set(self::SAR_CACHE_KEY, $advertised, self::CACHE_TTL);
+		return $advertised;
+	}
+
+	/**
+	 * Whether the MCP server can rerank (`rerank_available` on GET /api/v1/status).
+	 *
+	 * Searches request reranking whenever this is true -- there is no per-user
+	 * toggle. Fails CLOSED like {@see isSarAvailable()}: the server answers
+	 * `rerank: true` with a 422 when it cannot serve it, so an unreachable
+	 * server or one that predates the field gets retrieval ordering instead of
+	 * a failed search. Only a definite answer is cached.
+	 */
+	public function isRerankAvailable(): bool {
+		$cache = $this->cacheFactory->createDistributed('astrolabe_search_caps');
+		/** @var mixed $cached */
+		$cached = $cache->get(self::RERANK_CACHE_KEY);
+		if (is_bool($cached)) {
+			return $cached;
+		}
+
+		$status = $this->client->getStatus();
+		/** @var mixed $advertised — runtime JSON, not the declared status shape. */
+		$advertised = $status['rerank_available'] ?? null;
+		if (isset($status['error']) || !is_bool($advertised)) {
+			return false;
+		}
+
+		$cache->set(self::RERANK_CACHE_KEY, $advertised, self::CACHE_TTL);
 		return $advertised;
 	}
 

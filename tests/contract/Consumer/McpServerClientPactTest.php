@@ -278,6 +278,7 @@ final class McpServerClientPactTest extends TestCase {
 				'doc_types' => ['file'],
 				'modified_after' => '2023-01-01T00:00:00Z',
 				'path_prefixes' => ['/HR/Conduct'],
+				'fusion' => 'rrf',
 				'offset' => 0,
 				'granularity' => 'document',
 			]);
@@ -583,6 +584,8 @@ final class McpServerClientPactTest extends TestCase {
 				'algorithm' => 'semantic',
 				'limit' => $matcher->like(10),
 				'include_pca' => $matcher->boolean(true),
+				'fusion' => $matcher->like('rrf'),
+				'granularity' => $matcher->like('chunk'),
 			]);
 
 		$response = (new ProviderResponse())
@@ -608,6 +611,69 @@ final class McpServerClientPactTest extends TestCase {
 		// contract's job is to pin the request shape + the 422 response body.
 		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
 		$this->assertArrayHasKey('error', $result);
+	}
+
+	/**
+	 * Reranked search: astrolabe sends `rerank: true` whenever the server
+	 * advertises `rerank_available` (SearchCapabilities::isRerankAvailable),
+	 * and reads back `reranked` plus each row's `rerank_score` and calibrated
+	 * `relevance` -- the values the result list and the 3D plot report.
+	 */
+	public function testRerankedSearchHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/vector-viz/search')
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => $matcher->like('leadership award'),
+				'algorithm' => $matcher->like('hybrid'),
+				'limit' => $matcher->like(10),
+				'include_pca' => $matcher->boolean(false),
+				'fusion' => $matcher->like('rrf'),
+				'granularity' => $matcher->like('chunk'),
+				// The field under test -- pinned exactly.
+				'rerank' => true,
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'results' => $matcher->eachLike([
+					'id' => $matcher->integer(12),
+					'doc_type' => $matcher->like('note'),
+					'title' => $matcher->like('Award nominations'),
+					'score' => $matcher->number(0.0328),
+					'rerank_score' => $matcher->number(0.91),
+					'relevance' => $matcher->number(0.87),
+					'relevance_source' => $matcher->like('cross_encoder_calibrated'),
+				]),
+				'total_found' => $matcher->integer(1),
+				'algorithm_used' => $matcher->like('hybrid'),
+				'reranked' => $matcher->boolean(true),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('the server has reranking configured')
+			->uponReceiving('a reranked search request')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->search(
+			'leadership award',
+			'hybrid',
+			10,
+			false,
+			rerank: true,
+		);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertTrue($result['reranked'] ?? null);
+		$this->assertIsFloat($result['results'][0]['rerank_score'] ?? null);
 	}
 
 	/**

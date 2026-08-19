@@ -136,4 +136,25 @@ final class SearchCapabilitiesTest extends TestCase {
 
 		$this->assertFalse($this->subject()->isSarAvailable());
 	}
+
+	public function testRerankAvailableWhenAdvertisedAndCached(): void {
+		$this->client->method('getStatus')->willReturn(['rerank_available' => true]);
+		$this->cache->expects($this->once())->method('set')
+			->with('rerank_available', true, $this->anything());
+
+		$this->assertTrue($this->subject()->isRerankAvailable());
+	}
+
+	public function testRerankFailsClosedWhenFieldAbsentOrStatusErrors(): void {
+		// The server answers `rerank: true` with a 422 when it cannot serve it,
+		// so an older server or a status blip must not turn reranking on.
+		$this->client->method('getStatus')->willReturnOnConsecutiveCalls(
+			['vector_sync_enabled' => true],
+			['error' => 'connection refused'],
+		);
+		$this->cache->expects($this->never())->method('set');
+
+		$this->assertFalse($this->subject()->isRerankAvailable());
+		$this->assertFalse($this->subject()->isRerankAvailable());
+	}
 }
