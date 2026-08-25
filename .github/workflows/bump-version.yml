@@ -52,7 +52,9 @@ jobs:
           # a pin at the status quo, not a version change. Do not drop back to
           # 4.9.0: its wheel imports `deprecated` without declaring it, so an
           # isolated `uvx` environment fails at import.
-          if ! output=$(uvx --from commitizen==4.18.0 cz --config .cz.toml bump --yes 2>&1); then
+          # --no-build: wheels only, so no sdist gets to run its build backend
+          # on the runner (githubactions:S8541).
+          if ! output=$(uvx --no-build --from commitizen==4.18.0 cz --config .cz.toml bump --yes 2>&1); then
             if echo "$output" | grep -q "\[NO_COMMITS_TO_BUMP\]"; then
               echo "No commits eligible for version bump"
               echo "$output"
