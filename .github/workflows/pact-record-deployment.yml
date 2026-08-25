@@ -48,6 +48,11 @@ jobs:
       contents: read
     timeout-minutes: 5
     steps:
+      # Needed for .github/scripts/install-pact-cli.sh; this job previously ran
+      # without a working copy.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Join tailnet
         if: ${{ env.PACT_BROKER != '' }}
         uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
@@ -58,13 +63,7 @@ jobs:
 
       - name: Install Pact CLI
         if: ${{ env.PACT_BROKER != '' }}
-        run: |
-          # Unified pact CLI (Rust, pact-foundation/pact-cli) — replaces the
-          # deprecated pact-ruby-standalone `pact-broker` CLI. Pinned installer
-          # URL rather than the composite action; see .github/workflows/pact.yml
-          # for the renovate digest-pinning rationale.
-          curl -fsSL https://github.com/pact-foundation/pact-cli/releases/download/v0.10.7/pact-installer.sh | sh
-          echo "$HOME/.pact/bin" >> "$GITHUB_PATH"
+        run: .github/scripts/install-pact-cli.sh
 
       - name: Record deployment to production
         if: ${{ env.PACT_BROKER != '' }}

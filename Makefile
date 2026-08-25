@@ -32,10 +32,14 @@ validate-deps:
 	@echo "✓ All dependencies found"
 
 # Install PHP and Node dependencies
+#
+# npm --ignore-scripts: no dependency needs a lifecycle script to build the
+# frontend, and `make assemble` runs in CI (ci.yml's `package` job), where
+# running them would reintroduce what the workflows just stopped doing.
 .PHONY: install-deps
 install-deps: validate-deps
 	composer install --no-dev --optimize-autoloader
-	npm ci
+	npm ci --ignore-scripts
 
 # Build production frontend assets
 .PHONY: build-frontend

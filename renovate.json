@@ -50,12 +50,24 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Unified pact CLI installer URL pinned in the pact workflows",
+      "description": "commitizen pinned in the bump-version workflow (pre-commit's own rev is managed by the pre-commit manager)",
       "managerFilePatterns": [
-        "/^\\.github/workflows/.+\\.ya?ml$/"
+        "/^\\.github/workflows/bump-version\\.ya?ml$/"
       ],
       "matchStrings": [
-        "https://github\\.com/pact-foundation/pact-cli/releases/download/(?<currentValue>v[^/]+)/pact-installer\\.sh"
+        "commitizen==(?<currentValue>[0-9][^\\s\"']*)"
+      ],
+      "depNameTemplate": "commitizen",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "Unified pact CLI installer URL pinned in .github/scripts/install-pact-cli.sh (note: the sha256 next to it must be bumped by hand)",
+      "managerFilePatterns": [
+        "/^\\.github/scripts/install-pact-cli\\.sh$/"
+      ],
+      "matchStrings": [
+        "PACT_CLI_VERSION=\"(?<currentValue>v[^\"]+)\""
       ],
       "depNameTemplate": "pact-foundation/pact-cli",
       "datasourceTemplate": "github-releases"
