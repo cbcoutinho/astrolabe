@@ -46,7 +46,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nextjs-docs-${{ hashFiles('docs/package-lock.json') }}-
 
-      - run: npm ci --no-audit --no-fund
+      # `--ignore-scripts` skips the `postinstall: fumadocs-mdx` hook; the
+      # `typecheck` step below runs `fumadocs-mdx` itself, so `.source` is
+      # generated before `next build` needs it (githubactions:S6505).
+      - run: npm ci --no-audit --no-fund --ignore-scripts
 
       # Generates .source types (fumadocs-mdx), then runs next typegen + tsc.
       - run: npm run typecheck

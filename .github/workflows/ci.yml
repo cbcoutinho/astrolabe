@@ -10,9 +10,8 @@ name: CI
 on:
   pull_request:
 
-permissions:
-  contents: read
-
+# Permissions are declared per-job (GitHub Actions least-privilege: scope the
+# token to each job rather than the whole workflow — githubactions:S8264).
 concurrency:
   group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -22,6 +21,8 @@ jobs:
   node-build:
     runs-on: ubuntu-latest
     name: Node.js build
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,14 +40,16 @@ jobs:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
 
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
-        run: npm i -g 'npm@${{ steps.versions.outputs.npmVersion }}'
+        # See the `package` job below for why this is `--ignore-scripts` and an
+        # engines range rather than a pinned version.
+        run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
 
       - name: Install dependencies & build
         env:
           CYPRESS_INSTALL_BINARY: 0
           PUPPETEER_SKIP_DOWNLOAD: true
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm run build --if-present
 
       - name: Check webpack build changes
@@ -57,6 +60,8 @@ jobs:
   eslint:
     runs-on: ubuntu-latest
     name: ESLint
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,13 +79,15 @@ jobs:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
 
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
-        run: npm i -g 'npm@${{ steps.versions.outputs.npmVersion }}'
+        # See the `package` job below for why this is `--ignore-scripts` and an
+        # engines range rather than a pinned version.
+        run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
 
       - name: Install dependencies
         env:
           CYPRESS_INSTALL_BINARY: 0
           PUPPETEER_SKIP_DOWNLOAD: true
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint
@@ -89,6 +96,8 @@ jobs:
   stylelint:
     runs-on: ubuntu-latest
     name: Stylelint
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,13 +115,15 @@ jobs:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
 
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
-        run: npm i -g 'npm@${{ steps.versions.outputs.npmVersion }}'
+        # See the `package` job below for why this is `--ignore-scripts` and an
+        # engines range rather than a pinned version.
+        run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
 
       - name: Install dependencies
         env:
           CYPRESS_INSTALL_BINARY: 0
           PUPPETEER_SKIP_DOWNLOAD: true
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run stylelint
@@ -121,6 +132,8 @@ jobs:
   php-cs:
     runs-on: ubuntu-latest
     name: PHP CS Fixer
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,6 +166,8 @@ jobs:
   psalm:
     runs-on: ubuntu-latest
     name: Psalm
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -193,6 +208,8 @@ jobs:
   # PHPUnit Tests
   phpunit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     strategy:
       matrix:
@@ -246,6 +263,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     name: Package assembly
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

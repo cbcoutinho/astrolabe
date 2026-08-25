@@ -12,9 +12,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
+# Permissions are declared per-job (GitHub Actions least-privilege: scope the
+# token to each job rather than the whole workflow — githubactions:S8264).
 concurrency:
   group: e2e-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -24,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     name: e2e (${{ matrix.lane }})
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
@@ -58,7 +59,11 @@ jobs:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
 
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
-        run: npm i -g 'npm@${{ steps.versions.outputs.npmVersion }}'
+        # `--ignore-scripts`: installing npm itself has no lifecycle scripts we
+        # want to run. The version is an engines range rather than a pin because
+        # it is read from `package.json`, this project's single source of truth
+        # for it (see ci.yml's `package` job).
+        run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
 
       - name: Get php version
         id: php-versions
@@ -78,7 +83,7 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: true
         run: |
           composer install --no-dev --optimize-autoloader
-          npm ci
+          npm ci --ignore-scripts
           npm run build
 
       - name: Get installed Playwright version
@@ -97,7 +102,9 @@ jobs:
       # every job; apt is reliable, so no retry is needed here.
       - name: Install Playwright OS dependencies
         timeout-minutes: 8
-        run: npx playwright install-deps chromium
+        # `--no-install`: run the Playwright pinned in package-lock.json, never
+        # fetch one on demand (githubactions:S6505/S8543).
+        run: npx --no-install playwright install-deps chromium
 
       # Provision Chromium WITHOUT the Playwright CDN. The cdn.playwright.dev
       # download deterministically stalls at "100%" on GitHub's runners (it never
@@ -133,7 +140,7 @@ jobs:
 
       - name: Run E2E tests
         timeout-minutes: 30
-        run: npx playwright test ${{ matrix.config }}
+        run: npx --no-install playwright test ${{ matrix.config }}
 
       - name: Collect service logs
         if: always()
@@ -159,6 +166,8 @@ jobs:
 
   summary:
     runs-on: ubuntu-latest
+    permissions:
+      contents: none
     needs: [e2e]
     if: always()
     name: e2e-summary
