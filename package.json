@@ -30,7 +30,7 @@
     "@nextcloud/vue": "^9.3.3",
     "markdown-it": "^15.0.0",
     "pdfjs-dist": "^5.7.284",
-    "plotly.js-dist-min": "^3.0.0",
+    "plotly.js-dist-min": "^4.0.0",
     "vue": "^3.0.0",
     "vue-material-design-icons": "^5.3.1"
   },
