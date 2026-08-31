@@ -114,8 +114,47 @@
 									:max="100" />
 							</div>
 
+							<div v-if="rerankAvailable" class="mcp-option-group">
+								<NcCheckboxRadioSwitch
+									:modelValue="rerank"
+									type="switch"
+									@update:modelValue="rerank = $event">
+									{{ t('astrolabe', 'Rerank results') }}
+								</NcCheckboxRadioSwitch>
+								<p class="mcp-option-hint">
+									{{ t('astrolabe', 'Re-scores each result against your query with a cross-encoder. Slower, but orders results by actual relevance and turns the relevance figure into a calibrated probability.') }}
+								</p>
+							</div>
+
 							<div class="mcp-option-group">
-								<label for="mcp-minimum-score">{{ hasRelevance ? t('astrolabe', 'Minimum relevance') : t('astrolabe', 'Minimum relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
+								<label for="mcp-granularity">{{ t('astrolabe', 'Results per document') }}</label>
+								<select id="mcp-granularity" v-model="granularity" class="mcp-select">
+									<option value="chunk">
+										{{ t('astrolabe', 'Best passages — a long document may appear several times') }}
+									</option>
+									<option value="document">
+										{{ t('astrolabe', 'One row per document') }}
+									</option>
+								</select>
+							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-server-relevance">{{ t('astrolabe', 'Server relevance cut') }}: {{ serverMinRelevance }}%</label>
+								<input
+									id="mcp-server-relevance"
+									v-model.number="serverMinRelevance"
+									type="range"
+									min="0"
+									max="100"
+									step="5"
+									class="mcp-score-slider">
+								<p class="mcp-option-hint">
+									{{ t('astrolabe', 'Applied by the server before the page is cut to the result limit, so a filtered search still returns a full page. Filters the search itself.') }}
+								</p>
+							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-minimum-score">{{ hasRelevance ? t('astrolabe', 'Hide below relevance') : t('astrolabe', 'Hide below relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
 								<input
 									id="mcp-minimum-score"
 									v-model="scoreThreshold"
@@ -124,6 +163,9 @@
 									max="100"
 									step="5"
 									class="mcp-score-slider">
+								<p class="mcp-option-hint">
+									{{ t('astrolabe', 'Hides rows from the results already returned. Does not fetch more, so raising it shortens the list.') }}
+								</p>
 							</div>
 
 							<div class="mcp-option-group">
@@ -624,6 +666,29 @@ export default {
 			pathPrefixes: [],
 			limit: 20,
 			scoreThreshold: 0,
+			// Cross-encoder rerank stage, opt-in per request. The server's
+			// SEARCH_RERANK_ENABLED is only a capability gate -- `rerank`
+			// defaults to false server-side, so without sending this field a
+			// fully-configured reranker never runs for this app.
+			rerank: false,
+			// Whether the server advertises it CAN rerank (`rerank_available` on
+			// /api/v1/status). Gates the toggle so it isn't offered on a
+			// deployment that would ignore it.
+			rerankAvailable: false,
+			// Result shape: 'chunk' (best-matching passages, a long document can
+			// occupy several rows) or 'document' (one row per document). The
+			// server supported this all along; this page never asked for it.
+			granularity: 'chunk',
+			// Server-side relevance cut, percent. NOT the same control as
+			// `scoreThreshold` below: this is sent to the server and applied
+			// before the trim to `limit`, so the page backfills with qualifying
+			// rows. `scoreThreshold` filters client-side over the rows already
+			// returned, so raising it shrinks the list.
+			serverMinRelevance: 0,
+			// Whether the LAST response was actually reranked. Distinct from
+			// `rerank` (what was asked for): reranking degrades to retrieval
+			// order instead of failing, so these can disagree.
+			rerankedUsed: false,
 			loading: false,
 			error: null,
 			results: [],
@@ -944,6 +1009,12 @@ export default {
 	mounted() {
 		// Check for URL parameters to open chunk viewer
 		this.handleUrlParameters()
+		// Load the server capability set on the SEARCH tab too, not just when
+		// the Index Status tab is opened. `rerank_available` gates the rerank
+		// toggle, and gating a search control on data only another tab fetches
+		// means the control never appears for anyone who does not visit that
+		// tab first.
+		this.loadVectorStatus()
 	},
 
 	beforeUnmount() {
@@ -1136,6 +1207,28 @@ export default {
 					include_pca: this.showVisualization,
 				}
 
+				// Opt in to the cross-encoder rerank stage. Only sent when both
+				// the user asked for it and the server says it can serve it --
+				// the server rejects `rerank: true` with a 422 when the
+				// capability is off, so gating here turns a hard error into the
+				// toggle simply not being offered.
+				if (this.rerank && this.rerankAvailable) {
+					params.rerank = true
+				}
+
+				// Result shape. 'document' asks for one row per document rather
+				// than per passage -- the shape 'which files mention X' wants.
+				params.granularity = this.granularity
+
+				// Server-side relevance cut. Distinct from the slider below,
+				// which is a client-side filter over what already came back:
+				// this one is applied BEFORE the server trims to `limit`, so a
+				// filtered request still returns a full page of qualifying rows
+				// instead of a short one. Only sent when actually filtering.
+				if (this.serverMinRelevance > 0) {
+					params.min_relevance = this.serverMinRelevance / 100
+				}
+
 				if (this.selectedDocTypes.length > 0) {
 					params.doc_types = this.selectedDocTypes.join(',')
 				}
@@ -1161,6 +1254,9 @@ export default {
 				if (response.data.success) {
 					this.results = response.data.results || []
 					this.algorithmUsed = response.data.algorithm_used || this.algorithm
+					// What the server actually did, not what was asked for --
+					// reranking degrades to retrieval order rather than failing.
+					this.rerankedUsed = response.data.reranked === true
 					this.coordinates = response.data.coordinates_3d || []
 					this.queryCoords = response.data.query_coords || []
 
@@ -1199,6 +1295,7 @@ export default {
 
 				if (response.data.success) {
 					this.vectorStatus = response.data.status
+					this.rerankAvailable = response.data.rerank_available === true
 				} else {
 					this.statusError = response.data.error || this.t('astrolabe', 'Failed to load status')
 				}
@@ -1864,6 +1961,26 @@ export default {
 		margin-bottom: 8px;
 		color: var(--color-text-maxcontrast);
 	}
+}
+
+// Explanatory line under a control. Two of the relevance controls are easy to
+// confuse -- one filters the search, the other hides rows already returned --
+// so each says which it is rather than relying on the label alone.
+.mcp-option-hint {
+	margin: 6px 0 0;
+	font-size: 0.85em;
+	line-height: 1.4;
+	color: var(--color-text-maxcontrast);
+}
+
+.mcp-select {
+	width: 100%;
+	min-height: 34px;
+	padding: 4px 8px;
+	border: 2px solid var(--color-border-maxcontrast);
+	border-radius: var(--border-radius-large);
+	background-color: var(--color-main-background);
+	color: var(--color-main-text);
 }
 
 .mcp-checkbox-grid {
