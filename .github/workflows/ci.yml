@@ -140,7 +140,7 @@ jobs:
 
       - name: Get php version
         id: versions
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        uses: icewind1991/nextcloud-version-matrix@cd0211ffcef1065e2020cd579e4843b8746e7a58 # v1.3.3
         with:
           filename: appinfo/info.xml
 
@@ -193,7 +193,7 @@ jobs:
 
       - name: Get OCP version matrix
         id: ocp-versions
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        uses: icewind1991/nextcloud-version-matrix@cd0211ffcef1065e2020cd579e4843b8746e7a58 # v1.3.3
         with:
           filename: appinfo/info.xml
 
@@ -240,7 +240,7 @@ jobs:
 
       - name: Get OCP version matrix
         id: ocp-versions
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        uses: icewind1991/nextcloud-version-matrix@cd0211ffcef1065e2020cd579e4843b8746e7a58 # v1.3.3
         with:
           filename: appinfo/info.xml
 
