@@ -43,7 +43,7 @@
     "eslint": "10.9.1",
     "sass-embedded": "1.103.1",
     "stylelint": "17.14.1",
-    "terser": "5.51.0",
+    "terser": "5.51.2",
     "vite": "8.2.2"
   }
 }
