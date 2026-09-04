@@ -40,6 +40,20 @@ content as you, scoped to what background sync has indexed.
 Le Chat does not register itself dynamically, so its OIDC client has to be
 created by hand in your Nextcloud and then allowed on your tenant.
 
+<Callout title="Do these in order — finish step 3 before you open the Mistral console">
+
+Your tenant's MCP server rejects any client id that isn't on its allowlist, so
+the connector cannot work until step 3 is done. Allowing a client also has to
+reach the running MCP server, which takes a few minutes and is not finished the
+moment the portal saves the change.
+
+If you add the connector too early, the first authorization attempt is rejected
+with an unknown-client error — and **retrying from the Mistral console does not
+recover it** once the allowlist is correct. Delete the connector and add it
+again.
+
+</Callout>
+
 <Steps>
 
 <Step n="01" title="Create a confidential OIDC client in Nextcloud">
