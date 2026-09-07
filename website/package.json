@@ -25,12 +25,12 @@
     "@types/node": "24.13.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
-    "postcss": "8.5.26",
+    "postcss": "8.5.28",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
   },
   "overrides": {
-    "postcss": "8.5.26"
+    "postcss": "8.5.28"
   },
   "browserslist": [
     "extends @nextcloud/browserslist-config"
