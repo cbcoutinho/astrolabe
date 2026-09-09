@@ -45,6 +45,11 @@
         "@types/react-dom"
       ],
       "groupName": "react monorepo"
+    },
+    {
+      "description": "Keep fumadocs-core, fumadocs-ui and fumadocs-mdx on the same version — fumadocs-ui pins a peer range on fumadocs-core, so update them together in one PR.",
+      "matchPackageNames": ["fumadocs-**"],
+      "groupName": "fumadocs"
     }
   ],
   "customManagers": [
