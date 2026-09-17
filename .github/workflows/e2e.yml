@@ -32,8 +32,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Server majors under test: keep in step with appinfo/info.xml.
-        nextcloud: ['34', '35']
+        # Every server major appinfo/info.xml supports (min-version..max-version).
+        nextcloud: ['32', '33', '34', '35']
         lane: [internal-idp, external-idp]
         include:
           # Nextcloud is the IdP (`oidc` app).
