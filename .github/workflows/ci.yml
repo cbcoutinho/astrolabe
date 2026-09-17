@@ -216,8 +216,10 @@ jobs:
         # PHP 8.1 dropped: Nextcloud 32+ (astrolabe's min-version) requires PHP
         # 8.2+, and pact-php (contract tests, ADR-029) needs ^8.2.
         php-versions: ['8.2', '8.3']
+        # Oldest and newest Nextcloud OCP declared in appinfo/info.xml.
+        ocp: [min, max]
 
-    name: PHPUnit (PHP ${{ matrix.php-versions }})
+    name: PHPUnit (PHP ${{ matrix.php-versions }}, OCP ${{ matrix.ocp }})
 
     steps:
       - name: Checkout
@@ -246,7 +248,7 @@ jobs:
 
       - name: Install OCP for testing
         run: |
-          OCP_VERSION=$(echo '${{ steps.ocp-versions.outputs.ocp-matrix }}' | jq -r '.include[0]."ocp-version"')
+          OCP_VERSION=$(echo '${{ steps.ocp-versions.outputs.ocp-matrix }}' | jq -r '.include | if "${{ matrix.ocp }}" == "min" then first else last end | ."ocp-version"')
           composer require --dev "nextcloud/ocp:$OCP_VERSION" --ignore-platform-reqs --with-dependencies
 
       - name: Run PHPUnit
