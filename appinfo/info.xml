@@ -40,7 +40,7 @@ See [documentation](https://github.com/cbcoutinho/astrolabe) for configuration d
 	<screenshot>https://github.com/cbcoutinho/astrolabe/blob/main/screenshots/01-unified-search-astrolabe.png?raw=1</screenshot>
 	<screenshot>https://github.com/cbcoutinho/astrolabe/blob/main/screenshots/03-chunk-viewer-open.png?raw=1</screenshot>
 	<dependencies>
-		<nextcloud min-version="32" max-version="34"/>
+		<nextcloud min-version="32" max-version="35"/>
 		<!-- Astrolabe needs ONE of two OIDC integrations to derive a per-user
 		     token from the session: `oidc` (Nextcloud as identity provider,
 		     dispatching TokenGenerationRequestEvent) or `user_oidc` (Nextcloud

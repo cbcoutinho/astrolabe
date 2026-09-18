@@ -22,13 +22,21 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    name: e2e (${{ matrix.lane }})
+    name: e2e (${{ matrix.lane }}, NC ${{ matrix.nextcloud }})
     permissions:
       contents: read
+    env:
+      # Read by tests/e2e/docker-compose.yml for the Nextcloud image tag.
+      NEXTCLOUD_VERSION: ${{ matrix.nextcloud }}
 
     strategy:
       fail-fast: false
       matrix:
+        # Every server major appinfo/info.xml supports (min-version..max-version).
+        # 35 is pinned to 35.0.0: the floating major tag is brand new and moved
+        # under us once already (it briefly served an empty image index).
+        nextcloud: ['32', '33', '34', '35.0.0']
+        lane: [internal-idp, external-idp]
         include:
           # Nextcloud is the IdP (`oidc` app).
           - lane: internal-idp
@@ -156,7 +164,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: e2e-report-${{ matrix.lane }}
+          name: e2e-report-${{ matrix.lane }}-nc${{ matrix.nextcloud }}
           path: |
             test-results/
             playwright-report/

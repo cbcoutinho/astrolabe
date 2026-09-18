@@ -27,7 +27,9 @@ services:
     restart: "no"
 
   app:
-    image: docker.io/library/nextcloud:34@sha256:0c74fb931e7e5115c833b3cab8d1eb2a4894ff95cd5fa2e84124ac9d3e1fea09
+    # e2e.yml runs a matrix over NEXTCLOUD_VERSION; the default is the newest
+    # version declared in appinfo/info.xml.
+    image: docker.io/library/nextcloud:${NEXTCLOUD_VERSION:-35.0.0}
     restart: "no"
     ports:
       - "127.0.0.1:8080:80"
