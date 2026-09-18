@@ -27,9 +27,9 @@ services:
     restart: "no"
 
   app:
-    # Major only: e2e.yml runs a matrix over NEXTCLOUD_VERSION. The default is
-    # the newest major declared in appinfo/info.xml.
-    image: docker.io/library/nextcloud:${NEXTCLOUD_VERSION:-35}
+    # e2e.yml runs a matrix over NEXTCLOUD_VERSION; the default is the newest
+    # version declared in appinfo/info.xml.
+    image: docker.io/library/nextcloud:${NEXTCLOUD_VERSION:-35.0.0}
     restart: "no"
     ports:
       - "127.0.0.1:8080:80"
