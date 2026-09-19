@@ -1,0 +1,14 @@
+# oidc-from-source overlay for the E2E stack (internal-IdP lane).
+#
+# Applied on top of docker-compose.yml when e2e.yml checks out an unreleased
+# oidc ref (OIDC_REF) into ./oidc-src and builds it:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.oidc-src.yml up -d
+#
+# app-hooks/post-installation/10-install-apps.sh installs the mounted app
+# instead of the app-store release when it finds a built checkout here.
+
+services:
+  app:
+    volumes:
+      - ../../oidc-src:/opt/apps/oidc:ro

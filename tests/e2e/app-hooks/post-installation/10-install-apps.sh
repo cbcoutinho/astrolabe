@@ -19,9 +19,17 @@ if [ "${EXTERNAL_IDP:-0}" = "1" ]; then
     # The lane runs on plain http; user_oidc refuses the login flow otherwise.
     php /var/www/html/occ config:app:set user_oidc allow_insecure_http --value='1' --lazy
 else
-    # Install OIDC app (required for login-flow mode — provides OAuth/OIDC identity layer)
-    echo "Installing OIDC app from app store..."
-    php /var/www/html/occ app:install oidc
+    # Install OIDC app (required for login-flow mode — provides OAuth/OIDC identity layer).
+    # A built oidc checkout mounted by docker-compose.oidc-src.yml (an unreleased
+    # ref under test) takes precedence over the app-store release.
+    if [ -f /opt/apps/oidc/vendor/autoload.php ]; then
+        echo "Installing OIDC app from /opt/apps/oidc..."
+        rm -rf /var/www/html/custom_apps/oidc
+        ln -s /opt/apps/oidc /var/www/html/custom_apps/oidc
+    else
+        echo "Installing OIDC app from app store..."
+        php /var/www/html/occ app:install oidc
+    fi
     php /var/www/html/occ app:enable oidc
 
     # Configure OIDC Identity Provider for login-flow mode
