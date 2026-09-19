@@ -469,9 +469,16 @@
 						@error="handlePdfError" />
 
 					<!-- Markdown Viewer (for non-PDFs) -->
-					<MarkdownViewer
-						v-else
-						:content="getMarkdownContent()" />
+					<template v-else>
+						<!-- Only PDFs render as the document itself. Other file
+							 types (office documents, images, ...) fall back to the
+							 extracted text, so say so rather than let it read as
+							 the preview. -->
+						<NcNoteCard v-if="previewUnsupported" type="info">
+							{{ t('astrolabe', 'Previews are not yet supported for this file type. Showing the extracted text instead.') }}
+						</NcNoteCard>
+						<MarkdownViewer :content="getMarkdownContent()" />
+					</template>
 				</div>
 
 				<!-- Fixed Footer (navigation controls) -->
@@ -691,6 +698,27 @@ export default {
 		 */
 		canSummarize() {
 			return this.summaryModes.length > 0 && !this.viewerLoading
+		},
+
+		/**
+		 * Whether the open file result falls back to extracted text because
+		 * its type has no preview. Only PDFs have one. A PDF that failed to
+		 * load also falls back to text, but that is a load error, not an
+		 * unsupported type, so it is excluded by type rather than by viewer.
+		 *
+		 * @return {boolean} True for a non-PDF file shown as text.
+		 */
+		previewUnsupported() {
+			const result = this.currentResult
+			if (!result || result.doc_type !== 'file' || this.viewerType === 'pdf') {
+				return false
+			}
+			const mime = result.metadata?.mime_type
+			if (typeof mime === 'string' && mime) {
+				return mime !== 'application/pdf'
+			}
+			// Deep links carry the path but no MIME type.
+			return !(result.metadata?.path || '').toLowerCase().endsWith('.pdf')
 		},
 
 		algorithmOptions() {
