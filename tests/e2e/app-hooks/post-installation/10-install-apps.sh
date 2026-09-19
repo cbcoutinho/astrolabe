@@ -22,7 +22,7 @@ else
     # Install OIDC app (required for login-flow mode — provides OAuth/OIDC identity layer).
     # A built oidc checkout mounted by docker-compose.oidc-src.yml (an unreleased
     # ref under test) takes precedence over the app-store release.
-    if [ -f /opt/apps/oidc/vendor/autoload.php ]; then
+    if [[ -f /opt/apps/oidc/vendor/autoload.php ]]; then
         echo "Installing OIDC app from /opt/apps/oidc..."
         rm -rf /var/www/html/custom_apps/oidc
         ln -s /opt/apps/oidc /var/www/html/custom_apps/oidc
