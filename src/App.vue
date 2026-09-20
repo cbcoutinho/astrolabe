@@ -1536,6 +1536,15 @@ export default {
 				const response = await axios.get(url, { params })
 
 				if (response.data.success) {
+					// Kept for every viewer type, not just the text one: when a
+					// PDF fails to load, handlePdfError falls back to the text
+					// view, which would otherwise render an empty modal even
+					// though the chunk text is already in hand.
+					this.viewerContext = {
+						chunk: response.data.chunk_text,
+						before: response.data.before_context,
+						after: response.data.after_context,
+					}
 					// Determine viewer type and setup
 					if (result.doc_type === 'file' && response.data.page_number) {
 						this.viewerType = 'pdf'
@@ -1547,11 +1556,6 @@ export default {
 						this.currentBboxPage = response.data.page_number
 					} else {
 						this.viewerType = 'text'
-						this.viewerContext = {
-							chunk: response.data.chunk_text,
-							before: response.data.before_context,
-							after: response.data.after_context,
-						}
 					}
 				} else {
 					console.error('Failed to load chunk:', response.data.error)
