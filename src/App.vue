@@ -713,8 +713,11 @@ export default {
 			if (!result || result.doc_type !== 'file' || this.viewerType === 'pdf') {
 				return false
 			}
-			const mime = result.metadata?.mime_type
-			if (typeof mime === 'string' && mime) {
+			// Split off any parameters (`application/pdf; charset=binary`) so a
+			// decorated type is still recognised as its base type.
+			const rawMime = result.metadata?.mime_type
+			const mime = (typeof rawMime === 'string' ? rawMime : '').split(';')[0].trim().toLowerCase()
+			if (mime) {
 				return mime !== 'application/pdf'
 			}
 			// Deep links carry the path but no MIME type.
