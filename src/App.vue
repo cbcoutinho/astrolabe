@@ -469,9 +469,16 @@
 						@error="handlePdfError" />
 
 					<!-- Markdown Viewer (for non-PDFs) -->
-					<MarkdownViewer
-						v-else
-						:content="getMarkdownContent()" />
+					<template v-else>
+						<!-- Only PDFs render as the document itself. Other file
+							 types (office documents, images, ...) fall back to the
+							 extracted text, so say so rather than let it read as
+							 the preview. -->
+						<NcNoteCard v-if="previewUnsupported" type="info">
+							{{ t('astrolabe', 'Previews are not yet supported for this file type. Showing the extracted text instead.') }}
+						</NcNoteCard>
+						<MarkdownViewer :content="getMarkdownContent()" />
+					</template>
 				</div>
 
 				<!-- Fixed Footer (navigation controls) -->
@@ -691,6 +698,30 @@ export default {
 		 */
 		canSummarize() {
 			return this.summaryModes.length > 0 && !this.viewerLoading
+		},
+
+		/**
+		 * Whether the open file result falls back to extracted text because
+		 * its type has no preview. Only PDFs have one. A PDF that failed to
+		 * load also falls back to text, but that is a load error, not an
+		 * unsupported type, so it is excluded by type rather than by viewer.
+		 *
+		 * @return {boolean} True for a non-PDF file shown as text.
+		 */
+		previewUnsupported() {
+			const result = this.currentResult
+			if (!result || result.doc_type !== 'file' || this.viewerType === 'pdf') {
+				return false
+			}
+			// Split off any parameters (`application/pdf; charset=binary`) so a
+			// decorated type is still recognised as its base type.
+			const rawMime = result.metadata?.mime_type
+			const mime = (typeof rawMime === 'string' ? rawMime : '').split(';')[0].trim().toLowerCase()
+			if (mime) {
+				return mime !== 'application/pdf'
+			}
+			// Deep links carry the path but no MIME type.
+			return !(result.metadata?.path || '').toLowerCase().endsWith('.pdf')
 		},
 
 		algorithmOptions() {
@@ -1505,6 +1536,15 @@ export default {
 				const response = await axios.get(url, { params })
 
 				if (response.data.success) {
+					// Kept for every viewer type, not just the text one: when a
+					// PDF fails to load, handlePdfError falls back to the text
+					// view, which would otherwise render an empty modal even
+					// though the chunk text is already in hand.
+					this.viewerContext = {
+						chunk: response.data.chunk_text,
+						before: response.data.before_context,
+						after: response.data.after_context,
+					}
 					// Determine viewer type and setup
 					if (result.doc_type === 'file' && response.data.page_number) {
 						this.viewerType = 'pdf'
@@ -1516,11 +1556,6 @@ export default {
 						this.currentBboxPage = response.data.page_number
 					} else {
 						this.viewerType = 'text'
-						this.viewerContext = {
-							chunk: response.data.chunk_text,
-							before: response.data.before_context,
-							after: response.data.after_context,
-						}
 					}
 				} else {
 					console.error('Failed to load chunk:', response.data.error)
