@@ -275,6 +275,7 @@ class McpServerClient {
 	 *   vector_sync_enabled?: bool,
 	 *   webhooks_enabled?: bool,
 	 *   supported_search_types?: list<string>,
+	 *   sar_export_available?: bool,
 	 *   uptime_seconds?: int,
 	 *   management_api_version?: string,
 	 *   error?: string
@@ -823,5 +824,81 @@ class McpServerClient {
 			'Failed to get chunk context',
 			['doc_type' => $docType, 'doc_id' => $docId],
 		);
+	}
+
+	/**
+	 * Start a redacted SAR export archive (ADR-040 in nextcloud-mcp-server).
+	 *
+	 * Validation (folder writable, name free, item shape) is the MCP server's:
+	 * it acts as the token's user, so its answer is authoritative, and its
+	 * status and message are passed through for the UI to show.
+	 *
+	 * @param array{output_folder: string, name: string, subject: list<string>, items: list<array<array-key, mixed>>, queries: list<string>} $export
+	 * @param string $token OAuth bearer token
+	 * @return array<string, mixed> The export status, or ['error' => string, 'status' => int]
+	 */
+	public function submitSarExport(array $export, string $token): array {
+		return $this->sendPassingStatus(
+			fn (): ResponseInterface => $this->send('POST',
+				$this->baseUrl . '/api/v1/sar/exports',
+				$this->withUserAgent([
+					'headers' => ['Authorization' => 'Bearer ' . $token],
+					'json' => $export,
+				]),
+			),
+			'Failed to submit SAR export',
+		);
+	}
+
+	/**
+	 * Status of a SAR export (ADR-040 in nextcloud-mcp-server).
+	 *
+	 * @param string $token OAuth bearer token
+	 * @return array<string, mixed> The export status, or ['error' => string, 'status' => int]
+	 */
+	public function getSarExport(string $outputFolder, string $name, string $token): array {
+		return $this->sendPassingStatus(
+			fn (): ResponseInterface => $this->send('GET',
+				$this->baseUrl . '/api/v1/sar/exports',
+				$this->withUserAgent([
+					'headers' => ['Authorization' => 'Bearer ' . $token],
+					'query' => ['output_folder' => $outputFolder, 'name' => $name],
+				]),
+			),
+			'Failed to get SAR export status',
+		);
+	}
+
+	/**
+	 * Like sendAndDecode(), but a non-2xx keeps the server's status code and
+	 * `message`, for endpoints whose 4xx answers are meant for the user
+	 * (e.g. "an export already exists"). Transport failures become 502.
+	 *
+	 * @param callable(): ResponseInterface $request
+	 * @return array<string, mixed>
+	 */
+	private function sendPassingStatus(callable $request, string $errorMessage): array {
+		try {
+			$response = $request();
+			$status = $response->getStatusCode();
+			/** @var mixed $data */
+			$data = json_decode((string)$response->getBody(), true);
+			if ($status < 200 || $status >= 300) {
+				/** @var mixed $message */
+				$message = is_array($data) ? ($data['message'] ?? null) : null;
+				return [
+					'error' => is_string($message) ? $message : "Unexpected HTTP $status from MCP server",
+					'status' => $status,
+				];
+			}
+			if (!is_array($data)) {
+				throw new \RuntimeException('Invalid JSON response from server');
+			}
+			/** @var array<string, mixed> $data */
+			return $data;
+		} catch (\Exception $e) {
+			$this->logger->error($errorMessage, ['error' => $e->getMessage()]);
+			return ['error' => $e->getMessage(), 'status' => 502];
+		}
 	}
 }

@@ -37,6 +37,7 @@ class SearchCapabilities {
 
 	private const CACHE_TTL = 30;
 	private const CACHE_KEY = 'supported_search_types';
+	private const SAR_CACHE_KEY = 'sar_export_available';
 
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
@@ -76,6 +77,34 @@ class SearchCapabilities {
 		$types = array_values(array_filter($advertised, 'is_string'));
 		$cache->set(self::CACHE_KEY, $types, self::CACHE_TTL);
 		return $types;
+	}
+
+	/**
+	 * Whether the MCP server serves SAR export archives (`sar_export_available`
+	 * on GET /api/v1/status, ADR-040 in nextcloud-mcp-server).
+	 *
+	 * Fails CLOSED, unlike {@see getSupportedSearchTypes()}: a server that is
+	 * unreachable or predates the field cannot serve the export, so the UI is
+	 * hidden rather than offering a submit that would 404. Only a definite
+	 * answer is cached, so the UI appears as soon as the server advertises it.
+	 */
+	public function isSarExportAvailable(): bool {
+		$cache = $this->cacheFactory->createDistributed('astrolabe_search_caps');
+		/** @var mixed $cached */
+		$cached = $cache->get(self::SAR_CACHE_KEY);
+		if (is_bool($cached)) {
+			return $cached;
+		}
+
+		$status = $this->client->getStatus();
+		/** @var mixed $advertised — runtime JSON, not the declared status shape. */
+		$advertised = $status['sar_export_available'] ?? null;
+		if (isset($status['error']) || !is_bool($advertised)) {
+			return false;
+		}
+
+		$cache->set(self::SAR_CACHE_KEY, $advertised, self::CACHE_TTL);
+		return $advertised;
 	}
 
 	/**

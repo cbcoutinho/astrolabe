@@ -782,4 +782,91 @@ class ApiController extends Controller {
 		return new JSONResponse($result);
 	}
 
+	/**
+	 * Start a redacted SAR export archive for the current user.
+	 *
+	 * The MCP server acts as this user, so it is the authority on what they
+	 * may read (each item) and where they may write (the output folder); its
+	 * 4xx answers and messages are passed through for the UI to show.
+	 *
+	 * @param list<string> $subject The data subject's identifiers (kept)
+	 * @param list<array<array-key, mixed>> $items {doc_type, doc_id, reason, page_start?, page_end?}
+	 * @param list<string> $queries The searches that found the items
+	 */
+	#[NoAdminRequired]
+	public function sarSubmit(
+		string $output_folder = '',
+		string $name = '',
+		array $subject = [],
+		array $items = [],
+		array $queries = [],
+	): JSONResponse {
+		if (!$this->searchCapabilities->isSarExportAvailable()) {
+			return $this->sarUnavailableResponse();
+		}
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
+		}
+
+		$result = $this->client->submitSarExport([
+			'output_folder' => $output_folder,
+			'name' => $name,
+			'subject' => $subject,
+			'items' => $items,
+			'queries' => $queries,
+		], $accessToken);
+
+		return $this->sarResponse($result, Http::STATUS_ACCEPTED);
+	}
+
+	/**
+	 * Status of one of the current user's SAR exports.
+	 */
+	#[NoAdminRequired]
+	public function sarStatus(string $output_folder = '', string $name = ''): JSONResponse {
+		if (!$this->searchCapabilities->isSarExportAvailable()) {
+			return $this->sarUnavailableResponse();
+		}
+		$accessToken = $this->tokenForCurrentUser();
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
+		}
+
+		return $this->sarResponse(
+			$this->client->getSarExport($output_folder, $name, $accessToken),
+			Http::STATUS_OK,
+		);
+	}
+
+	private function sarUnavailableResponse(): JSONResponse {
+		return new JSONResponse([
+			'success' => false,
+			'error' => 'The MCP server does not provide SAR export.',
+		], Http::STATUS_NOT_FOUND);
+	}
+
+	/**
+	 * Statuses the MCP server's SAR endpoints answer with that are passed
+	 * through to the browser; anything else becomes a 500.
+	 */
+	private const SAR_PASSTHROUGH_STATUSES = [400, 401, 403, 404, 409, 502, 503];
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @param Http::STATUS_OK|Http::STATUS_ACCEPTED $successStatus
+	 */
+	private function sarResponse(array $result, int $successStatus): JSONResponse {
+		if (isset($result['error'])) {
+			/** @var mixed $status */
+			$status = $result['status'] ?? null;
+			return new JSONResponse([
+				'success' => false,
+				'error' => $result['error'],
+			], in_array($status, self::SAR_PASSTHROUGH_STATUSES, true)
+				? $status
+				: Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+		return new JSONResponse($result, $successStatus);
+	}
 }

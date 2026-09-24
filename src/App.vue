@@ -19,6 +19,19 @@
 						<ChartBox :size="20" />
 					</template>
 				</NcAppNavigationItem>
+
+				<NcAppNavigationItem
+					v-if="sarExportAvailable"
+					:name="t('astrolabe', 'Subject Access Request')"
+					:active="activeSection === 'sar'"
+					@click="activeSection = 'sar'">
+					<template #icon>
+						<ShieldAccount :size="20" />
+					</template>
+					<template #counter>
+						<NcCounterBubble v-if="sarItems.length" :count="sarItems.length" />
+					</template>
+				</NcAppNavigationItem>
 			</template>
 
 			<template #footer>
@@ -247,6 +260,18 @@
 										</template>
 										{{ t('astrolabe', 'Show Chunk') }}
 									</NcButton>
+									<NcButton
+										v-if="sarExportAvailable"
+										variant="tertiary"
+										class="mcp-add-to-sar"
+										:disabled="inSar(result)"
+										@click="addToSar(result)">
+										<template #icon>
+											<PlaylistCheck v-if="inSar(result)" :size="18" />
+											<PlaylistPlus v-else :size="18" />
+										</template>
+										{{ inSar(result) ? t('astrolabe', 'In SAR') : t('astrolabe', 'Add to SAR') }}
+									</NcButton>
 								</div>
 							</div>
 							<a
@@ -313,6 +338,17 @@
 						<Magnify />
 					</template>
 				</NcEmptyContent>
+			</div>
+
+			<!-- Subject Access Request Section -->
+			<div v-if="sarExportAvailable" v-show="activeSection === 'sar'" class="mcp-section">
+				<div class="mcp-section-header">
+					<h2>{{ t('astrolabe', 'Subject Access Request') }}</h2>
+				</div>
+				<SarExport
+					:items="sarItems"
+					:queries="sarQueries"
+					@remove="sarItems.splice($event, 1)" />
 			</div>
 
 			<!-- Index Status Section -->
@@ -513,6 +549,7 @@ import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcContent from '@nextcloud/vue/components/NcContent'
+import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -531,7 +568,10 @@ import Eye from 'vue-material-design-icons/Eye.vue'
 import FolderSearch from 'vue-material-design-icons/FolderSearch.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
+import PlaylistCheck from 'vue-material-design-icons/PlaylistCheck.vue'
+import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import ShieldAccount from 'vue-material-design-icons/ShieldAccount.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
 // Imported statically, despite PDF.js being several MB. A dynamic import emits
 // a separate chunk whose URL Vite resolves against `base` (`/`), so it is
@@ -539,6 +579,7 @@ import MarkdownViewer from './components/MarkdownViewer.vue'
 // same root-relative-URL problem that forces the worker to be inlined. Making
 // this lazy again needs a base-aware chunk URL first.
 import PDFViewer from './components/PDFViewer.vue'
+import SarExport from './components/SarExport.vue'
 
 // How many PDF pages to render for a multimodal summary. Kept under the
 // backend's own cap; vision tokens dominate the cost of these calls, so sending
@@ -567,6 +608,11 @@ export default {
 		NcCheckboxRadioSwitch,
 		PDFViewer,
 		MarkdownViewer,
+		SarExport,
+		NcCounterBubble,
+		PlaylistCheck,
+		PlaylistPlus,
+		ShieldAccount,
 		Magnify,
 		ChartBox,
 		Cog,
@@ -677,6 +723,13 @@ export default {
 			// the resolving request checks this before writing its result — without
 			// it, document A's summary can land on document B.
 			summaryGeneration: 0,
+
+			// SAR export (redacted archive). Hidden entirely unless the MCP
+			// server advertises it. `sarItems` is the basket built from search
+			// results; `sarQueries` records the searches that produced them.
+			sarExportAvailable: appConfig.sarExportAvailable === true,
+			sarItems: [],
+			sarQueries: [],
 		}
 	},
 
@@ -1080,6 +1133,43 @@ export default {
 		// directories into the path filter. Picking from the user's own Files
 		// tree means every value is a valid, server-side path, so the filter
 		// can't silently match nothing because of a typo.
+		/**
+		 * Whether a result's document is already in the SAR basket. Keyed by
+		 * document, not chunk: several chunks of one document are one item.
+		 *
+		 * @param {object} result A search result
+		 * @return {boolean} True when the document is in the basket.
+		 */
+		inSar(result) {
+			return this.sarItems.some((item) => item.doc_type === result.doc_type
+				&& String(item.doc_id) === String(result.id))
+		},
+
+		/**
+		 * Add a result's document to the SAR basket, and record the query that
+		 * found it for the archive's search log. The reason and page range are
+		 * filled in on the SAR view.
+		 *
+		 * @param {object} result A search result
+		 */
+		addToSar(result) {
+			if (this.inSar(result)) {
+				return
+			}
+			this.sarItems.push({
+				doc_type: result.doc_type,
+				doc_id: String(result.id),
+				title: result.title || '',
+				reason: '',
+				page_start: '',
+				page_end: '',
+			})
+			const query = this.query.trim()
+			if (query && !this.sarQueries.includes(query)) {
+				this.sarQueries.push(query)
+			}
+		},
+
 		async pickFolders() {
 			const picker = getFilePickerBuilder(this.t('astrolabe', 'Select folders to search'))
 				.setMultiSelect(true)

@@ -457,4 +457,59 @@ final class McpServerClientTest extends TestCase {
 		$this->assertFalse($captured->hasHeader('X-Request-Id'));
 		$this->assertFalse($captured->hasHeader('traceparent'));
 	}
+
+	// =========================================================================
+	// SAR export: status and message of a 4xx are passed through
+	// =========================================================================
+
+	public function testSubmitSarExportPostsBodyWithBearer(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(202, json_encode(['state' => 'running']));
+			});
+
+		$export = [
+			'output_folder' => '/Team',
+			'name' => 'SAR-1',
+			'subject' => ['Jane Doe'],
+			'items' => [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'r']],
+			'queries' => [],
+		];
+		$result = $this->client->submitSarExport($export, 'tok');
+
+		$this->assertSame(['state' => 'running'], $result);
+		$this->assertSame('POST', $captured->getMethod());
+		$this->assertSame('/api/v1/sar/exports', $captured->getUri()->getPath());
+		$this->assertSame('Bearer tok', $captured->getHeaderLine('Authorization'));
+		$this->assertSame($export, json_decode((string)$captured->getBody(), true));
+	}
+
+	public function testSubmitSarExportKeepsServerStatusAndMessage(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(
+			409,
+			json_encode(['error' => 'export_error', 'message' => 'an export already exists']),
+		));
+
+		$result = $this->client->submitSarExport([
+			'output_folder' => '/Team', 'name' => 'SAR-1', 'subject' => [], 'items' => [], 'queries' => [],
+		], 'tok');
+
+		$this->assertSame(['error' => 'an export already exists', 'status' => 409], $result);
+	}
+
+	public function testGetSarExportSendsQueryAndMapsTransportFailureTo502(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				throw new \RuntimeException('connection refused');
+			});
+
+		$result = $this->client->getSarExport('/Team Folder', 'SAR 1', 'tok');
+
+		$this->assertSame(502, $result['status']);
+		$this->assertSame('output_folder=%2FTeam+Folder&name=SAR+1', $captured->getUri()->getQuery());
+	}
 }

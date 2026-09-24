@@ -77,6 +77,18 @@ return [
 			'verb' => 'GET',
 		],
 
+		// SAR export archives (proxied to the MCP server's /api/v1/sar/exports)
+		[
+			'name' => 'api#sarSubmit',
+			'url' => '/api/v1/sar/exports',
+			'verb' => 'POST',
+		],
+		[
+			'name' => 'api#sarStatus',
+			'url' => '/api/v1/sar/exports',
+			'verb' => 'GET',
+		],
+
 		// Assistant integration. Scheduling returns a TaskProcessing task id; the
 		// frontend then polls core's own OCS endpoint
 		// (/ocs/v2.php/taskprocessing/task/{id}) rather than a route of ours.
