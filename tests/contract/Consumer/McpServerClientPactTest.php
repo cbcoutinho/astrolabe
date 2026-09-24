@@ -133,6 +133,8 @@ final class McpServerClientPactTest extends TestCase {
 				'uptime_seconds' => $matcher->integer(123),
 				'management_api_version' => $matcher->like('1.0'),
 				'supported_search_types' => $matcher->eachLike('semantic'),
+				// Gates the SAR export UI (SearchCapabilities::isSarExportAvailable).
+				'sar_export_available' => $matcher->boolean(false),
 			]);
 
 		$builder = new InteractionBuilder($config);
@@ -153,6 +155,104 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertSame(123, $status['uptime_seconds'] ?? null);
 		$this->assertSame('1.0', $status['management_api_version'] ?? null);
 		$this->assertSame(['semantic'], $status['supported_search_types'] ?? null);
+		$this->assertFalse($status['sar_export_available'] ?? null);
+	}
+
+	/**
+	 * SAR export submit: the export request astrolabe forwards for the current
+	 * user, and the status the MCP server answers with (202 while the job runs).
+	 */
+	public function testSubmitSarExportHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/sar/exports')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'output_folder' => $matcher->like('/Team/SAR'),
+				'name' => $matcher->like('SAR-1'),
+				'subject' => $matcher->eachLike('Jane Doe'),
+				'items' => $matcher->eachLike([
+					'doc_type' => $matcher->like('file'),
+					'doc_id' => $matcher->like('12'),
+					'reason' => $matcher->like('mentions the subject'),
+				]),
+				'queries' => $matcher->eachLike('jane doe'),
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(202)
+			->addHeader('Content-Type', 'application/json')
+			->setBody(self::sarStatusBody($matcher, 'running'));
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('a user with background access can export a SAR archive')
+			->uponReceiving('a request to start a SAR export')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->submitSarExport([
+			'output_folder' => '/Team/SAR',
+			'name' => 'SAR-1',
+			'subject' => ['Jane Doe'],
+			'items' => [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'mentions the subject']],
+			'queries' => ['jane doe'],
+		], 'mint-token');
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertArrayNotHasKey('error', $result);
+		$this->assertSame('running', $result['state'] ?? null);
+	}
+
+	/**
+	 * SAR export status, polled by the SAR view until the archive is ready.
+	 */
+	public function testGetSarExportHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('GET')
+			->setPath('/api/v1/sar/exports')
+			->setQuery(['output_folder' => '/Team/SAR', 'name' => 'SAR-1'])
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'));
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody(self::sarStatusBody($matcher, 'done'));
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('a finished SAR export exists')
+			->uponReceiving('a request for a SAR export status')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->getSarExport('/Team/SAR', 'SAR-1', 'mint-token');
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame('done', $result['state'] ?? null);
+		$this->assertSame('/Team/SAR/SAR-1.zip', $result['archive_path'] ?? null);
+	}
+
+	/**
+	 * The status fields the SAR view reads.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function sarStatusBody(Matcher $matcher, string $state): array {
+		return [
+			'state' => $matcher->regex($state, 'running|done|failed'),
+			'archive_path' => $matcher->like('/Team/SAR/SAR-1.zip'),
+			'total' => $matcher->integer(1),
+			'processed' => $matcher->integer(1),
+			'failed' => $matcher->integer(0),
+		];
 	}
 
 	/**
