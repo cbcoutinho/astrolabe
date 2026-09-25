@@ -459,47 +459,52 @@ final class McpServerClientTest extends TestCase {
 	}
 
 	// =========================================================================
-	// SAR export: status and message of a 4xx are passed through
+	// SAR cases: status and message of a 4xx are passed through
 	// =========================================================================
 
-	public function testSubmitSarExportPostsBodyWithBearer(): void {
+	public function testSarCasesSendsMethodPathBodyAndBearer(): void {
 		$captured = null;
 		$this->httpClient->method('sendRequest')
 			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
 				$captured = $r;
-				return $this->makeResponse(202, json_encode(['state' => 'running']));
+				return $this->makeResponse(200, json_encode(['case_id' => 101]));
 			});
 
-		$export = [
-			'output_folder' => '/Team',
-			'name' => 'SAR-1',
-			'subject' => ['Jane Doe'],
-			'items' => [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'r']],
-			'queries' => [],
-		];
-		$result = $this->client->submitSarExport($export, 'tok');
+		$body = ['add' => [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'r']]];
+		$result = $this->client->sarCases('POST', '/101/items', 'tok', $body);
 
-		$this->assertSame(['state' => 'running'], $result);
+		$this->assertSame(['case_id' => 101], $result);
 		$this->assertSame('POST', $captured->getMethod());
-		$this->assertSame('/api/v1/sar/exports', $captured->getUri()->getPath());
+		$this->assertSame('/api/v1/sar/cases/101/items', $captured->getUri()->getPath());
 		$this->assertSame('Bearer tok', $captured->getHeaderLine('Authorization'));
-		$this->assertSame($export, json_decode((string)$captured->getBody(), true));
+		$this->assertSame($body, json_decode((string)$captured->getBody(), true));
 	}
 
-	public function testSubmitSarExportKeepsServerStatusAndMessage(): void {
+	public function testSarCasesEmptyBodyIsAJsonObject(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(202, '{}');
+			});
+
+		$this->client->sarCases('POST', '/101/exports', 'tok', []);
+
+		$this->assertSame('{}', (string)$captured->getBody());
+	}
+
+	public function testSarCasesKeepsServerStatusAndMessage(): void {
 		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(
 			409,
-			json_encode(['error' => 'export_error', 'message' => 'an export already exists']),
+			json_encode(['error' => 'sar_case_error', 'message' => 'the case is closed']),
 		));
 
-		$result = $this->client->submitSarExport([
-			'output_folder' => '/Team', 'name' => 'SAR-1', 'subject' => [], 'items' => [], 'queries' => [],
-		], 'tok');
+		$result = $this->client->sarCases('PATCH', '/101', 'tok', ['state' => 'open']);
 
-		$this->assertSame(['error' => 'an export already exists', 'status' => 409], $result);
+		$this->assertSame(['error' => 'the case is closed', 'status' => 409], $result);
 	}
 
-	public function testGetSarExportSendsQueryAndMapsTransportFailureTo502(): void {
+	public function testSarCasesSendsQueryAndMapsTransportFailureTo502(): void {
 		$captured = null;
 		$this->httpClient->method('sendRequest')
 			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
@@ -507,9 +512,10 @@ final class McpServerClientTest extends TestCase {
 				throw new \RuntimeException('connection refused');
 			});
 
-		$result = $this->client->getSarExport('/Team Folder', 'SAR 1', 'tok');
+		$result = $this->client->sarCases('GET', '/101', 'tok', null, ['offset' => 0, 'limit' => 50]);
 
 		$this->assertSame(502, $result['status']);
-		$this->assertSame('output_folder=%2FTeam+Folder&name=SAR+1', $captured->getUri()->getQuery());
+		$this->assertSame('offset=0&limit=50', $captured->getUri()->getQuery());
+		$this->assertSame('', (string)$captured->getBody());
 	}
 }

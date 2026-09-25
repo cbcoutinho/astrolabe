@@ -782,24 +782,91 @@ class ApiController extends Controller {
 		return new JSONResponse($result);
 	}
 
+	/*
+	 * SAR cases (ADR-040 in nextcloud-mcp-server), proxied to the MCP server's
+	 * /api/v1/sar/cases as the current user. The MCP server is the authority on
+	 * what the user may read and write (it acts through Nextcloud's permissions
+	 * on the case folder); its 4xx answers and messages are passed through for
+	 * the UI to show.
+	 */
+
+	#[NoAdminRequired]
+	public function sarList(): JSONResponse {
+		return $this->sarProxy('GET', '');
+	}
+
 	/**
-	 * Start a redacted SAR export archive for the current user.
-	 *
-	 * The MCP server acts as this user, so it is the authority on what they
-	 * may read (each item) and where they may write (the output folder); its
-	 * 4xx answers and messages are passed through for the UI to show.
-	 *
-	 * @param list<string> $subject The data subject's identifiers (kept)
-	 * @param list<array<array-key, mixed>> $items {doc_type, doc_id, reason, page_start?, page_end?}
-	 * @param list<string> $queries The searches that found the items
+	 * @param list<string> $subject The data subject's identifiers (kept in exports)
 	 */
 	#[NoAdminRequired]
-	public function sarSubmit(
-		string $output_folder = '',
+	public function sarCreate(
+		string $folder = '',
 		string $name = '',
 		array $subject = [],
-		array $items = [],
-		array $queries = [],
+		string $description = '',
+	): JSONResponse {
+		return $this->sarProxy('POST', '', [
+			'folder' => $folder,
+			'name' => $name,
+			'subject' => $subject,
+			'description' => $description,
+		], successStatus: Http::STATUS_CREATED);
+	}
+
+	#[NoAdminRequired]
+	public function sarGet(int $id, int $offset = 0, int $limit = 200): JSONResponse {
+		return $this->sarProxy('GET', "/$id", query: ['offset' => $offset, 'limit' => $limit]);
+	}
+
+	/**
+	 * @param list<string>|null $subject
+	 */
+	#[NoAdminRequired]
+	public function sarUpdate(
+		int $id,
+		?array $subject = null,
+		?string $description = null,
+		?string $state = null,
+	): JSONResponse {
+		$body = array_filter(
+			['subject' => $subject, 'description' => $description, 'state' => $state],
+			fn (mixed $v): bool => $v !== null,
+		);
+		return $this->sarProxy('PATCH', "/$id", $body);
+	}
+
+	/**
+	 * @param list<array<array-key, mixed>> $add {doc_type, doc_id, reason, title?, found_by?, page_start?, page_end?}
+	 * @param list<array<array-key, mixed>> $remove {doc_type, doc_id}
+	 * @param list<array<array-key, mixed>> $queries {text, hits?}
+	 */
+	#[NoAdminRequired]
+	public function sarItems(int $id, array $add = [], array $remove = [], array $queries = []): JSONResponse {
+		return $this->sarProxy('POST', "/$id/items", [
+			'add' => $add,
+			'remove' => $remove,
+			'queries' => $queries,
+		]);
+	}
+
+	#[NoAdminRequired]
+	public function sarExport(int $id, ?string $output_folder = null): JSONResponse {
+		$body = $output_folder === null || $output_folder === '' ? [] : ['output_folder' => $output_folder];
+		return $this->sarProxy('POST', "/$id/exports", $body, successStatus: Http::STATUS_ACCEPTED);
+	}
+
+	/**
+	 * @param 'GET'|'POST'|'PATCH' $method
+	 * @param array<string, mixed>|null $body
+	 * @param array<string, int|string> $query
+	 * @param Http::STATUS_OK|Http::STATUS_CREATED|Http::STATUS_ACCEPTED $successStatus
+	 */
+	private function sarProxy(
+		string $method,
+		string $path,
+		?array $body = null,
+		array $query = [],
+		int $successStatus = Http::STATUS_OK,
 	): JSONResponse {
 		if (!$this->searchCapabilities->isSarExportAvailable()) {
 			return $this->sarUnavailableResponse();
@@ -808,41 +875,16 @@ class ApiController extends Controller {
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
 		}
-
-		$result = $this->client->submitSarExport([
-			'output_folder' => $output_folder,
-			'name' => $name,
-			'subject' => $subject,
-			'items' => $items,
-			'queries' => $queries,
-		], $accessToken);
-
-		return $this->sarResponse($result, Http::STATUS_ACCEPTED);
-	}
-
-	/**
-	 * Status of one of the current user's SAR exports.
-	 */
-	#[NoAdminRequired]
-	public function sarStatus(string $output_folder = '', string $name = ''): JSONResponse {
-		if (!$this->searchCapabilities->isSarExportAvailable()) {
-			return $this->sarUnavailableResponse();
-		}
-		$accessToken = $this->tokenForCurrentUser();
-		if ($accessToken instanceof JSONResponse) {
-			return $accessToken;
-		}
-
 		return $this->sarResponse(
-			$this->client->getSarExport($output_folder, $name, $accessToken),
-			Http::STATUS_OK,
+			$this->client->sarCases($method, $path, $accessToken, $body, $query),
+			$successStatus,
 		);
 	}
 
 	private function sarUnavailableResponse(): JSONResponse {
 		return new JSONResponse([
 			'success' => false,
-			'error' => 'The MCP server does not provide SAR export.',
+			'error' => 'The MCP server does not provide SAR cases.',
 		], Http::STATUS_NOT_FOUND);
 	}
 
@@ -854,7 +896,7 @@ class ApiController extends Controller {
 
 	/**
 	 * @param array<string, mixed> $result
-	 * @param Http::STATUS_OK|Http::STATUS_ACCEPTED $successStatus
+	 * @param Http::STATUS_OK|Http::STATUS_CREATED|Http::STATUS_ACCEPTED $successStatus
 	 */
 	private function sarResponse(array $result, int $successStatus): JSONResponse {
 		if (isset($result['error'])) {

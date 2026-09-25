@@ -7,102 +7,122 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 use OCP\AppFramework\Http;
 
 /**
- * SAR export proxy (ApiController::sarSubmit / sarStatus): gated on the MCP
- * server's advertised capability, forwarded as the current user, and the MCP
+ * SAR case proxy (ApiController::sar*): gated on the MCP server's advertised
+ * capability, forwarded as the current user to /api/v1/sar/cases, and the MCP
  * server's 4xx answers passed through so the UI can show them.
  */
 final class ApiControllerSarTest extends AbstractApiControllerTestCase {
-	private const STATUS = [
-		'state' => 'running',
-		'archive_path' => '/Team/SAR-1.zip',
-		'total' => 1,
-		'processed' => 0,
-		'failed' => 0,
-	];
+	private const CASE = ['case_id' => 101, 'case' => ['name' => 'SAR-1', 'state' => 'open']];
 
-	public function testSubmitIs404WhenServerDoesNotAdvertiseSar(): void {
+	private function available(): void {
+		$this->authenticateUserWithToken('alice', 'alice-token');
+		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
+	}
+
+	public function testIs404WhenServerDoesNotAdvertiseSar(): void {
 		$this->authenticateUserWithToken();
 		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(false);
-		$this->client->expects($this->never())->method('submitSarExport');
+		$this->client->expects($this->never())->method('sarCases');
 
-		$response = $this->controller->sarSubmit(output_folder: '/Team', name: 'SAR-1');
+		$response = $this->controller->sarList();
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
 		$this->assertFalse($response->getData()['success']);
 	}
 
-	public function testSubmitForwardsExportAsCurrentUserAndReturns202(): void {
-		$this->authenticateUserWithToken('alice', 'alice-token');
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
-		$items = [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'letter']];
+	public function testCreateForwardsAsCurrentUserAndReturns201(): void {
+		$this->available();
 		$this->client->expects($this->once())
-			->method('submitSarExport')
-			->with([
-				'output_folder' => '/Team',
+			->method('sarCases')
+			->with('POST', '', 'alice-token', [
+				'folder' => '/Team',
 				'name' => 'SAR-1',
 				'subject' => ['Jane Doe'],
-				'items' => $items,
-				'queries' => ['jane'],
-			], 'alice-token')
-			->willReturn(self::STATUS);
+				'description' => 'ref 7',
+			])
+			->willReturn(self::CASE);
 
-		$response = $this->controller->sarSubmit(
-			output_folder: '/Team',
-			name: 'SAR-1',
-			subject: ['Jane Doe'],
-			items: $items,
-			queries: ['jane'],
-		);
+		$response = $this->controller->sarCreate('/Team', 'SAR-1', ['Jane Doe'], 'ref 7');
 
-		$this->assertSame(Http::STATUS_ACCEPTED, $response->getStatus());
-		$this->assertSame(self::STATUS, $response->getData());
+		$this->assertSame(Http::STATUS_CREATED, $response->getStatus());
+		$this->assertSame(self::CASE, $response->getData());
 	}
 
-	public function testSubmitPassesServerStatusAndMessageThrough(): void {
-		$this->authenticateUserWithToken();
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
-		$this->client->method('submitSarExport')->willReturn([
-			'error' => 'an export already exists at /Team/SAR-1.status.json',
+	public function testGetPassesPaging(): void {
+		$this->available();
+		$this->client->expects($this->once())
+			->method('sarCases')
+			->with('GET', '/101', 'alice-token', null, ['offset' => 5, 'limit' => 50])
+			->willReturn(self::CASE);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, 5, 50)->getStatus());
+	}
+
+	public function testUpdateSendsOnlyGivenFields(): void {
+		$this->available();
+		$this->client->expects($this->once())
+			->method('sarCases')
+			->with('PATCH', '/101', 'alice-token', ['state' => 'closed'])
+			->willReturn(self::CASE);
+
+		$this->controller->sarUpdate(101, state: 'closed');
+	}
+
+	public function testItemsForwardAddRemoveAndQueries(): void {
+		$this->available();
+		$add = [['doc_type' => 'note', 'doc_id' => '12', 'reason' => 'r']];
+		$this->client->expects($this->once())
+			->method('sarCases')
+			->with('POST', '/101/items', 'alice-token', [
+				'add' => $add,
+				'remove' => [],
+				'queries' => [['text' => 'jane', 'hits' => 2]],
+			])
+			->willReturn(self::CASE);
+
+		$this->controller->sarItems(101, $add, [], [['text' => 'jane', 'hits' => 2]]);
+	}
+
+	public function testExportReturns202AndSendsFolderOnlyWhenGiven(): void {
+		$this->available();
+		$this->client->expects($this->exactly(2))
+			->method('sarCases')
+			->willReturnCallback(function (string $method, string $path, string $token, ?array $body): array {
+				$this->assertSame(['POST', '/101/exports'], [$method, $path]);
+				static $calls = 0;
+				$this->assertSame($calls++ === 0 ? [] : ['output_folder' => '/Out'], $body);
+				return self::CASE;
+			});
+
+		$this->assertSame(Http::STATUS_ACCEPTED, $this->controller->sarExport(101)->getStatus());
+		$this->controller->sarExport(101, '/Out');
+	}
+
+	public function testServerStatusAndMessagePassThrough(): void {
+		$this->available();
+		$this->client->method('sarCases')->willReturn([
+			'error' => 'the case is closed; this needs it to be open',
 			'status' => 409,
 		]);
 
-		$response = $this->controller->sarSubmit(output_folder: '/Team', name: 'SAR-1');
+		$response = $this->controller->sarItems(101, [['doc_type' => 'note', 'doc_id' => '1', 'reason' => 'r']]);
 
 		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
-		$this->assertStringContainsString('already exists', $response->getData()['error']);
+		$this->assertStringContainsString('closed', $response->getData()['error']);
 	}
 
-	public function testSubmitWithoutUserIs401(): void {
+	public function testUnexpectedStatusBecomes500(): void {
+		$this->available();
+		$this->client->method('sarCases')->willReturn(['error' => 'teapot', 'status' => 418]);
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $this->controller->sarList()->getStatus());
+	}
+
+	public function testWithoutUserIs401(): void {
 		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
 		$this->userSession->method('getUser')->willReturn(null);
-		$this->client->expects($this->never())->method('submitSarExport');
+		$this->client->expects($this->never())->method('sarCases');
 
-		$response = $this->controller->sarSubmit(output_folder: '/Team', name: 'SAR-1');
-
-		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
-	}
-
-	public function testStatusForwardsFolderAndName(): void {
-		$this->authenticateUserWithToken('alice', 'alice-token');
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
-		$this->client->expects($this->once())
-			->method('getSarExport')
-			->with('/Team', 'SAR-1', 'alice-token')
-			->willReturn(['state' => 'done'] + self::STATUS);
-
-		$response = $this->controller->sarStatus(output_folder: '/Team', name: 'SAR-1');
-
-		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame('done', $response->getData()['state']);
-	}
-
-	public function testStatusOfUnknownExportIs404(): void {
-		$this->authenticateUserWithToken();
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
-		$this->client->method('getSarExport')->willReturn(['error' => 'no export', 'status' => 404]);
-
-		$response = $this->controller->sarStatus(output_folder: '/Team', name: 'X');
-
-		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller->sarList()->getStatus());
 	}
 }

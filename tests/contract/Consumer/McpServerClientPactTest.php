@@ -159,99 +159,198 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
-	 * SAR export submit: the export request astrolabe forwards for the current
-	 * user, and the status the MCP server answers with (202 while the job runs).
+	 * SAR case create: the case astrolabe opens for the current user.
 	 */
-	public function testSubmitSarExportHonoursTheContract(): void {
+	public function testCreateSarCaseHonoursTheContract(): void {
 		$matcher = new Matcher();
 		$config = $this->mockServerConfig();
 
 		$request = (new ConsumerRequest())
 			->setMethod('POST')
-			->setPath('/api/v1/sar/exports')
+			->setPath('/api/v1/sar/cases')
 			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
 			->addHeader('Content-Type', 'application/json')
 			->setBody([
-				'output_folder' => $matcher->like('/Team/SAR'),
+				'folder' => $matcher->like('/Team'),
 				'name' => $matcher->like('SAR-1'),
 				'subject' => $matcher->eachLike('Jane Doe'),
-				'items' => $matcher->eachLike([
-					'doc_type' => $matcher->like('file'),
-					'doc_id' => $matcher->like('12'),
-					'reason' => $matcher->like('mentions the subject'),
-				]),
-				'queries' => $matcher->eachLike('jane doe'),
+				'description' => $matcher->like('ref 7'),
 			]);
 
 		$response = (new ProviderResponse())
-			->setStatus(202)
+			->setStatus(201)
 			->addHeader('Content-Type', 'application/json')
-			->setBody(self::sarStatusBody($matcher, 'running'));
+			->setBody(self::sarCaseBody($matcher, 'open'));
 
 		$builder = new InteractionBuilder($config);
 		$builder
-			->given('a user with background access can export a SAR archive')
-			->uponReceiving('a request to start a SAR export')
+			->given('a user with background access can create a SAR case')
+			->uponReceiving('a request to create a SAR case')
 			->with($request)
 			->willRespondWith($response);
 
-		$result = $this->clientFor($config)->submitSarExport([
-			'output_folder' => '/Team/SAR',
+		$result = $this->clientFor($config)->sarCases('POST', '', 'mint-token', [
+			'folder' => '/Team',
 			'name' => 'SAR-1',
 			'subject' => ['Jane Doe'],
-			'items' => [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'mentions the subject']],
-			'queries' => ['jane doe'],
-		], 'mint-token');
+			'description' => 'ref 7',
+		]);
 
 		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
-		$this->assertArrayNotHasKey('error', $result);
-		$this->assertSame('running', $result['state'] ?? null);
+		$this->assertSame(101, $result['case_id'] ?? null);
 	}
 
 	/**
-	 * SAR export status, polled by the SAR view until the archive is ready.
+	 * SAR case items: adding a search result to the case, with its reason and
+	 * the query that found it, and logging the query.
 	 */
-	public function testGetSarExportHonoursTheContract(): void {
+	public function testChangeSarCaseItemsHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/sar/cases/101/items')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'add' => $matcher->eachLike([
+					'doc_type' => $matcher->like('file'),
+					'doc_id' => $matcher->like('12'),
+					'reason' => $matcher->like('mentions the subject'),
+					'title' => $matcher->like('Letter'),
+					'found_by' => $matcher->like('jane doe'),
+				]),
+				'remove' => [],
+				'queries' => $matcher->eachLike([
+					'text' => $matcher->like('jane doe'),
+					'hits' => $matcher->integer(3),
+				]),
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody(self::sarCaseBody($matcher, 'open'));
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an open SAR case 101 exists')
+			->uponReceiving('a request to add documents to a SAR case')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->sarCases('POST', '/101/items', 'mint-token', [
+			'add' => [[
+				'doc_type' => 'file',
+				'doc_id' => '12',
+				'reason' => 'mentions the subject',
+				'title' => 'Letter',
+				'found_by' => 'jane doe',
+			]],
+			'remove' => [],
+			'queries' => [['text' => 'jane doe', 'hits' => 3]],
+		]);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame('open', $result['case']['state'] ?? null);
+	}
+
+	/**
+	 * SAR case get: what the case page and the export progress read.
+	 */
+	public function testGetSarCaseHonoursTheContract(): void {
 		$matcher = new Matcher();
 		$config = $this->mockServerConfig();
 
 		$request = (new ConsumerRequest())
 			->setMethod('GET')
-			->setPath('/api/v1/sar/exports')
-			->setQuery(['output_folder' => '/Team/SAR', 'name' => 'SAR-1'])
+			->setPath('/api/v1/sar/cases/101')
+			->setQuery(['offset' => '0', 'limit' => '200'])
 			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'));
 
-		$response = (new ProviderResponse())
-			->setStatus(200)
-			->addHeader('Content-Type', 'application/json')
-			->setBody(self::sarStatusBody($matcher, 'done'));
-
-		$builder = new InteractionBuilder($config);
-		$builder
-			->given('a finished SAR export exists')
-			->uponReceiving('a request for a SAR export status')
-			->with($request)
-			->willRespondWith($response);
-
-		$result = $this->clientFor($config)->getSarExport('/Team/SAR', 'SAR-1', 'mint-token');
-
-		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
-		$this->assertSame('done', $result['state'] ?? null);
-		$this->assertSame('/Team/SAR/SAR-1.zip', $result['archive_path'] ?? null);
-	}
-
-	/**
-	 * The status fields the SAR view reads.
-	 *
-	 * @return array<string, mixed>
-	 */
-	private static function sarStatusBody(Matcher $matcher, string $state): array {
-		return [
-			'state' => $matcher->regex($state, 'running|done|failed'),
-			'archive_path' => $matcher->like('/Team/SAR/SAR-1.zip'),
+		$body = self::sarCaseBody($matcher, 'ready_for_audit');
+		$body['latest_export'] = [
+			'state' => $matcher->regex('done', 'running|done|failed'),
+			'archive_path' => $matcher->like('/Team/SAR-1/exports/SAR-1-v1.zip'),
 			'total' => $matcher->integer(1),
 			'processed' => $matcher->integer(1),
 			'failed' => $matcher->integer(0),
+		];
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody($body);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an exported SAR case 101 exists')
+			->uponReceiving('a request for a SAR case')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->sarCases('GET', '/101', 'mint-token', null, ['offset' => 0, 'limit' => 200]);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame('ready_for_audit', $result['case']['state'] ?? null);
+		$this->assertSame('done', $result['latest_export']['state'] ?? null);
+	}
+
+	/**
+	 * SAR case export: starting the redacted archive (202; the case locks).
+	 */
+	public function testExportSarCaseHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/sar/cases/101/exports')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody(new \stdClass());
+
+		$response = (new ProviderResponse())
+			->setStatus(202)
+			->addHeader('Content-Type', 'application/json')
+			->setBody(self::sarCaseBody($matcher, 'exporting'));
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an open SAR case 101 exists')
+			->uponReceiving('a request to export a SAR case')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->sarCases('POST', '/101/exports', 'mint-token', []);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame('exporting', $result['case']['state'] ?? null);
+	}
+
+	/**
+	 * The case fields the SAR views read.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function sarCaseBody(Matcher $matcher, string $state): array {
+		return [
+			'case_id' => $matcher->integer(101),
+			'path' => $matcher->like('/Team/SAR-1/sar-case.json'),
+			'items_total' => $matcher->integer(1),
+			'case' => [
+				'name' => $matcher->like('SAR-1'),
+				'description' => $matcher->like('ref 7'),
+				'state' => $matcher->regex($state, 'open|exporting|ready_for_audit|closed'),
+				'subject' => $matcher->eachLike('Jane Doe'),
+				'items' => $matcher->eachLike([
+					'doc_type' => $matcher->like('file'),
+					'doc_id' => $matcher->like('12'),
+					'reason' => $matcher->like('mentions the subject'),
+					'title' => $matcher->like('Letter'),
+				]),
+				'updated_at' => $matcher->like('2026-09-25T08:00:00+00:00'),
+			],
 		];
 	}
 

@@ -827,45 +827,41 @@ class McpServerClient {
 	}
 
 	/**
-	 * Start a redacted SAR export archive (ADR-040 in nextcloud-mcp-server).
+	 * Call the MCP server's SAR case API (ADR-040 in nextcloud-mcp-server) as
+	 * the token's user.
 	 *
-	 * Validation (folder writable, name free, item shape) is the MCP server's:
-	 * it acts as the token's user, so its answer is authoritative, and its
-	 * status and message are passed through for the UI to show.
+	 * ``$path`` is relative to /api/v1/sar/cases: '' for the collection,
+	 * '/{id}', '/{id}/items' or '/{id}/exports'. The MCP server validates and
+	 * enforces access (it acts as the token's user, through Nextcloud's
+	 * permissions on the case folder), so its status and message are passed
+	 * through for the UI to show.
 	 *
-	 * @param array{output_folder: string, name: string, subject: list<string>, items: list<array<array-key, mixed>>, queries: list<string>} $export
-	 * @param string $token OAuth bearer token
-	 * @return array<string, mixed> The export status, or ['error' => string, 'status' => int]
+	 * @param 'GET'|'POST'|'PATCH' $method
+	 * @param array<string, mixed>|null $body JSON body
+	 * @param array<string, int|string> $query
+	 * @return array<string, mixed> The response, or ['error' => string, 'status' => int]
 	 */
-	public function submitSarExport(array $export, string $token): array {
+	public function sarCases(
+		string $method,
+		string $path,
+		string $token,
+		?array $body = null,
+		array $query = [],
+	): array {
+		$options = [
+			'headers' => ['Authorization' => 'Bearer ' . $token],
+			'query' => $query,
+		];
+		if ($body !== null) {
+			// An empty body must still encode as a JSON object, not [].
+			$options['json'] = $body === [] ? new \stdClass() : $body;
+		}
 		return $this->sendPassingStatus(
-			fn (): ResponseInterface => $this->send('POST',
-				$this->baseUrl . '/api/v1/sar/exports',
-				$this->withUserAgent([
-					'headers' => ['Authorization' => 'Bearer ' . $token],
-					'json' => $export,
-				]),
+			fn (): ResponseInterface => $this->send($method,
+				$this->baseUrl . '/api/v1/sar/cases' . $path,
+				$this->withUserAgent($options),
 			),
-			'Failed to submit SAR export',
-		);
-	}
-
-	/**
-	 * Status of a SAR export (ADR-040 in nextcloud-mcp-server).
-	 *
-	 * @param string $token OAuth bearer token
-	 * @return array<string, mixed> The export status, or ['error' => string, 'status' => int]
-	 */
-	public function getSarExport(string $outputFolder, string $name, string $token): array {
-		return $this->sendPassingStatus(
-			fn (): ResponseInterface => $this->send('GET',
-				$this->baseUrl . '/api/v1/sar/exports',
-				$this->withUserAgent([
-					'headers' => ['Authorization' => 'Bearer ' . $token],
-					'query' => ['output_folder' => $outputFolder, 'name' => $name],
-				]),
-			),
-			'Failed to get SAR export status',
+			'SAR case request failed',
 		);
 	}
 
