@@ -647,6 +647,8 @@ const SUMMARY_TIMEOUT_MS = 3 * 60 * 1000
 // The active SAR case is a per-browser convenience; the case itself is on the
 // server. Storage can be unavailable (private windows), so both are guarded.
 const ACTIVE_SAR_CASE_KEY = 'astrolabe.activeSarCase'
+// Case items per request: the MCP server's maximum page.
+const SAR_PAGE = 1000
 
 function readActiveSarCase() {
 	try {
@@ -853,10 +855,18 @@ export default {
 			// set (all three when sync is on). `null` = the server didn't advertise
 			// the set (older backend) ⇒ show all (the backend still rejects an
 			// unsupported algorithm 422-side).
-			if (this.supportedSearchTypes === null) {
-				return all
+			const offered = this.supportedSearchTypes === null
+				? all
+				: all.filter((opt) => this.supportedSearchTypes.includes(opt.id))
+			// A case search lists one row per document, which the dense-only
+			// algorithm cannot do; offer it only when nothing else is available.
+			if (this.sarCollecting) {
+				const grouped = offered.filter((opt) => opt.id !== 'semantic')
+				if (grouped.length > 0) {
+					return grouped
+				}
 			}
-			return all.filter((opt) => this.supportedSearchTypes.includes(opt.id))
+			return offered
 		},
 
 		docTypeOptions() {
@@ -1055,6 +1065,14 @@ export default {
 	},
 
 	watch: {
+		// Keep the chosen algorithm one that is offered: opening a case drops
+		// "Semantic", and the value sent must follow what the picker shows.
+		algorithmOptions(opts) {
+			if (opts.length > 0 && !opts.some((opt) => opt.id === this.algorithm)) {
+				this.algorithm = opts[0].id
+			}
+		},
+
 		docTypeOptions(opts) {
 			// Drop any selected doc type that is no longer offered (e.g. the
 			// user/admin disabled its source), so an invisible selection can't
@@ -1276,9 +1294,18 @@ export default {
 		// Which documents are already in the active case. A case that is gone
 		// or no longer accessible stops being active.
 		async loadSarCaseKeys() {
+			// Every page: a case holds more items than one response carries.
+			const keys = []
 			try {
-				const { data } = await axios.get(this.sarCaseUrl(), { params: { limit: 1000 } })
-				this.onSarCaseChanged(data)
+				let data
+				do {
+					({ data } = await axios.get(this.sarCaseUrl(), {
+						params: { offset: keys.length, limit: SAR_PAGE },
+					}))
+					keys.push(...data.case.items.map((item) => `${item.doc_type}:${item.doc_id}`))
+				} while (keys.length < data.items_total && data.case.items.length > 0)
+				this.sarCaseState = data.case.state
+				this.sarCaseKeys = keys
 			} catch {
 				this.stopSarCase()
 			}
@@ -1289,6 +1316,11 @@ export default {
 				return
 			}
 			this.sarCaseState = data.case.state
+			if (data.items_total > data.case.items.length) {
+				// A change returns the first page only: fetch all the keys.
+				this.loadSarCaseKeys()
+				return
+			}
 			this.sarCaseKeys = data.case.items.map((item) => `${item.doc_type}:${item.doc_id}`)
 		},
 

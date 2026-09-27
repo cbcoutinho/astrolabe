@@ -39,7 +39,10 @@
 			<p v-if="current.items_total === 0" class="sar-muted">
 				{{ t('astrolabe', 'Search, then use \'Add to SAR\' on the results.') }}
 			</p>
-			<ul v-else class="sar-items">
+			<p v-if="current.case.items.length < current.items_total" class="sar-muted">
+				{{ t('astrolabe', 'Showing the first {shown} of {total} documents.', { shown: current.case.items.length, total: current.items_total }) }}
+			</p>
+			<ul v-if="current.items_total > 0" class="sar-items">
 				<li v-for="item in current.case.items" :key="item.doc_type + ':' + item.doc_id" class="sar-item">
 					<div class="sar-item-header">
 						<span class="mcp-result-type">{{ item.doc_type }}</span>
@@ -137,6 +140,8 @@ const emit = defineEmits(['changed'])
 
 const API = generateUrl('/apps/astrolabe/api/v1/sar/cases')
 const POLL_MS = 2000
+// Items listed: the MCP server's maximum page.
+const PAGE = 1000
 
 const current = ref(null)
 const busy = ref(false)
@@ -215,7 +220,7 @@ function show(data) {
 async function load() {
 	error.value = ''
 	try {
-		show((await axios.get(`${API}/${props.caseId}`, { params: { limit: 1000 } })).data)
+		show((await axios.get(`${API}/${props.caseId}`, { params: { limit: PAGE } })).data)
 	} catch (err) {
 		fail(err, t('astrolabe', 'Could not open the case.'))
 	}
@@ -225,7 +230,12 @@ async function mutate(request, fallback) {
 	busy.value = true
 	error.value = ''
 	try {
-		show((await request()).data)
+		const { data } = await request()
+		show(data)
+		// A change returns the first page of items only; list up to a full page.
+		if (data.case.items.length < Math.min(data.items_total, PAGE)) {
+			await load()
+		}
 		return true
 	} catch (err) {
 		fail(err, fallback)
@@ -291,7 +301,7 @@ function schedulePoll() {
 	if (current.value?.case.state === 'exporting') {
 		pollTimer = setTimeout(async () => {
 			try {
-				show((await axios.get(`${API}/${props.caseId}`, { params: { limit: 1000 } })).data)
+				show((await axios.get(`${API}/${props.caseId}`, { params: { limit: PAGE } })).data)
 			} catch {
 				// A blip while polling is not a failed export: try again.
 				schedulePoll()

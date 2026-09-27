@@ -480,6 +480,46 @@ final class McpServerClientTest extends TestCase {
 		$this->assertSame($body, json_decode((string)$captured->getBody(), true));
 	}
 
+	/**
+	 * A case search goes to the case's search route, one row per document,
+	 * paged, without PCA, and reports the MCP server's total_found as
+	 * total_documents.
+	 */
+	public function testCaseSearchSendsDocumentRowsToTheCase(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['results' => [], 'total_found' => 7]));
+			});
+
+		$result = $this->client->search('q', 'hybrid', 20, true, ['file'], 'tok', null, null, ['/HR'], 101, 40);
+
+		$this->assertSame('/api/v1/sar/cases/101/search', $captured->getUri()->getPath());
+		$body = json_decode((string)$captured->getBody(), true);
+		$this->assertSame(['document', 40, false], [$body['granularity'], $body['offset'], $body['include_pca']]);
+		$this->assertSame(['/HR'], $body['path_prefixes']);
+		$this->assertSame(7, $result['total_documents']);
+	}
+
+	/**
+	 * The dense-only algorithm cannot group chunks per document (the server
+	 * answers 422), so a direct semantic case search asks for chunk rows. The
+	 * UI does not offer Semantic while a case is open.
+	 */
+	public function testSemanticCaseSearchFallsBackToChunkRows(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['results' => [], 'total_found' => 0]));
+			});
+
+		$this->client->search('q', 'semantic', 20, false, null, 'tok', null, null, null, 101, 0);
+
+		$this->assertSame('chunk', json_decode((string)$captured->getBody(), true)['granularity']);
+	}
+
 	public function testSarCasesEmptyBodyIsAJsonObject(): void {
 		$captured = null;
 		$this->httpClient->method('sendRequest')
