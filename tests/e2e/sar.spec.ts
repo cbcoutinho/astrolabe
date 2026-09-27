@@ -90,7 +90,24 @@ test.describe('Subject Access Request cases', () => {
 
 			// Give the reason in the sidebar and export.
 			const reason = sidebar.getByRole('textbox', { name: 'Reason for inclusion' })
-			await reason.fill('Karen Smith\'s letter mentions the subject')
+			// Typing while a save is in flight survives the reload the save
+			// returns: hold the save until the typing is done.
+			let release = () => {}
+			const held = new Promise<void>((resolve) => { release = resolve })
+			await page.route('**/api/v1/sar/cases/*/items', async (route) => {
+				await held
+				await route.continue()
+			})
+			await reason.fill('Karen Smith\'s letter')
+			const saved = page.waitForResponse((r) => r.url().includes('/items'))
+			await reason.blur()
+			await reason.focus()
+			await reason.press('End')
+			await reason.pressSequentially(' mentions the subject')
+			release()
+			await saved
+			await page.unroute('**/api/v1/sar/cases/*/items')
+			await expect(reason).toHaveValue('Karen Smith\'s letter mentions the subject')
 			await reason.blur()
 			await expect(sidebar.locator('.sar-item')).toHaveCount(1)
 			await sidebar.getByRole('button', { name: 'Create redacted archive' }).click()
@@ -101,6 +118,7 @@ test.describe('Subject Access Request cases', () => {
 			// The case and the archive are in Nextcloud.
 			const stored = await (await nc('GET', `${caseDir}/sar-case.json`)).json()
 			expect(stored.state).toBe('ready_for_audit')
+			expect(stored.items[0].reason).toBe('Karen Smith\'s letter mentions the subject')
 			const logged = stored.queries.find((q: { text: string }) => q.text === term)
 			expect(logged?.filters?.granularity).toBe('document')
 			const archive = await nc('GET', `${caseDir}/exports/SAR-e2e-v1.zip`)
