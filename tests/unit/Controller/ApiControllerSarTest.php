@@ -194,7 +194,7 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 		$this->controller->search(query: 'q', sar_case: 101);
 		$this->controller->search(query: 'q');
 
-		$this->assertSame(['sar.read', 'sar.read', 'sar.write', 'sar.write', 'sar.write', 'sar.write', ''], $minted);
+		$this->assertSame(['sar.read', 'sar.read', 'sar.write', 'sar.write', 'sar.write', 'sar.write semantic.read', ''], $minted);
 	}
 
 	public function testUnexpectedStatusBecomes500(): void {

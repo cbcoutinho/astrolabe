@@ -280,8 +280,9 @@ class ApiController extends Controller {
 			return $this->unsupportedSearchTypeResponse($e);
 		}
 
-		// A case search also logs the query in the case: it needs sar.write.
-		$accessToken = $this->tokenForCurrentUser($sar_case > 0 ? 'sar.write' : '');
+		// A case search also logs the query in the case: it needs sar.write, and
+		// semantic.read like the MCP server's sar_case_search tool.
+		$accessToken = $this->tokenForCurrentUser($sar_case > 0 ? 'sar.write semantic.read' : '');
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
 		}
