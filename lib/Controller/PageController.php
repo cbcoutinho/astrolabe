@@ -66,7 +66,7 @@ class PageController extends Controller {
 			'summaryModes' => $this->assistantCapabilities->getSummaryModes(),
 			// Whether the MCP server builds redacted SAR export archives. False
 			// hides the SAR basket and view entirely (fails closed).
-			'sarExportAvailable' => $this->searchCapabilities->isSarExportAvailable(),
+			'sarAvailable' => $this->searchCapabilities->isSarAvailable(),
 		]);
 
 		$response = new TemplateResponse(

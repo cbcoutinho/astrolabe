@@ -107,15 +107,15 @@ final class SearchCapabilitiesTest extends TestCase {
 		$this->addToAssertionCount(1); // no exception == pass
 	}
 
-	public function testSarExportAvailableWhenAdvertisedAndCached(): void {
-		$this->client->method('getStatus')->willReturn(['sar_export_available' => true]);
+	public function testSarAvailableWhenAdvertisedAndCached(): void {
+		$this->client->method('getStatus')->willReturn(['sar_available' => true]);
 		$this->cache->expects($this->once())->method('set')
-			->with('sar_export_available', true, $this->anything());
+			->with('sar_available', true, $this->anything());
 
-		$this->assertTrue($this->subject()->isSarExportAvailable());
+		$this->assertTrue($this->subject()->isSarAvailable());
 	}
 
-	public function testSarExportFailsClosedWhenFieldAbsentOrStatusErrors(): void {
+	public function testSarFailsClosedWhenFieldAbsentOrStatusErrors(): void {
 		// An older server, or a status blip, cannot serve the export: hide the
 		// UI rather than offer a submit that 404s. Nothing is cached, so the UI
 		// appears as soon as the server advertises it.
@@ -125,15 +125,15 @@ final class SearchCapabilitiesTest extends TestCase {
 		);
 		$this->cache->expects($this->never())->method('set');
 
-		$this->assertFalse($this->subject()->isSarExportAvailable());
-		$this->assertFalse($this->subject()->isSarExportAvailable());
+		$this->assertFalse($this->subject()->isSarAvailable());
+		$this->assertFalse($this->subject()->isSarAvailable());
 	}
 
-	public function testSarExportUsesCachedAnswer(): void {
+	public function testSarUsesCachedAnswer(): void {
 		$this->cache = $this->createMock(ICache::class);
 		$this->cache->method('get')->willReturn(false);
 		$this->client->expects($this->never())->method('getStatus');
 
-		$this->assertFalse($this->subject()->isSarExportAvailable());
+		$this->assertFalse($this->subject()->isSarAvailable());
 	}
 }

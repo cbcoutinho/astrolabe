@@ -16,12 +16,12 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 
 	private function available(): void {
 		$this->authenticateUserWithToken('alice', 'alice-token');
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(true);
 	}
 
 	public function testIs404WhenServerDoesNotAdvertiseSar(): void {
 		$this->authenticateUserWithToken();
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(false);
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(false);
 		$this->client->expects($this->never())->method('sarCases');
 
 		$response = $this->controller->sarList();
@@ -160,12 +160,41 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 
 	public function testCaseSearchIs404WhenServerDoesNotAdvertiseSar(): void {
 		$this->authenticateUserWithToken();
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(false);
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(false);
 		$this->client->expects($this->never())->method('search');
 
 		$response = $this->controller->search(query: 'grievance', sar_case: 101);
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+	}
+
+	/**
+	 * The MCP server requires sar.read to read cases and sar.write for the
+	 * rest; Astrolabe asks for exactly that scope on each call's token.
+	 */
+	public function testSarCallsMintTokensWithTheScopeTheyNeed(): void {
+		$user = $this->createMock(\OCP\IUser::class);
+		$user->method('getUID')->willReturn('alice');
+		$this->userSession->method('getUser')->willReturn($user);
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(true);
+		$minted = [];
+		$this->tokenMinter->method('mintForUser')
+			->willReturnCallback(function (string $uid, string $scopes) use (&$minted): string {
+				$minted[] = $scopes;
+				return 'token';
+			});
+		$this->client->method('sarCases')->willReturn(self::CASE);
+		$this->client->method('search')->willReturn(['results' => [], 'total_documents' => 0]);
+
+		$this->controller->sarGet(101);
+		$this->controller->sarList();
+		$this->controller->sarUpdate(101, state: 'closed');
+		$this->controller->sarItems(101, [['doc_type' => 'note', 'doc_id' => '1', 'reason' => 'r']]);
+		$this->controller->sarExport(101);
+		$this->controller->search(query: 'q', sar_case: 101);
+		$this->controller->search(query: 'q');
+
+		$this->assertSame(['sar.read', 'sar.read', 'sar.write', 'sar.write', 'sar.write', 'sar.write', ''], $minted);
 	}
 
 	public function testUnexpectedStatusBecomes500(): void {
@@ -176,7 +205,7 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 	}
 
 	public function testWithoutUserIs401(): void {
-		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(true);
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(true);
 		$this->userSession->method('getUser')->willReturn(null);
 		$this->client->expects($this->never())->method('sarCases');
 

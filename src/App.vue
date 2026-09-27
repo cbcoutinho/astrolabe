@@ -21,7 +21,7 @@
 				</NcAppNavigationItem>
 
 				<NcAppNavigationItem
-					v-if="sarExportAvailable"
+					v-if="sarAvailable"
 					:name="t('astrolabe', 'Subject Access Request')"
 					:active="activeSection === 'sar'"
 					@click="activeSection = 'sar'">
@@ -57,7 +57,7 @@
 					</p>
 				</div>
 
-				<NcNoteCard v-if="sarExportAvailable && activeSarCase" type="info" class="sar-collecting">
+				<NcNoteCard v-if="sarAvailable && activeSarCase" type="info" class="sar-collecting">
 					<p>
 						<template v-if="sarCollecting">
 							{{ t('astrolabe', 'Searching for SAR case {name}: one result per document. Each search is logged in the case with its filters.', { name: activeSarCase.name }) }}
@@ -289,7 +289,7 @@
 										{{ t('astrolabe', 'Show Chunk') }}
 									</NcButton>
 									<NcButton
-										v-if="sarExportAvailable"
+										v-if="sarAvailable"
 										variant="tertiary"
 										class="mcp-add-to-sar"
 										:disabled="inSar(result)"
@@ -379,7 +379,7 @@
 			</div>
 
 			<!-- Subject Access Request Section -->
-			<div v-if="sarExportAvailable" v-show="activeSection === 'sar'" class="mcp-section">
+			<div v-if="sarAvailable" v-show="activeSection === 'sar'" class="mcp-section">
 				<div class="mcp-section-header">
 					<h2>{{ t('astrolabe', 'Subject Access Request') }}</h2>
 				</div>
@@ -465,7 +465,7 @@
 
 		<!-- The active SAR case, beside the search it is collected from. -->
 		<NcAppSidebar
-			v-if="sarExportAvailable && activeSarCase && showSarSidebar && activeSection === 'search'"
+			v-if="sarAvailable && activeSarCase && showSarSidebar && activeSection === 'search'"
 			class="sar-sidebar"
 			:name="activeSarCase.name"
 			:subname="t('astrolabe', 'Subject access request')"
@@ -811,7 +811,7 @@ export default {
 			// through it (logged with their filters, one row per document,
 			// paged) and "Add to SAR" writes to it. `sarCaseKeys`
 			// ("doc_type:doc_id") marks results already in it.
-			sarExportAvailable: appConfig.sarExportAvailable === true,
+			sarAvailable: appConfig.sarAvailable === true,
 			activeSarCase: readActiveSarCase(),
 			sarCaseKeys: [],
 			sarCaseState: null,
@@ -827,7 +827,7 @@ export default {
 	computed: {
 		// Searches run through the active case only while it is open.
 		sarCollecting() {
-			return this.sarExportAvailable && this.activeSarCase !== null && this.sarCaseState === 'open'
+			return this.sarAvailable && this.activeSarCase !== null && this.sarCaseState === 'open'
 		},
 
 		/**
@@ -1094,7 +1094,7 @@ export default {
 		// Check for URL parameters to open chunk viewer
 		this.handleUrlParameters()
 		// A case remembered from an earlier visit: check it is still open.
-		if (this.sarExportAvailable && this.activeSarCase) {
+		if (this.sarAvailable && this.activeSarCase) {
 			this.loadSarCaseKeys()
 		}
 	},

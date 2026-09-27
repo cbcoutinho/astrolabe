@@ -275,7 +275,7 @@ class McpServerClient {
 	 *   vector_sync_enabled?: bool,
 	 *   webhooks_enabled?: bool,
 	 *   supported_search_types?: list<string>,
-	 *   sar_export_available?: bool,
+	 *   sar_available?: bool,
 	 *   uptime_seconds?: int,
 	 *   management_api_version?: string,
 	 *   error?: string

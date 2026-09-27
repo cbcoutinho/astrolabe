@@ -171,7 +171,7 @@ class ApiController extends Controller {
 	 * so the success path keeps a non-null string without tripping Psalm's
 	 * nullable-return checks (a tuple return decorrelates the two halves).
 	 */
-	private function tokenForCurrentUser(): JSONResponse|string {
+	private function tokenForCurrentUser(string $extraScopes = ''): JSONResponse|string {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
 			return new JSONResponse([
@@ -181,7 +181,7 @@ class ApiController extends Controller {
 		}
 
 		try {
-			return $this->tokenMinter->mintForUser($user->getUID());
+			return $this->tokenMinter->mintForUser($user->getUID(), $extraScopes);
 		} catch (McpTokenMintException $e) {
 			$this->logger->error('MCP token mint failed', [
 				'user_id' => $user->getUID(),
@@ -234,7 +234,7 @@ class ApiController extends Controller {
 		int $offset = 0,
 		int $sar_case = 0,
 	): JSONResponse {
-		if ($sar_case > 0 && !$this->searchCapabilities->isSarExportAvailable()) {
+		if ($sar_case > 0 && !$this->searchCapabilities->isSarAvailable()) {
 			return $this->sarUnavailableResponse();
 		}
 		if (empty($query)) {
@@ -280,7 +280,8 @@ class ApiController extends Controller {
 			return $this->unsupportedSearchTypeResponse($e);
 		}
 
-		$accessToken = $this->tokenForCurrentUser();
+		// A case search also logs the query in the case: it needs sar.write.
+		$accessToken = $this->tokenForCurrentUser($sar_case > 0 ? 'sar.write' : '');
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
 		}
@@ -883,10 +884,12 @@ class ApiController extends Controller {
 		array $query = [],
 		int $successStatus = Http::STATUS_OK,
 	): JSONResponse {
-		if (!$this->searchCapabilities->isSarExportAvailable()) {
+		if (!$this->searchCapabilities->isSarAvailable()) {
 			return $this->sarUnavailableResponse();
 		}
-		$accessToken = $this->tokenForCurrentUser();
+		// Reading a case needs sar.read, anything else sar.write (MCP server
+		// checks both). Asked for per call, not in every token Astrolabe mints.
+		$accessToken = $this->tokenForCurrentUser($method === 'GET' ? 'sar.read' : 'sar.write');
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
 		}

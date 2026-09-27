@@ -133,8 +133,8 @@ final class McpServerClientPactTest extends TestCase {
 				'uptime_seconds' => $matcher->integer(123),
 				'management_api_version' => $matcher->like('1.0'),
 				'supported_search_types' => $matcher->eachLike('semantic'),
-				// Gates the SAR export UI (SearchCapabilities::isSarExportAvailable).
-				'sar_export_available' => $matcher->boolean(false),
+				// Gates the SAR export UI (SearchCapabilities::isSarAvailable).
+				'sar_available' => $matcher->boolean(false),
 			]);
 
 		$builder = new InteractionBuilder($config);
@@ -155,7 +155,7 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertSame(123, $status['uptime_seconds'] ?? null);
 		$this->assertSame('1.0', $status['management_api_version'] ?? null);
 		$this->assertSame(['semantic'], $status['supported_search_types'] ?? null);
-		$this->assertFalse($status['sar_export_available'] ?? null);
+		$this->assertFalse($status['sar_available'] ?? null);
 	}
 
 	/**

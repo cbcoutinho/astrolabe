@@ -12,7 +12,7 @@ import { completeAuthorization } from './helpers/authorize.ts'
  * result → give a reason in the sidebar → export a redacted archive → ready
  * for audit → close. The case is stored in Nextcloud, so it survives a reload.
  *
- * Needs an MCP server that advertises `sar_export_available` (it needs the
+ * Needs an MCP server that advertises `sar_available` (it needs the
  * embedding gateway's /v1/ner, stubbed in nextcloud-mcp-server's compose
  * stack). The UI is hidden otherwise, and the test skips saying so rather
  * than failing on a server that cannot serve the feature.
@@ -40,7 +40,7 @@ test.describe('Subject Access Request cases', () => {
 		await page.goto('/apps/astrolabe')
 		const sarNav = page.locator('.app-navigation-entry__name', { hasText: 'Subject Access Request' })
 		const available = await sarNav.isVisible({ timeout: 15_000 }).catch(() => false)
-		test.skip(!available, 'MCP server does not advertise sar_export_available')
+		test.skip(!available, 'MCP server does not advertise sar_available')
 
 		const created = await nc('POST', '/index.php/apps/notes/api/v1/notes', {
 			title: `Letter re Karen Smith ${term}`,
@@ -122,5 +122,25 @@ test.describe('Subject Access Request cases', () => {
 			await nc('DELETE', `/index.php/apps/notes/api/v1/notes/${note.id}`)
 			await nc('DELETE', `/remote.php/dav/files/admin/${folder}`)
 		}
+	})
+
+	test('shows no SAR UI when the MCP server does not advertise it', async ({ authenticatedPage: page }) => {
+		// The SAR routes answer 404 exactly when sar_available is false.
+		const sar = await nc('GET', '/index.php/apps/astrolabe/api/v1/sar/cases')
+		test.skip(sar.status !== 404, 'MCP server advertises sar_available')
+
+		await completeAuthorization(page)
+		await page.goto('/apps/astrolabe')
+		await expect(page.locator('.app-navigation-entry__name', { hasText: 'Semantic Search' })).toBeVisible()
+		await expect(page.locator('.app-navigation-entry__name', { hasText: 'Subject Access Request' })).toHaveCount(0)
+
+		const searchInput = page.getByRole('textbox', { name: 'Search query' })
+		await searchInput.fill('report')
+		const responded = page.waitForResponse((r) => r.url().includes('/api/search'))
+		await searchInput.press('Control+Enter')
+		await responded
+		await expect(page.locator('.mcp-add-to-sar')).toHaveCount(0)
+		await expect(page.locator('.mcp-add-all-to-sar')).toHaveCount(0)
+		await expect(page.locator('.sar-sidebar')).toHaveCount(0)
 	})
 })
