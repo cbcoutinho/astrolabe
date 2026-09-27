@@ -25,6 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.44.0 (2026-09-27)
+
+### Feat
+
+- **sar**: SAR calls use sar.read/sar.write tokens; gate on sar_available
+- **sar**: one search page with the case in a sidebar
+- **sar**: SAR cases shared with MCP agents, replacing the page-local basket
+- **sar**: SAR export basket and redacted archive view
+
+### Fix
+
+- **sar**: leaving a case clears its paging state
+- **sar**: remember the open case per user; add each document once
+- **sar**: no semantic-only rows in a case; track every item of a big case
+- **sar**: a case search token carries semantic.read too
+
 ## v0.43.1 (2026-09-27)
 
 ### Fix
