@@ -344,12 +344,16 @@ class McpServerClient {
 	 * @param string|null $modifiedAfter RFC 3339 lower bound on last-modified (open if null)
 	 * @param string|null $modifiedBefore RFC 3339 upper bound on last-modified (open if null)
 	 * @param list<string>|null $pathPrefixes Folder filters (files only), OR-ed; no filter if null/empty
+	 * @param int|null $sarCase Search for this SAR case instead: the same filters,
+	 *                          one row per document, paged by $offset, and logged in the case
+	 * @param int $offset Results to skip (SAR case searches only)
 	 * @return array{
 	 *   results?: array,
 	 *   pca_coordinates?: array,
 	 *   algorithm_used?: string,
 	 *   total_documents?: int,
-	 *   error?: string
+	 *   error?: string,
+	 *   status?: int
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -364,6 +368,8 @@ class McpServerClient {
 		?string $modifiedAfter = null,
 		?string $modifiedBefore = null,
 		?array $pathPrefixes = null,
+		?int $sarCase = null,
+		int $offset = 0,
 	): array {
 		$requestBody = [
 			'query' => $query,
@@ -401,6 +407,32 @@ class McpServerClient {
 			$options['headers'] = [
 				'Authorization' => 'Bearer ' . $token,
 			];
+		}
+
+		if ($sarCase !== null) {
+			// The same filters, sent to the case's search, which runs the MCP
+			// server's paged search and logs the query with them.
+			// One row per document, except for the dense-only algorithm, which
+			// cannot group chunks (the server answers 422 to that combination).
+			$options['json'] += [
+				'offset' => max(0, $offset),
+				'granularity' => $algorithm === 'semantic' ? 'chunk' : 'document',
+			];
+			$options['json']['include_pca'] = false;
+			$result = $this->sendPassingStatus(
+				fn (): ResponseInterface => $this->send('POST',
+					$this->baseUrl . "/api/v1/sar/cases/$sarCase/search",
+					$this->withUserAgent($options),
+				),
+				'SAR case search failed',
+			);
+			if (!isset($result['error'])) {
+				/** @var mixed $found */
+				$found = $result['total_found'] ?? 0;
+				$result['total_documents'] = is_int($found) ? $found : 0;
+			}
+			/** @psalm-suppress InvalidReturnStatement - same runtime shape as sendAndDecode below. */
+			return $result;
 		}
 
 		return $this->sendAndDecode(

@@ -257,6 +257,75 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
+	 * SAR case search: the search page's own filters, sent to the case, which
+	 * returns one row per document with the navigation metadata the result
+	 * list reads, and logs the query.
+	 */
+	public function testSarCaseSearchHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/sar/cases/101/search')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => 'grievance',
+				'algorithm' => 'hybrid',
+				'limit' => 20,
+				'include_pca' => false,
+				'doc_types' => ['file'],
+				'modified_after' => '2023-01-01T00:00:00Z',
+				'path_prefixes' => ['/HR/Conduct'],
+				'offset' => 0,
+				'granularity' => 'document',
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'results' => $matcher->eachLike([
+					'id' => $matcher->integer(12),
+					'doc_type' => $matcher->like('file'),
+					'title' => $matcher->like('Letter.pdf'),
+					'relevance' => $matcher->number(0.8),
+					'relevance_source' => $matcher->like('fusion_ordinal'),
+					'metadata' => $matcher->like(['path' => '/HR/Conduct/Letter.pdf']),
+				]),
+				'total_found' => $matcher->integer(1),
+				'algorithm_used' => $matcher->like('hybrid'),
+				'granularity' => 'document',
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an open SAR case 101 exists')
+			->uponReceiving('a filtered search for a SAR case')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->search(
+			'grievance',
+			'hybrid',
+			20,
+			false,
+			['file'],
+			'mint-token',
+			'2023-01-01T00:00:00Z',
+			null,
+			['/HR/Conduct'],
+			101,
+			0,
+		);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame(1, $result['total_documents'] ?? null);
+		$this->assertSame('/HR/Conduct/Letter.pdf', $result['results'][0]['metadata']['path'] ?? null);
+	}
+
+	/**
 	 * SAR case get: what the case page and the export progress read.
 	 */
 	public function testGetSarCaseHonoursTheContract(): void {

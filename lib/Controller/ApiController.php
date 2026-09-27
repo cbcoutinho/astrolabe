@@ -216,7 +216,9 @@ class ApiController extends Controller {
 	/**
 	 * Execute semantic search via MCP server.
 	 *
-	 * AJAX endpoint for vector search UI in app page.
+	 * AJAX endpoint for vector search UI in app page. With $sar_case, the same
+	 * search runs for that SAR case: one row per document, paged by $offset,
+	 * and logged in the case with its filters (ADR-040).
 	 */
 	#[NoAdminRequired]
 	public function search(
@@ -229,7 +231,12 @@ class ApiController extends Controller {
 		string $modified_before = '',
 		string $path_prefix = '',
 		string $path_prefixes = '',
+		int $offset = 0,
+		int $sar_case = 0,
 	): JSONResponse {
+		if ($sar_case > 0 && !$this->searchCapabilities->isSarExportAvailable()) {
+			return $this->sarUnavailableResponse();
+		}
 		if (empty($query)) {
 			return new JSONResponse([
 				'success' => false,
@@ -307,7 +314,9 @@ class ApiController extends Controller {
 			]);
 		}
 
-		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
+		// A case search is paged by document; the plot is for chunk searches.
+		$includePcaBool = $sar_case === 0
+			&& in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
 		// Server-side enforcement: when the admin has disabled the visualization
 		// panel, never compute PCA — regardless of what the client (or a direct
@@ -351,8 +360,14 @@ class ApiController extends Controller {
 			$modified_after !== '' ? $modified_after : null,
 			$modified_before !== '' ? $modified_before : null,
 			$pathPrefixesArray !== [] ? $pathPrefixesArray : null,
+			$sar_case > 0 ? $sar_case : null,
+			$offset,
 		);
 
+		if ($sar_case > 0 && isset($result['error'])) {
+			// The case's own answers (closed, gone, not the user's) reach the UI.
+			return $this->sarResponse($result, Http::STATUS_OK);
+		}
 		if (isset($result['error'])) {
 			return new JSONResponse([
 				'success' => false,

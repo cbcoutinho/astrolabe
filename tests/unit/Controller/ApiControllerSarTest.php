@@ -111,6 +111,63 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 		$this->assertStringContainsString('closed', $response->getData()['error']);
 	}
 
+	public function testCaseSearchSendsTheSameFiltersToTheCaseWithoutPca(): void {
+		$this->available();
+		$this->client->expects($this->once())
+			->method('search')
+			->with(
+				'grievance',
+				'hybrid',
+				20,
+				false,
+				['file'],
+				'alice-token',
+				'2023-01-01T00:00:00Z',
+				null,
+				['/HR/Conduct'],
+				101,
+				40,
+			)
+			->willReturn(['results' => [], 'total_documents' => 0]);
+
+		$response = $this->controller->search(
+			query: 'grievance',
+			limit: 20,
+			doc_types: 'file',
+			include_pca: 'true',
+			modified_after: '2023-01-01T00:00:00Z',
+			path_prefixes: '/HR/Conduct',
+			offset: 40,
+			sar_case: 101,
+		);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertArrayNotHasKey('coordinates_3d', $response->getData());
+	}
+
+	public function testCaseSearchOfAClosedCasePassesTheConflictThrough(): void {
+		$this->available();
+		$this->client->method('search')->willReturn([
+			'error' => 'this case is closed',
+			'status' => 409,
+		]);
+
+		$response = $this->controller->search(query: 'grievance', sar_case: 101);
+
+		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		$this->assertStringContainsString('closed', $response->getData()['error']);
+	}
+
+	public function testCaseSearchIs404WhenServerDoesNotAdvertiseSar(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isSarExportAvailable')->willReturn(false);
+		$this->client->expects($this->never())->method('search');
+
+		$response = $this->controller->search(query: 'grievance', sar_case: 101);
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+	}
+
 	public function testUnexpectedStatusBecomes500(): void {
 		$this->available();
 		$this->client->method('sarCases')->willReturn(['error' => 'teapot', 'status' => 418]);
