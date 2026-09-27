@@ -13,7 +13,7 @@ export default [
 			// all. Its legacy build ships the polyfills: use only that.
 			'no-restricted-imports': ['error', {
 				patterns: [{
-					regex: '^pdfjs-dist(/build/.*)?$',
+					regex: '^pdfjs-dist(?!/legacy/)',
 					message: 'Import pdf.js from pdfjs-dist/legacy/build/ (the modern build breaks on all but the newest browsers).',
 				}],
 			}],
