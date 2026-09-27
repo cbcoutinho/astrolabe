@@ -589,6 +589,7 @@
 </template>
 
 <script>
+import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
 import { FilePickerType, getFilePickerBuilder, showError } from '@nextcloud/dialogs'
 import { loadState } from '@nextcloud/initial-state'
@@ -646,7 +647,8 @@ const SUMMARY_TIMEOUT_MS = 3 * 60 * 1000
 
 // The active SAR case is a per-browser convenience; the case itself is on the
 // server. Storage can be unavailable (private windows), so both are guarded.
-const ACTIVE_SAR_CASE_KEY = 'astrolabe.activeSarCase'
+// Per user: a shared browser profile must not carry one user's case to another.
+const ACTIVE_SAR_CASE_KEY = `astrolabe.activeSarCase.${getCurrentUser()?.uid ?? ''}`
 // Case items per request: the MCP server's maximum page.
 const SAR_PAGE = 1000
 
@@ -1338,8 +1340,17 @@ export default {
 		// Every result on the page that is not yet in the case, in one call.
 		async addAllToSar() {
 			const found = this.query.trim() || null
+			// One entry per document: with chunk rows a document can appear twice.
+			const seen = new Set()
 			const add = this.filteredResults
-				.filter((result) => !this.inSar(result))
+				.filter((result) => {
+					const key = `${result.doc_type}:${result.id}`
+					if (this.inSar(result) || seen.has(key)) {
+						return false
+					}
+					seen.add(key)
+					return true
+				})
 				.map((result) => ({
 					doc_type: result.doc_type,
 					doc_id: String(result.id),
