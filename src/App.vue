@@ -1289,6 +1289,8 @@ export default {
 			this.sarCaseKeys = []
 			this.sarCaseState = null
 			this.sarHasMore = false
+			this.sarNextOffset = 0
+			this.sarLastParams = {}
 			writeActiveSarCase(null)
 			this.$refs.sarCases?.loadCases()
 		},
