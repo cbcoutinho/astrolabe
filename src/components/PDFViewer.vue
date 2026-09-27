@@ -44,13 +44,16 @@ import { NcLoadingIcon } from '@nextcloud/vue'
  * for cross the wire rather than the whole document. For a non-linearized scan
  * that is still a lot of them — see the note in pdfRangeTransport.js.
  */
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
+// The legacy build, page and worker alike: the modern one calls JS APIs only
+// the newest engines have (e.g. Map.prototype.getOrInsertComputed) and fails
+// to load any PDF elsewhere. The legacy build ships the polyfills.
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 // `inline` is load-bearing, not a size trade-off. A non-inlined worker is
 // emitted as a separate asset and referenced by a root-absolute URL
 // (`new Worker("/assets/pdf.worker…")`), which 404s for a Nextcloud app served
 // from /custom_apps/astrolabe/. Inlining yields a blob: worker with no URL to
 // resolve — hence `worker-src blob:` in the app's CSP, see PageController.
-import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&inline'
+import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AlertCircle from 'vue-material-design-icons/AlertCircle.vue'
 import { fetchInitialData, RANGE_CHUNK_SIZE, resolveDocument, WebDavRangeTransport } from '../services/pdfRangeTransport.js'

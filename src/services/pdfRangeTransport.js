@@ -1,6 +1,6 @@
 import { getCurrentUser, getRequestToken } from '@nextcloud/auth'
 import { generateRemoteUrl } from '@nextcloud/router'
-import { PDFDataRangeTransport } from 'pdfjs-dist'
+import { PDFDataRangeTransport } from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 /**
  * Byte-ranged PDF loading straight from Nextcloud's WebDAV endpoint.
