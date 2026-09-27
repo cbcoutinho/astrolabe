@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.44.1 (2026-09-27)
+
+### Fix
+
+- **sar**: the case sidebar keeps edits typed while it reloads
+
 ## v0.44.0 (2026-09-27)
 
 ### Feat
