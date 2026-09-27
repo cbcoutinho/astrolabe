@@ -326,6 +326,45 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
+	 * SAR case list: what the SAR page lists (name, state, item count).
+	 */
+	public function testListSarCasesHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('GET')
+			->setPath('/api/v1/sar/cases')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'));
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'cases' => $matcher->eachLike([
+					'case_id' => $matcher->integer(101),
+					'path' => $matcher->like('/Team/SAR-1/sar-case.json'),
+					'name' => $matcher->like('SAR-1'),
+					'state' => $matcher->regex('open', 'open|exporting|ready_for_audit|closed'),
+					'items' => $matcher->integer(1),
+					'updated_at' => $matcher->like('2026-09-25T08:00:00+00:00'),
+				]),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an open SAR case 101 exists')
+			->uponReceiving('a request to list SAR cases')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->sarCases('GET', '', 'mint-token');
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame('SAR-1', $result['cases'][0]['name'] ?? null);
+	}
+
+	/**
 	 * SAR case get: what the case page and the export progress read.
 	 */
 	public function testGetSarCaseHonoursTheContract(): void {
