@@ -58,29 +58,29 @@
 						</NcButton>
 					</div>
 					<NcTextField
-						:modelValue="item.reason"
+						:modelValue="field(item, 'reason')"
 						:label="t('astrolabe', 'Reason for inclusion')"
-						:error="!item.reason.trim()"
+						:error="!field(item, 'reason').trim()"
 						:disabled="!isOpen"
-						@update:modelValue="item.reason = $event"
+						@update:modelValue="edit(item, 'reason', $event)"
 						@blur="saveItem(item)" />
 					<!-- Only files have pages; leave both empty for the whole document. -->
 					<div v-if="item.doc_type === 'file'" class="sar-item-pages">
 						<NcTextField
-							:modelValue="item.page_start ?? ''"
+							:modelValue="field(item, 'page_start') ?? ''"
 							type="number"
 							min="1"
 							:label="t('astrolabe', 'From page')"
 							:disabled="!isOpen"
-							@update:modelValue="item.page_start = page($event)"
+							@update:modelValue="edit(item, 'page_start', page($event))"
 							@blur="saveItem(item)" />
 						<NcTextField
-							:modelValue="item.page_end ?? ''"
+							:modelValue="field(item, 'page_end') ?? ''"
 							type="number"
 							min="1"
 							:label="t('astrolabe', 'To page')"
 							:disabled="!isOpen"
-							@update:modelValue="item.page_end = page($event)"
+							@update:modelValue="edit(item, 'page_end', page($event))"
 							@blur="saveItem(item)" />
 					</div>
 				</li>
@@ -125,7 +125,7 @@
 import axios from '@nextcloud/axios'
 import { translatePlural as n, translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -208,11 +208,33 @@ function fail(err, fallback) {
 	error.value = err.response?.data?.error || fallback
 }
 
+// Unsaved edits to a document, by key: what the user typed while a save,
+// an add or a search reloaded the case. They overlay the server copy until
+// saved, so a reload never discards typing in progress.
+const drafts = reactive({})
+
+function itemKey(item) {
+	return item.doc_type + ':' + item.doc_id
+}
+
+function field(item, name) {
+	const draft = drafts[itemKey(item)]
+	return draft && name in draft ? draft[name] : item[name]
+}
+
+function edit(item, name, value) {
+	(drafts[itemKey(item)] ??= {})[name] = value
+}
+
 // Every mutating call returns the whole case; show it and tell the parent.
+// Unsaved subject and description edits are kept, like document drafts.
 function show(data) {
+	const detailsDirty = detailsChanged.value
 	current.value = data
-	subjectText.value = data.case.subject.join('\n')
-	descriptionText.value = data.case.description
+	if (!detailsDirty) {
+		subjectText.value = data.case.subject.join('\n')
+		descriptionText.value = data.case.description
+	}
 	emit('changed', data)
 	schedulePoll()
 }
@@ -273,16 +295,34 @@ function items(body) {
 	)
 }
 
-function saveItem(item) {
-	return items({
+async function saveItem(item) {
+	const key = itemKey(item)
+	const sent = { ...drafts[key] }
+	if (Object.keys(sent).length === 0) {
+		return true
+	}
+	const saved = await items({
 		add: [{
 			doc_type: item.doc_type,
 			doc_id: item.doc_id,
-			reason: item.reason,
-			page_start: item.page_start ?? null,
-			page_end: item.page_end ?? null,
+			reason: field(item, 'reason'),
+			page_start: field(item, 'page_start') ?? null,
+			page_end: field(item, 'page_end') ?? null,
 		}],
 	})
+	// Drop only what was sent: anything typed since stays a draft.
+	const draft = drafts[key]
+	if (saved && draft) {
+		for (const [name, value] of Object.entries(sent)) {
+			if (draft[name] === value) {
+				delete draft[name]
+			}
+		}
+		if (Object.keys(draft).length === 0) {
+			delete drafts[key]
+		}
+	}
+	return saved
 }
 
 function removeItem(item) {
