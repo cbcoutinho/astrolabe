@@ -507,7 +507,11 @@
 							</template>
 							{{ t('astrolabe', 'Summarize section') }}
 						</NcButton>
-						<NcButton variant="tertiary" @click="closeViewer">
+						<NcButton
+							variant="tertiary"
+							:aria-label="t('astrolabe', 'Close')"
+							:title="t('astrolabe', 'Close')"
+							@click="closeViewer">
 							<template #icon>
 								<Close :size="20" />
 							</template>
@@ -1903,6 +1907,9 @@ export default {
 				// check guards). Surface a friendly message instead of a stack trace.
 				if (err.response && err.response.status === 403) {
 					this.error = this.t('astrolabe', 'You no longer have access to this document.')
+				} else if (err.response && err.response.status === 404) {
+					// Deleted or unindexed since the search, or a stale deep link.
+					this.error = this.t('astrolabe', 'This document is no longer in the search index.')
 				} else {
 					console.error('Error loading chunk:', err)
 				}

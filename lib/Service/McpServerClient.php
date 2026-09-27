@@ -817,7 +817,9 @@ class McpServerClient {
 	 *                             provided, the MCP server uses the always-indexed chunk_index field
 	 *                             for lookup instead of the offset filter.
 	 * @param int|null $totalChunks Total chunks in document (optional)
-	 * @return array
+	 * @return array The context, or ['error' => ..., 'status' => HTTP status]
+	 *               (404 when the document is not in the index; 502 when the
+	 *               MCP server could not be reached)
 	 */
 	public function getChunkContext(
 		string $docType,
@@ -845,7 +847,7 @@ class McpServerClient {
 			$query['total_chunks'] = $totalChunks;
 		}
 
-		return $this->sendAndDecode(
+		return $this->sendPassingStatus(
 			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/chunk-context',
 				$this->withUserAgent([
@@ -854,7 +856,6 @@ class McpServerClient {
 				]),
 			),
 			'Failed to get chunk context',
-			['doc_type' => $docType, 'doc_id' => $docId],
 		);
 	}
 

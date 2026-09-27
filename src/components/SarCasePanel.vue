@@ -50,11 +50,12 @@
 						<NcButton
 							v-if="isOpen"
 							variant="tertiary"
-							:aria-label="t('astrolabe', 'Remove')"
+							:title="t('astrolabe', 'Remove this document from the case')"
 							@click="removeItem(item)">
 							<template #icon>
 								<Close :size="18" />
 							</template>
+							{{ t('astrolabe', 'Remove') }}
 						</NcButton>
 					</div>
 					<NcTextField

@@ -790,10 +790,13 @@ class ApiController extends Controller {
 		);
 
 		if (isset($result['error'])) {
+			// A document the index no longer holds (deleted, unindexed, a stale
+			// deep link) is a 404, not a server fault; the viewer says so.
+			$notIndexed = ($result['status'] ?? null) === Http::STATUS_NOT_FOUND;
 			return new JSONResponse([
 				'success' => false,
 				'error' => $result['error'],
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
+			], $notIndexed ? Http::STATUS_NOT_FOUND : Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 
 		return new JSONResponse($result);

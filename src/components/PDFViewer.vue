@@ -153,7 +153,9 @@ function teardown() {
 	loadController = null
 	renderTask?.cancel()
 	renderTask = null
-	pdfDoc?.destroy()
+	// pdf.js 6 moved destroy() from the document to its loading task; calling
+	// it on the document threw and left the worker holding every document.
+	pdfDoc?.loadingTask.destroy()
 	pdfDoc = null
 	transport?.abort()
 	transport = null
@@ -234,7 +236,7 @@ async function loadDocument(gen) {
 		// built rather than the shared handles, which now belong to the newer
 		// load, so the abandoned transport stops fetching ranges.
 		pendingTransport.abort()
-		pendingDoc.destroy()
+		pendingDoc.loadingTask.destroy()
 		return false
 	}
 

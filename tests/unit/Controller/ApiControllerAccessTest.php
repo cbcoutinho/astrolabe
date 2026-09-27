@@ -43,6 +43,30 @@ final class ApiControllerAccessTest extends AbstractApiControllerTestCase {
 		$this->assertSame('hello', $response->getData()['chunk_text'] ?? null);
 	}
 
+	public function testChunkContextNotInIndexReturns404(): void {
+		$this->filesInstalled();
+		$this->userFolder->method('getById')->with(42)->willReturn([$this->createMock(Node::class)]);
+		$this->authenticateUserWithToken('alice', 'tok');
+		$this->client->method('getChunkContext')
+			->willReturn(['error' => 'Unexpected HTTP 404 from MCP server', 'status' => 404]);
+
+		$response = $this->controller->chunkContext('file', '42', 0, 10);
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+	}
+
+	public function testChunkContextUpstreamFailureStays500(): void {
+		$this->filesInstalled();
+		$this->userFolder->method('getById')->with(42)->willReturn([$this->createMock(Node::class)]);
+		$this->authenticateUserWithToken('alice', 'tok');
+		$this->client->method('getChunkContext')
+			->willReturn(['error' => 'connection refused', 'status' => 502]);
+
+		$response = $this->controller->chunkContext('file', '42', 0, 10);
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+	}
+
 	public function testChunkContextDeniedReturns403AndSkipsMcpAndToken(): void {
 		$this->filesInstalled();
 		$this->userFolder->method('getById')->with(42)->willReturn([]); // unshared since indexing

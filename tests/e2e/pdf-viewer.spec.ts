@@ -117,4 +117,28 @@ test.describe('browser-side PDF rendering', () => {
 		expect(csp).toContain('worker-src')
 		expect(csp).toMatch(/worker-src[^;]*blob:/)
 	})
+
+	test('a document missing from the index answers 404 and says so', async ({ authenticatedPage: page }) => {
+		// The uploaded fixture is never indexed: a stale deep link to it must
+		// read as "not in the index" (404), not as a server fault (500).
+		const propfind = await fetch(`${NC}/remote.php/dav/files/admin/${PDF_PATH}`, {
+			method: 'PROPFIND',
+			headers: { Authorization: ADMIN_AUTH, Depth: '0', 'Content-Type': 'application/xml' },
+			body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>',
+		})
+		const id = /<oc:fileid>(\d+)<\/oc:fileid>/.exec(await propfind.text())?.[1]
+		expect(id).toBeTruthy()
+		const params = new URLSearchParams({
+			doc_type: 'file',
+			doc_id: id as string,
+			chunk_start: '0',
+			chunk_end: '1',
+			title: PDF_PATH,
+			path: `/${PDF_PATH}`,
+		})
+		const chunk = page.waitForResponse((r) => r.url().includes('/api/chunk-context'))
+		await page.goto(`/apps/astrolabe/?${params}`)
+		expect((await chunk).status()).toBe(404)
+		await expect(page.getByText('This document is no longer in the search index.')).toBeVisible()
+	})
 })
