@@ -106,4 +106,34 @@ final class SearchCapabilitiesTest extends TestCase {
 		$this->subject()->assertSupported('hybrid');
 		$this->addToAssertionCount(1); // no exception == pass
 	}
+
+	public function testSarAvailableWhenAdvertisedAndCached(): void {
+		$this->client->method('getStatus')->willReturn(['sar_available' => true]);
+		$this->cache->expects($this->once())->method('set')
+			->with('sar_available', true, $this->anything());
+
+		$this->assertTrue($this->subject()->isSarAvailable());
+	}
+
+	public function testSarFailsClosedWhenFieldAbsentOrStatusErrors(): void {
+		// An older server, or a status blip, cannot serve the export: hide the
+		// UI rather than offer a submit that 404s. Nothing is cached, so the UI
+		// appears as soon as the server advertises it.
+		$this->client->method('getStatus')->willReturnOnConsecutiveCalls(
+			['vector_sync_enabled' => true],
+			['error' => 'connection refused'],
+		);
+		$this->cache->expects($this->never())->method('set');
+
+		$this->assertFalse($this->subject()->isSarAvailable());
+		$this->assertFalse($this->subject()->isSarAvailable());
+	}
+
+	public function testSarUsesCachedAnswer(): void {
+		$this->cache = $this->createMock(ICache::class);
+		$this->cache->method('get')->willReturn(false);
+		$this->client->expects($this->never())->method('getStatus');
+
+		$this->assertFalse($this->subject()->isSarAvailable());
+	}
 }

@@ -76,7 +76,8 @@
                             "assistant": {
                                 "type": "object",
                                 "required": [
-                                    "summary_modes"
+                                    "summary_modes",
+                                    "agent_available"
                                 ],
                                 "properties": {
                                     "summary_modes": {
@@ -84,6 +85,9 @@
                                         "items": {
                                             "type": "string"
                                         }
+                                    },
+                                    "agent_available": {
+                                        "type": "boolean"
                                     }
                                 }
                             }

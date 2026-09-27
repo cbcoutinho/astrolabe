@@ -19,6 +19,19 @@
 						<ChartBox :size="20" />
 					</template>
 				</NcAppNavigationItem>
+
+				<NcAppNavigationItem
+					v-if="sarAvailable"
+					:name="t('astrolabe', 'Subject Access Request')"
+					:active="activeSection === 'sar'"
+					@click="activeSection = 'sar'">
+					<template #icon>
+						<ShieldAccount :size="20" />
+					</template>
+					<template #counter>
+						<NcCounterBubble v-if="activeSarCase && sarCaseKeys.length" :count="sarCaseKeys.length" />
+					</template>
+				</NcAppNavigationItem>
 			</template>
 
 			<template #footer>
@@ -43,6 +56,23 @@
 						{{ t('astrolabe', 'Search your indexed content using semantic similarity. Find documents by meaning, not just keywords.') }}
 					</p>
 				</div>
+
+				<NcNoteCard v-if="sarAvailable && activeSarCase" type="info" class="sar-collecting">
+					<p>
+						<template v-if="sarCollecting">
+							{{ t('astrolabe', 'Searching for SAR case {name}: one result per document. Each search is logged in the case with its filters.', { name: activeSarCase.name }) }}
+						</template>
+						<template v-else>
+							{{ t('astrolabe', 'SAR case {name} is not open, so searches are not added to it.', { name: activeSarCase.name }) }}
+						</template>
+						<NcButton v-if="!showSarSidebar" variant="tertiary" @click="showSarSidebar = true">
+							{{ t('astrolabe', 'Show case') }}
+						</NcButton>
+						<NcButton variant="tertiary" @click="stopSarCase">
+							{{ t('astrolabe', 'Leave case') }}
+						</NcButton>
+					</p>
+				</NcNoteCard>
 
 				<!-- Search Controls -->
 				<div class="mcp-search-card">
@@ -210,6 +240,17 @@
 								({{ results.length - filteredResults.length }} {{ t('astrolabe', 'filtered by score') }})
 							</span>
 						</span>
+						<NcButton
+							v-if="sarCollecting"
+							variant="secondary"
+							class="mcp-add-all-to-sar"
+							:disabled="filteredResults.every((r) => inSar(r))"
+							@click="addAllToSar">
+							<template #icon>
+								<PlaylistPlus :size="18" />
+							</template>
+							{{ t('astrolabe', 'Add all to SAR') }}
+						</NcButton>
 						<span class="mcp-algorithm-badge">{{ algorithmUsed }}</span>
 					</div>
 
@@ -246,6 +287,18 @@
 											<Eye :size="18" />
 										</template>
 										{{ t('astrolabe', 'Show Chunk') }}
+									</NcButton>
+									<NcButton
+										v-if="sarAvailable"
+										variant="tertiary"
+										class="mcp-add-to-sar"
+										:disabled="inSar(result)"
+										@click="addToSar(result)">
+										<template #icon>
+											<PlaylistCheck v-if="inSar(result)" :size="18" />
+											<PlaylistPlus v-else :size="18" />
+										</template>
+										{{ inSar(result) ? t('astrolabe', 'In SAR') : t('astrolabe', 'Add to SAR') }}
 									</NcButton>
 								</div>
 							</div>
@@ -292,6 +345,16 @@
 							</div>
 						</div>
 					</div>
+					<NcButton
+						v-if="sarCollecting && sarHasMore"
+						class="mcp-load-more"
+						:disabled="loadingMore"
+						@click="performSearch(true)">
+						<template #icon>
+							<NcLoadingIcon v-if="loadingMore" :size="20" />
+						</template>
+						{{ t('astrolabe', 'Load more') }}
+					</NcButton>
 				</div>
 
 				<!-- No Results -->
@@ -313,6 +376,17 @@
 						<Magnify />
 					</template>
 				</NcEmptyContent>
+			</div>
+
+			<!-- Subject Access Request Section -->
+			<div v-if="sarAvailable" v-show="activeSection === 'sar'" class="mcp-section">
+				<div class="mcp-section-header">
+					<h2>{{ t('astrolabe', 'Subject Access Request') }}</h2>
+				</div>
+				<SarCases
+					ref="sarCases"
+					:activeCaseId="activeSarCase ? activeSarCase.id : null"
+					@activate="activateSarCase" />
 			</div>
 
 			<!-- Index Status Section -->
@@ -388,6 +462,19 @@
 				</NcButton>
 			</div>
 		</NcAppContent>
+
+		<!-- The active SAR case, beside the search it is collected from. -->
+		<NcAppSidebar
+			v-if="sarAvailable && activeSarCase && showSarSidebar && activeSection === 'search'"
+			class="sar-sidebar"
+			:name="activeSarCase.name"
+			:subname="t('astrolabe', 'Subject access request')"
+			@close="showSarSidebar = false">
+			<SarCasePanel
+				ref="sarPanel"
+				:caseId="activeSarCase.id"
+				@changed="onSarCaseChanged" />
+		</NcAppSidebar>
 
 		<!-- PDF/Chunk Viewer Modal -->
 		<div v-if="showViewer" class="mcp-modal-overlay" @click.self="closeViewer">
@@ -502,17 +589,20 @@
 </template>
 
 <script>
+import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
-import { FilePickerType, getFilePickerBuilder } from '@nextcloud/dialogs'
+import { FilePickerType, getFilePickerBuilder, showError } from '@nextcloud/dialogs'
 import { loadState } from '@nextcloud/initial-state'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 import Plotly from 'plotly.js-dist-min'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
+import NcAppSidebar from '@nextcloud/vue/components/NcAppSidebar'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcContent from '@nextcloud/vue/components/NcContent'
+import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -531,7 +621,10 @@ import Eye from 'vue-material-design-icons/Eye.vue'
 import FolderSearch from 'vue-material-design-icons/FolderSearch.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
+import PlaylistCheck from 'vue-material-design-icons/PlaylistCheck.vue'
+import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import ShieldAccount from 'vue-material-design-icons/ShieldAccount.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
 // Imported statically, despite PDF.js being several MB. A dynamic import emits
 // a separate chunk whose URL Vite resolves against `base` (`/`), so it is
@@ -539,6 +632,8 @@ import MarkdownViewer from './components/MarkdownViewer.vue'
 // same root-relative-URL problem that forces the worker to be inlined. Making
 // this lazy again needs a base-aware chunk URL first.
 import PDFViewer from './components/PDFViewer.vue'
+import SarCasePanel from './components/SarCasePanel.vue'
+import SarCases from './components/SarCases.vue'
 
 // How many PDF pages to render for a multimodal summary. Kept under the
 // backend's own cap; vision tokens dominate the cost of these calls, so sending
@@ -550,6 +645,34 @@ const SUMMARY_PAGE_WINDOW = 3
 const SUMMARY_POLL_MS = 1500
 const SUMMARY_TIMEOUT_MS = 3 * 60 * 1000
 
+// The active SAR case is a per-browser convenience; the case itself is on the
+// server. Storage can be unavailable (private windows), so both are guarded.
+// Per user: a shared browser profile must not carry one user's case to another.
+const ACTIVE_SAR_CASE_KEY = `astrolabe.activeSarCase.${getCurrentUser()?.uid ?? ''}`
+// Case items per request: the MCP server's maximum page.
+const SAR_PAGE = 1000
+
+function readActiveSarCase() {
+	try {
+		const value = JSON.parse(window.localStorage.getItem(ACTIVE_SAR_CASE_KEY))
+		return value && Number.isInteger(value.id) ? value : null
+	} catch {
+		return null
+	}
+}
+
+function writeActiveSarCase(value) {
+	try {
+		if (value) {
+			window.localStorage.setItem(ACTIVE_SAR_CASE_KEY, JSON.stringify(value))
+		} else {
+			window.localStorage.removeItem(ACTIVE_SAR_CASE_KEY)
+		}
+	} catch {
+		// Storage unavailable: the case simply is not remembered.
+	}
+}
+
 export default {
 	name: 'App',
 	components: {
@@ -557,6 +680,7 @@ export default {
 		NcAppNavigation,
 		NcAppNavigationItem,
 		NcAppContent,
+		NcAppSidebar,
 		NcButton,
 		NcTextField,
 		NcTextArea,
@@ -567,6 +691,12 @@ export default {
 		NcCheckboxRadioSwitch,
 		PDFViewer,
 		MarkdownViewer,
+		SarCasePanel,
+		SarCases,
+		NcCounterBubble,
+		PlaylistCheck,
+		PlaylistPlus,
+		ShieldAccount,
 		Magnify,
 		ChartBox,
 		Cog,
@@ -677,10 +807,33 @@ export default {
 			// the resolving request checks this before writing its result — without
 			// it, document A's summary can land on document B.
 			summaryGeneration: 0,
+
+			// SAR cases (ADR-040). Hidden entirely unless the MCP server
+			// advertises them. `activeSarCase` ({id, name}) is the case shown in
+			// the sidebar; the case itself lives on the server, this only
+			// remembers which one is active. While it is open, searches run
+			// through it (logged with their filters, one row per document,
+			// paged) and "Add to SAR" writes to it. `sarCaseKeys`
+			// ("doc_type:doc_id") marks results already in it.
+			sarAvailable: appConfig.sarAvailable === true,
+			activeSarCase: readActiveSarCase(),
+			sarCaseKeys: [],
+			sarCaseState: null,
+			showSarSidebar: true,
+			sarHasMore: false,
+			loadingMore: false,
+			sarNextOffset: 0,
+			sarLastQuery: '',
+			sarLastParams: {},
 		}
 	},
 
 	computed: {
+		// Searches run through the active case only while it is open.
+		sarCollecting() {
+			return this.sarAvailable && this.activeSarCase !== null && this.sarCaseState === 'open'
+		},
+
 		/**
 		 * Whether a summary can be produced at all. Gated on the backend's
 		 * advertised tiers rather than assumed: Astrolabe supplies retrieval, and
@@ -704,10 +857,18 @@ export default {
 			// set (all three when sync is on). `null` = the server didn't advertise
 			// the set (older backend) ⇒ show all (the backend still rejects an
 			// unsupported algorithm 422-side).
-			if (this.supportedSearchTypes === null) {
-				return all
+			const offered = this.supportedSearchTypes === null
+				? all
+				: all.filter((opt) => this.supportedSearchTypes.includes(opt.id))
+			// A case search lists one row per document, which the dense-only
+			// algorithm cannot do; offer it only when nothing else is available.
+			if (this.sarCollecting) {
+				const grouped = offered.filter((opt) => opt.id !== 'semantic')
+				if (grouped.length > 0) {
+					return grouped
+				}
 			}
-			return all.filter((opt) => this.supportedSearchTypes.includes(opt.id))
+			return offered
 		},
 
 		docTypeOptions() {
@@ -906,6 +1067,14 @@ export default {
 	},
 
 	watch: {
+		// Keep the chosen algorithm one that is offered: opening a case drops
+		// "Semantic", and the value sent must follow what the picker shows.
+		algorithmOptions(opts) {
+			if (opts.length > 0 && !opts.some((opt) => opt.id === this.algorithm)) {
+				this.algorithm = opts[0].id
+			}
+		},
+
 		docTypeOptions(opts) {
 			// Drop any selected doc type that is no longer offered (e.g. the
 			// user/admin disabled its source), so an invisible selection can't
@@ -944,6 +1113,10 @@ export default {
 	mounted() {
 		// Check for URL parameters to open chunk viewer
 		this.handleUrlParameters()
+		// A case remembered from an earlier visit: check it is still open.
+		if (this.sarAvailable && this.activeSarCase) {
+			this.loadSarCaseKeys()
+		}
 	},
 
 	beforeUnmount() {
@@ -1080,6 +1253,164 @@ export default {
 		// directories into the path filter. Picking from the user's own Files
 		// tree means every value is a valid, server-side path, so the filter
 		// can't silently match nothing because of a typo.
+		sarCaseUrl(suffix = '') {
+			return generateUrl('/apps/astrolabe/api/v1/sar/cases/{id}', { id: this.activeSarCase.id }) + suffix
+		},
+
+		/**
+		 * Whether a result's document is already in the active SAR case.
+		 * Keyed by document, not chunk: several chunks of one document are
+		 * one item.
+		 *
+		 * @param {object} result A search result
+		 * @return {boolean} True when the document is in the case.
+		 */
+		inSar(result) {
+			return this.sarCaseKeys.includes(`${result.doc_type}:${result.id}`)
+		},
+
+		/**
+		 * Open a case beside the search page.
+		 *
+		 * @param {{id: number, name: string}} sarCase The case
+		 */
+		async activateSarCase(sarCase) {
+			this.activeSarCase = sarCase
+			writeActiveSarCase(sarCase)
+			this.showSarSidebar = true
+			this.results = []
+			this.searched = false
+			await this.loadSarCaseKeys()
+			this.activeSection = 'search'
+		},
+
+		stopSarCase() {
+			this.activeSarCase = null
+			this.sarCaseKeys = []
+			this.sarCaseState = null
+			this.sarHasMore = false
+			this.sarNextOffset = 0
+			this.sarLastParams = {}
+			writeActiveSarCase(null)
+			this.$refs.sarCases?.loadCases()
+		},
+
+		// Which documents are already in the active case. A case that is gone
+		// or no longer accessible stops being active.
+		async loadSarCaseKeys() {
+			// Every page: a case holds more items than one response carries.
+			const keys = []
+			try {
+				let data
+				do {
+					({ data } = await axios.get(this.sarCaseUrl(), {
+						params: { offset: keys.length, limit: SAR_PAGE },
+					}))
+					keys.push(...data.case.items.map((item) => `${item.doc_type}:${item.doc_id}`))
+				} while (keys.length < data.items_total && data.case.items.length > 0)
+				this.sarCaseState = data.case.state
+				this.sarCaseKeys = keys
+			} catch {
+				this.stopSarCase()
+			}
+		},
+
+		onSarCaseChanged(data) {
+			if (!this.activeSarCase || data.case_id !== this.activeSarCase.id) {
+				return
+			}
+			this.sarCaseState = data.case.state
+			if (data.items_total > data.case.items.length) {
+				// A change returns the first page only: fetch all the keys.
+				this.loadSarCaseKeys()
+				return
+			}
+			this.sarCaseKeys = data.case.items.map((item) => `${item.doc_type}:${item.doc_id}`)
+		},
+
+		// A case the user can no longer change (closed elsewhere, deleted,
+		// access removed) answers 404/409: refresh what the sidebar shows.
+		onSarCaseError(err, fallback) {
+			showError(err.response?.data?.error || fallback)
+			if (err.response?.status === 404) {
+				this.stopSarCase()
+			} else if (err.response?.status === 409) {
+				this.$refs.sarPanel ? this.$refs.sarPanel.load() : this.loadSarCaseKeys()
+			}
+		},
+
+		// Every result on the page that is not yet in the case, in one call.
+		async addAllToSar() {
+			const found = this.query.trim() || null
+			// One entry per document: with chunk rows a document can appear twice.
+			const seen = new Set()
+			const add = this.filteredResults
+				.filter((result) => {
+					const key = `${result.doc_type}:${result.id}`
+					if (this.inSar(result) || seen.has(key)) {
+						return false
+					}
+					seen.add(key)
+					return true
+				})
+				.map((result) => ({
+					doc_type: result.doc_type,
+					doc_id: String(result.id),
+					reason: '',
+					title: result.title || '',
+					found_by: found,
+				}))
+			if (add.length === 0) {
+				return
+			}
+			try {
+				const { data } = await axios.post(this.sarCaseUrl('/items'), { add })
+				this.showSarCase(data)
+			} catch (err) {
+				this.onSarCaseError(err, this.t('astrolabe', 'Could not add the documents to the case.'))
+			}
+		},
+
+		// The server returns the whole case after each change: show it.
+		showSarCase(data) {
+			if (this.$refs.sarPanel) {
+				this.$refs.sarPanel.show(data)
+			} else {
+				this.onSarCaseChanged(data)
+			}
+		},
+
+		/**
+		 * Add a result's document to the active case, on the server, with the
+		 * query that found it. The reason is filled in on the case page.
+		 *
+		 * @param {object} result A search result
+		 */
+		async addToSar(result) {
+			if (!this.sarCollecting) {
+				this.activeSection = 'sar'
+				showError(this.t('astrolabe', 'Open or create a case first.'))
+				return
+			}
+			if (this.inSar(result)) {
+				return
+			}
+			try {
+				const { data } = await axios.post(this.sarCaseUrl('/items'), {
+					add: [{
+						doc_type: result.doc_type,
+						doc_id: String(result.id),
+						reason: '',
+						title: result.title || '',
+						found_by: this.query.trim() || null,
+					}],
+				})
+				this.showSarCase(data)
+			} catch (err) {
+				this.onSarCaseError(err, this.t('astrolabe', 'Could not add the document to the case.'))
+			}
+		},
+
 		async pickFolders() {
 			const picker = getFilePickerBuilder(this.t('astrolabe', 'Select folders to search'))
 				.setMultiSelect(true)
@@ -1100,8 +1431,15 @@ export default {
 			this.pathPrefixes = [...new Set([...this.pathPrefixes, ...cleaned])]
 		},
 
-		async performSearch() {
-			const queryText = this.query.trim()
+		/**
+		 * Run the search, or with `more` fetch the next page of a case search.
+		 *
+		 * @param {boolean} more Append the next page (strictly true: a click
+		 *   handler passes its event here)
+		 */
+		async performSearch(more = false) {
+			const loadMore = more === true && this.sarCollecting
+			const queryText = loadMore ? this.sarLastQuery : this.query.trim()
 			if (!queryText) {
 				return
 			}
@@ -1118,19 +1456,26 @@ export default {
 			}
 			this.dateRangeError = null
 
-			this.loading = true
-			this.error = null
-			this.searched = true
-			this.coordinates = []
-			this.queryCoords = []
-			this.expandedExcerpts = {}
+			if (loadMore) {
+				this.loadingMore = true
+			} else {
+				this.loading = true
+				this.error = null
+				this.searched = true
+				this.coordinates = []
+				this.queryCoords = []
+				this.expandedExcerpts = {}
+				this.sarNextOffset = 0
+				this.sarLastQuery = queryText
+			}
 
 			try {
 				const url = generateUrl('/apps/astrolabe/api/search')
-				const params = {
+				let params = {
 					query: queryText,
 					algorithm: this.algorithm,
-					limit: parseInt(this.limit) || 20,
+					// The server caps a page at 50.
+					limit: Math.min(parseInt(this.limit) || 20, 50),
 					// Skip the PCA computation entirely when the admin has
 					// disabled the visualization panel.
 					include_pca: this.showVisualization,
@@ -1156,11 +1501,32 @@ export default {
 					params.path_prefixes = this.pathPrefixes.join('\n')
 				}
 
+				// With an open case, the same search runs through it: logged there
+				// with these filters, one row per document, and paged.
+				// "Load more" repeats the first page's search exactly, whatever the
+				// filter fields show now.
+				if (loadMore) {
+					params = { ...this.sarLastParams, offset: this.sarNextOffset }
+				} else if (this.sarCollecting) {
+					params.sar_case = this.activeSarCase.id
+					params.offset = 0
+					this.sarLastParams = { ...params }
+				}
+
 				const response = await axios.get(url, { params })
 
 				if (response.data.success) {
-					this.results = response.data.results || []
+					const page = response.data.results || []
+					this.results = loadMore ? [...this.results, ...page] : page
 					this.algorithmUsed = response.data.algorithm_used || this.algorithm
+					if (this.sarCollecting) {
+						this.sarNextOffset += params.limit
+						this.sarHasMore = page.length === params.limit
+						if (!loadMore) {
+							// The case logged this search: show it in the sidebar.
+							this.$refs.sarPanel?.load()
+						}
+					}
 					this.coordinates = response.data.coordinates_3d || []
 					this.queryCoords = response.data.query_coords || []
 
@@ -1183,9 +1549,15 @@ export default {
 				} else {
 					this.error = this.t('astrolabe', 'Network error. Please try again.')
 				}
-				this.results = []
+				if (!loadMore) {
+					this.results = []
+				}
+				if (this.sarCollecting && [404, 409].includes(err.response?.status)) {
+					this.onSarCaseError(err, this.error)
+				}
 			} finally {
 				this.loading = false
+				this.loadingMore = false
 			}
 		},
 

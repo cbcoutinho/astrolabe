@@ -77,6 +77,34 @@ return [
 			'verb' => 'GET',
 		],
 
+		// SAR cases (proxied to the MCP server's /api/v1/sar/cases)
+		['name' => 'api#sarList', 'url' => '/api/v1/sar/cases', 'verb' => 'GET'],
+		['name' => 'api#sarCreate', 'url' => '/api/v1/sar/cases', 'verb' => 'POST'],
+		[
+			'name' => 'api#sarGet',
+			'url' => '/api/v1/sar/cases/{id}',
+			'verb' => 'GET',
+			'requirements' => ['id' => '\d+'],
+		],
+		[
+			'name' => 'api#sarUpdate',
+			'url' => '/api/v1/sar/cases/{id}',
+			'verb' => 'PATCH',
+			'requirements' => ['id' => '\d+'],
+		],
+		[
+			'name' => 'api#sarItems',
+			'url' => '/api/v1/sar/cases/{id}/items',
+			'verb' => 'POST',
+			'requirements' => ['id' => '\d+'],
+		],
+		[
+			'name' => 'api#sarExport',
+			'url' => '/api/v1/sar/cases/{id}/exports',
+			'verb' => 'POST',
+			'requirements' => ['id' => '\d+'],
+		],
+
 		// Assistant integration. Scheduling returns a TaskProcessing task id; the
 		// frontend then polls core's own OCS endpoint
 		// (/ocs/v2.php/taskprocessing/task/{id}) rather than a route of ours.

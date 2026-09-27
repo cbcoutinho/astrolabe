@@ -64,6 +64,9 @@ class PageController extends Controller {
 			// Empty ⇒ the button is hidden entirely. Provided here as well as on
 			// the OCS capabilities endpoint so the page needs no extra round-trip.
 			'summaryModes' => $this->assistantCapabilities->getSummaryModes(),
+			// Whether the MCP server builds redacted SAR export archives. False
+			// hides the SAR basket and view entirely (fails closed).
+			'sarAvailable' => $this->searchCapabilities->isSarAvailable(),
 		]);
 
 		$response = new TemplateResponse(

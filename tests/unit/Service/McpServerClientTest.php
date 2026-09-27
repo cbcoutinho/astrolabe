@@ -457,4 +457,105 @@ final class McpServerClientTest extends TestCase {
 		$this->assertFalse($captured->hasHeader('X-Request-Id'));
 		$this->assertFalse($captured->hasHeader('traceparent'));
 	}
+
+	// =========================================================================
+	// SAR cases: status and message of a 4xx are passed through
+	// =========================================================================
+
+	public function testSarCasesSendsMethodPathBodyAndBearer(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['case_id' => 101]));
+			});
+
+		$body = ['add' => [['doc_type' => 'file', 'doc_id' => '12', 'reason' => 'r']]];
+		$result = $this->client->sarCases('POST', '/101/items', 'tok', $body);
+
+		$this->assertSame(['case_id' => 101], $result);
+		$this->assertSame('POST', $captured->getMethod());
+		$this->assertSame('/api/v1/sar/cases/101/items', $captured->getUri()->getPath());
+		$this->assertSame('Bearer tok', $captured->getHeaderLine('Authorization'));
+		$this->assertSame($body, json_decode((string)$captured->getBody(), true));
+	}
+
+	/**
+	 * A case search goes to the case's search route, one row per document,
+	 * paged, without PCA, and reports the MCP server's total_found as
+	 * total_documents.
+	 */
+	public function testCaseSearchSendsDocumentRowsToTheCase(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['results' => [], 'total_found' => 7]));
+			});
+
+		$result = $this->client->search('q', 'hybrid', 20, true, ['file'], 'tok', null, null, ['/HR'], 101, 40);
+
+		$this->assertSame('/api/v1/sar/cases/101/search', $captured->getUri()->getPath());
+		$body = json_decode((string)$captured->getBody(), true);
+		$this->assertSame(['document', 40, false], [$body['granularity'], $body['offset'], $body['include_pca']]);
+		$this->assertSame(['/HR'], $body['path_prefixes']);
+		$this->assertSame(7, $result['total_documents']);
+	}
+
+	/**
+	 * The dense-only algorithm cannot group chunks per document (the server
+	 * answers 422), so a direct semantic case search asks for chunk rows. The
+	 * UI does not offer Semantic while a case is open.
+	 */
+	public function testSemanticCaseSearchFallsBackToChunkRows(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['results' => [], 'total_found' => 0]));
+			});
+
+		$this->client->search('q', 'semantic', 20, false, null, 'tok', null, null, null, 101, 0);
+
+		$this->assertSame('chunk', json_decode((string)$captured->getBody(), true)['granularity']);
+	}
+
+	public function testSarCasesEmptyBodyIsAJsonObject(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(202, '{}');
+			});
+
+		$this->client->sarCases('POST', '/101/exports', 'tok', []);
+
+		$this->assertSame('{}', (string)$captured->getBody());
+	}
+
+	public function testSarCasesKeepsServerStatusAndMessage(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(
+			409,
+			json_encode(['error' => 'sar_case_error', 'message' => 'the case is closed']),
+		));
+
+		$result = $this->client->sarCases('PATCH', '/101', 'tok', ['state' => 'open']);
+
+		$this->assertSame(['error' => 'the case is closed', 'status' => 409], $result);
+	}
+
+	public function testSarCasesSendsQueryAndMapsTransportFailureTo502(): void {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				throw new \RuntimeException('connection refused');
+			});
+
+		$result = $this->client->sarCases('GET', '/101', 'tok', null, ['offset' => 0, 'limit' => 50]);
+
+		$this->assertSame(502, $result['status']);
+		$this->assertSame('offset=0&limit=50', $captured->getUri()->getQuery());
+		$this->assertSame('', (string)$captured->getBody());
+	}
 }

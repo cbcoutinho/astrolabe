@@ -275,6 +275,7 @@ class McpServerClient {
 	 *   vector_sync_enabled?: bool,
 	 *   webhooks_enabled?: bool,
 	 *   supported_search_types?: list<string>,
+	 *   sar_available?: bool,
 	 *   uptime_seconds?: int,
 	 *   management_api_version?: string,
 	 *   error?: string
@@ -343,12 +344,16 @@ class McpServerClient {
 	 * @param string|null $modifiedAfter RFC 3339 lower bound on last-modified (open if null)
 	 * @param string|null $modifiedBefore RFC 3339 upper bound on last-modified (open if null)
 	 * @param list<string>|null $pathPrefixes Folder filters (files only), OR-ed; no filter if null/empty
+	 * @param int|null $sarCase Search for this SAR case instead: the same filters,
+	 *                          one row per document, paged by $offset, and logged in the case
+	 * @param int $offset Results to skip (SAR case searches only)
 	 * @return array{
 	 *   results?: array,
 	 *   pca_coordinates?: array,
 	 *   algorithm_used?: string,
 	 *   total_documents?: int,
-	 *   error?: string
+	 *   error?: string,
+	 *   status?: int
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -363,6 +368,8 @@ class McpServerClient {
 		?string $modifiedAfter = null,
 		?string $modifiedBefore = null,
 		?array $pathPrefixes = null,
+		?int $sarCase = null,
+		int $offset = 0,
 	): array {
 		$requestBody = [
 			'query' => $query,
@@ -400,6 +407,32 @@ class McpServerClient {
 			$options['headers'] = [
 				'Authorization' => 'Bearer ' . $token,
 			];
+		}
+
+		if ($sarCase !== null) {
+			// The same filters, sent to the case's search, which runs the MCP
+			// server's paged search and logs the query with them.
+			// One row per document, except for the dense-only algorithm, which
+			// cannot group chunks (the server answers 422 to that combination).
+			$options['json'] += [
+				'offset' => max(0, $offset),
+				'granularity' => $algorithm === 'semantic' ? 'chunk' : 'document',
+			];
+			$options['json']['include_pca'] = false;
+			$result = $this->sendPassingStatus(
+				fn (): ResponseInterface => $this->send('POST',
+					$this->baseUrl . "/api/v1/sar/cases/$sarCase/search",
+					$this->withUserAgent($options),
+				),
+				'SAR case search failed',
+			);
+			if (!isset($result['error'])) {
+				/** @var mixed $found */
+				$found = $result['total_found'] ?? 0;
+				$result['total_documents'] = is_int($found) ? $found : 0;
+			}
+			/** @psalm-suppress InvalidReturnStatement - same runtime shape as sendAndDecode below. */
+			return $result;
 		}
 
 		return $this->sendAndDecode(
@@ -823,5 +856,77 @@ class McpServerClient {
 			'Failed to get chunk context',
 			['doc_type' => $docType, 'doc_id' => $docId],
 		);
+	}
+
+	/**
+	 * Call the MCP server's SAR case API (ADR-040 in nextcloud-mcp-server) as
+	 * the token's user.
+	 *
+	 * ``$path`` is relative to /api/v1/sar/cases: '' for the collection,
+	 * '/{id}', '/{id}/items' or '/{id}/exports'. The MCP server validates and
+	 * enforces access (it acts as the token's user, through Nextcloud's
+	 * permissions on the case folder), so its status and message are passed
+	 * through for the UI to show.
+	 *
+	 * @param 'GET'|'POST'|'PATCH' $method
+	 * @param array<string, mixed>|null $body JSON body
+	 * @param array<string, int|string> $query
+	 * @return array<string, mixed> The response, or ['error' => string, 'status' => int]
+	 */
+	public function sarCases(
+		string $method,
+		string $path,
+		string $token,
+		?array $body = null,
+		array $query = [],
+	): array {
+		$options = [
+			'headers' => ['Authorization' => 'Bearer ' . $token],
+			'query' => $query,
+		];
+		if ($body !== null) {
+			// An empty body must still encode as a JSON object, not [].
+			$options['json'] = $body === [] ? new \stdClass() : $body;
+		}
+		return $this->sendPassingStatus(
+			fn (): ResponseInterface => $this->send($method,
+				$this->baseUrl . '/api/v1/sar/cases' . $path,
+				$this->withUserAgent($options),
+			),
+			'SAR case request failed',
+		);
+	}
+
+	/**
+	 * Like sendAndDecode(), but a non-2xx keeps the server's status code and
+	 * `message`, for endpoints whose 4xx answers are meant for the user
+	 * (e.g. "an export already exists"). Transport failures become 502.
+	 *
+	 * @param callable(): ResponseInterface $request
+	 * @return array<string, mixed>
+	 */
+	private function sendPassingStatus(callable $request, string $errorMessage): array {
+		try {
+			$response = $request();
+			$status = $response->getStatusCode();
+			/** @var mixed $data */
+			$data = json_decode((string)$response->getBody(), true);
+			if ($status < 200 || $status >= 300) {
+				/** @var mixed $message */
+				$message = is_array($data) ? ($data['message'] ?? null) : null;
+				return [
+					'error' => is_string($message) ? $message : "Unexpected HTTP $status from MCP server",
+					'status' => $status,
+				];
+			}
+			if (!is_array($data)) {
+				throw new \RuntimeException('Invalid JSON response from server');
+			}
+			/** @var array<string, mixed> $data */
+			return $data;
+		} catch (\Exception $e) {
+			$this->logger->error($errorMessage, ['error' => $e->getMessage()]);
+			return ['error' => $e->getMessage(), 'status' => 502];
+		}
 	}
 }

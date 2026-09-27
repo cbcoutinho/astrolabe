@@ -171,7 +171,7 @@ class ApiController extends Controller {
 	 * so the success path keeps a non-null string without tripping Psalm's
 	 * nullable-return checks (a tuple return decorrelates the two halves).
 	 */
-	private function tokenForCurrentUser(): JSONResponse|string {
+	private function tokenForCurrentUser(string $extraScopes = ''): JSONResponse|string {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
 			return new JSONResponse([
@@ -181,7 +181,7 @@ class ApiController extends Controller {
 		}
 
 		try {
-			return $this->tokenMinter->mintForUser($user->getUID());
+			return $this->tokenMinter->mintForUser($user->getUID(), $extraScopes);
 		} catch (McpTokenMintException $e) {
 			$this->logger->error('MCP token mint failed', [
 				'user_id' => $user->getUID(),
@@ -216,7 +216,9 @@ class ApiController extends Controller {
 	/**
 	 * Execute semantic search via MCP server.
 	 *
-	 * AJAX endpoint for vector search UI in app page.
+	 * AJAX endpoint for vector search UI in app page. With $sar_case, the same
+	 * search runs for that SAR case: one row per document, paged by $offset,
+	 * and logged in the case with its filters (ADR-040).
 	 */
 	#[NoAdminRequired]
 	public function search(
@@ -229,7 +231,12 @@ class ApiController extends Controller {
 		string $modified_before = '',
 		string $path_prefix = '',
 		string $path_prefixes = '',
+		int $offset = 0,
+		int $sar_case = 0,
 	): JSONResponse {
+		if ($sar_case > 0 && !$this->searchCapabilities->isSarAvailable()) {
+			return $this->sarUnavailableResponse();
+		}
 		if (empty($query)) {
 			return new JSONResponse([
 				'success' => false,
@@ -273,7 +280,9 @@ class ApiController extends Controller {
 			return $this->unsupportedSearchTypeResponse($e);
 		}
 
-		$accessToken = $this->tokenForCurrentUser();
+		// A case search also logs the query in the case: it needs sar.write, and
+		// semantic.read like the MCP server's sar_case_search tool.
+		$accessToken = $this->tokenForCurrentUser($sar_case > 0 ? 'sar.write semantic.read' : '');
 		if ($accessToken instanceof JSONResponse) {
 			return $accessToken;
 		}
@@ -307,7 +316,9 @@ class ApiController extends Controller {
 			]);
 		}
 
-		$includePcaBool = in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
+		// A case search is paged by document; the plot is for chunk searches.
+		$includePcaBool = $sar_case === 0
+			&& in_array(strtolower($include_pca), ['true', '1', 'yes'], true);
 
 		// Server-side enforcement: when the admin has disabled the visualization
 		// panel, never compute PCA — regardless of what the client (or a direct
@@ -351,8 +362,14 @@ class ApiController extends Controller {
 			$modified_after !== '' ? $modified_after : null,
 			$modified_before !== '' ? $modified_before : null,
 			$pathPrefixesArray !== [] ? $pathPrefixesArray : null,
+			$sar_case > 0 ? $sar_case : null,
+			$offset,
 		);
 
+		if ($sar_case > 0 && isset($result['error'])) {
+			// The case's own answers (closed, gone, not the user's) reach the UI.
+			return $this->sarResponse($result, Http::STATUS_OK);
+		}
 		if (isset($result['error'])) {
 			return new JSONResponse([
 				'success' => false,
@@ -782,4 +799,139 @@ class ApiController extends Controller {
 		return new JSONResponse($result);
 	}
 
+	/*
+	 * SAR cases (ADR-040 in nextcloud-mcp-server), proxied to the MCP server's
+	 * /api/v1/sar/cases as the current user. The MCP server is the authority on
+	 * what the user may read and write (it acts through Nextcloud's permissions
+	 * on the case folder); its 4xx answers and messages are passed through for
+	 * the UI to show.
+	 */
+
+	#[NoAdminRequired]
+	public function sarList(): JSONResponse {
+		return $this->sarProxy('GET', '');
+	}
+
+	/**
+	 * @param list<string> $subject The data subject's identifiers (kept in exports)
+	 */
+	#[NoAdminRequired]
+	public function sarCreate(
+		string $folder = '',
+		string $name = '',
+		array $subject = [],
+		string $description = '',
+	): JSONResponse {
+		return $this->sarProxy('POST', '', [
+			'folder' => $folder,
+			'name' => $name,
+			'subject' => $subject,
+			'description' => $description,
+		], successStatus: Http::STATUS_CREATED);
+	}
+
+	#[NoAdminRequired]
+	public function sarGet(int $id, int $offset = 0, int $limit = 200): JSONResponse {
+		// The MCP server's page is at most 1000 items.
+		return $this->sarProxy('GET', "/$id", query: [
+			'offset' => max(0, $offset),
+			'limit' => max(1, min($limit, 1000)),
+		]);
+	}
+
+	/**
+	 * @param list<string>|null $subject
+	 */
+	#[NoAdminRequired]
+	public function sarUpdate(
+		int $id,
+		?array $subject = null,
+		?string $description = null,
+		?string $state = null,
+	): JSONResponse {
+		$body = array_filter(
+			['subject' => $subject, 'description' => $description, 'state' => $state],
+			fn (mixed $v): bool => $v !== null,
+		);
+		return $this->sarProxy('PATCH', "/$id", $body);
+	}
+
+	/**
+	 * @param list<array<array-key, mixed>> $add {doc_type, doc_id, reason, title?, found_by?, page_start?, page_end?}
+	 * @param list<array<array-key, mixed>> $remove {doc_type, doc_id}
+	 * @param list<array<array-key, mixed>> $queries {text, hits?}
+	 */
+	#[NoAdminRequired]
+	public function sarItems(int $id, array $add = [], array $remove = [], array $queries = []): JSONResponse {
+		return $this->sarProxy('POST', "/$id/items", [
+			'add' => $add,
+			'remove' => $remove,
+			'queries' => $queries,
+		]);
+	}
+
+	#[NoAdminRequired]
+	public function sarExport(int $id, ?string $output_folder = null): JSONResponse {
+		$body = $output_folder === null || $output_folder === '' ? [] : ['output_folder' => $output_folder];
+		return $this->sarProxy('POST', "/$id/exports", $body, successStatus: Http::STATUS_ACCEPTED);
+	}
+
+	/**
+	 * @param 'GET'|'POST'|'PATCH' $method
+	 * @param array<string, mixed>|null $body
+	 * @param array<string, int|string> $query
+	 * @param Http::STATUS_OK|Http::STATUS_CREATED|Http::STATUS_ACCEPTED $successStatus
+	 */
+	private function sarProxy(
+		string $method,
+		string $path,
+		?array $body = null,
+		array $query = [],
+		int $successStatus = Http::STATUS_OK,
+	): JSONResponse {
+		if (!$this->searchCapabilities->isSarAvailable()) {
+			return $this->sarUnavailableResponse();
+		}
+		// Reading a case needs sar.read, anything else sar.write (MCP server
+		// checks both). Asked for per call, not in every token Astrolabe mints.
+		$accessToken = $this->tokenForCurrentUser($method === 'GET' ? 'sar.read' : 'sar.write');
+		if ($accessToken instanceof JSONResponse) {
+			return $accessToken;
+		}
+		return $this->sarResponse(
+			$this->client->sarCases($method, $path, $accessToken, $body, $query),
+			$successStatus,
+		);
+	}
+
+	private function sarUnavailableResponse(): JSONResponse {
+		return new JSONResponse([
+			'success' => false,
+			'error' => 'The MCP server does not provide SAR cases.',
+		], Http::STATUS_NOT_FOUND);
+	}
+
+	/**
+	 * Statuses the MCP server's SAR endpoints answer with that are passed
+	 * through to the browser; anything else becomes a 500.
+	 */
+	private const SAR_PASSTHROUGH_STATUSES = [400, 401, 403, 404, 409, 422, 502, 503];
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @param Http::STATUS_OK|Http::STATUS_CREATED|Http::STATUS_ACCEPTED $successStatus
+	 */
+	private function sarResponse(array $result, int $successStatus): JSONResponse {
+		if (isset($result['error'])) {
+			/** @var mixed $status */
+			$status = $result['status'] ?? null;
+			return new JSONResponse([
+				'success' => false,
+				'error' => $result['error'],
+			], in_array($status, self::SAR_PASSTHROUGH_STATUSES, true)
+				? $status
+				: Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+		return new JSONResponse($result, $successStatus);
+	}
 }
