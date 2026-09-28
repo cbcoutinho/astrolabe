@@ -150,4 +150,54 @@ test.describe('Astrolabe search', () => {
 		// percentage should fail here.
 		await expect(firstResult.locator('.mcp-result-score')).toHaveCount(0)
 	})
+
+	test('a search that times out offers keyword search instead', async ({ authenticatedPage: page }) => {
+		// The server's answer when the MCP server did not reply in time (it was
+		// waiting on the embedding service); faked here, since an unresponsive
+		// gateway cannot be staged in the e2e stack. Keyword search does not
+		// need the embedding service, so the retry is let through.
+		const algorithms: string[] = []
+		await page.route('**/apps/astrolabe/api/search?**', async (route) => {
+			const algorithm = new URL(route.request().url()).searchParams.get('algorithm') ?? ''
+			algorithms.push(algorithm)
+			if (algorithm !== 'bm25') {
+				await route.fulfill({
+					status: 504,
+					contentType: 'application/json',
+					body: JSON.stringify({ success: false, code: 'search_timeout', error: 'The search did not finish in time.' }),
+				})
+				return
+			}
+			await route.continue()
+		})
+		await page.goto('/apps/astrolabe')
+		const input = page.getByRole('textbox', { name: 'Search query' })
+		await input.fill('quarterly report')
+		await input.press('Control+Enter')
+
+		await expect(page.getByText('The embedding service may be starting up or unavailable')).toBeVisible()
+		await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+		const keyword = page.waitForRequest((r) => r.url().includes('/api/search') && r.url().includes('algorithm=bm25'))
+		await page.getByRole('button', { name: 'Search by keyword instead' }).click()
+		await keyword
+		expect(algorithms.at(-1)).toBe('bm25')
+		await expect(page.getByText('The embedding service may be starting up or unavailable')).toHaveCount(0)
+	})
+
+	test('a slow search says why and can be cancelled', async ({ authenticatedPage: page }) => {
+		// Hold the search past the "still searching" threshold (8 s).
+		await page.route('**/apps/astrolabe/api/search?**', async (route) => {
+			await new Promise((resolve) => setTimeout(resolve, 20_000))
+			await route.abort().catch(() => {})
+		})
+		await page.goto('/apps/astrolabe')
+		const input = page.getByRole('textbox', { name: 'Search query' })
+		await input.fill('quarterly report')
+		await input.press('Control+Enter')
+
+		await expect(page.getByText('Still searching. The embedding service may be starting up.')).toBeVisible({ timeout: 15_000 })
+		await page.getByRole('button', { name: 'Cancel' }).click()
+		await expect(page.getByText('Search cancelled.')).toBeVisible()
+		await expect(page.getByText('Still searching.')).toHaveCount(0)
+	})
 })

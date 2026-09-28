@@ -206,7 +206,7 @@ class McpServerClient {
 			return is_array($data) ? $data : [];
 		} catch (\Exception $e) {
 			$this->logger->error($errorMessage, ['error' => $e->getMessage()] + $logContext);
-			return ['error' => $e->getMessage()];
+			return ['error' => $e->getMessage()] + (self::isTimeout($e) ? ['timeout' => true] : []);
 		}
 	}
 
@@ -353,7 +353,8 @@ class McpServerClient {
 	 *   algorithm_used?: string,
 	 *   total_documents?: int,
 	 *   error?: string,
-	 *   status?: int
+	 *   status?: int,
+	 *   timeout?: bool
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -932,7 +933,19 @@ class McpServerClient {
 			return $data;
 		} catch (\Exception $e) {
 			$this->logger->error($errorMessage, ['error' => $e->getMessage()]);
-			return ['error' => $e->getMessage(), 'status' => 502];
+			return self::isTimeout($e)
+				? ['error' => $e->getMessage(), 'status' => 504, 'timeout' => true]
+				: ['error' => $e->getMessage(), 'status' => 502];
 		}
+	}
+
+	/**
+	 * Whether a request failed because the MCP server did not answer in time
+	 * (Nextcloud's HTTP client gives up after 30 s). A search usually waits
+	 * that long on the embedding service, e.g. a GPU backend starting up.
+	 */
+	private static function isTimeout(\Exception $e): bool {
+		$message = $e->getMessage();
+		return str_contains($message, 'cURL error 28') || stripos($message, 'timed out') !== false;
 	}
 }

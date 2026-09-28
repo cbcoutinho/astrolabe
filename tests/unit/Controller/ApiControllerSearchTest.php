@@ -234,4 +234,31 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertNull($captured[7]);
 		$this->assertNull($captured[8]);
 	}
+
+	public function testTimedOutSearchIs504WithACode(): void {
+		// The MCP server did not answer within Nextcloud's HTTP timeout, which
+		// usually means it is waiting on the embedding service. The UI keys
+		// its "search by keyword instead" offer off the code, not cURL's text.
+		$this->authenticateUserWithToken();
+		$this->client->method('search')->willReturn([
+			'error' => 'cURL error 28: Operation timed out after 30001 milliseconds',
+			'timeout' => true,
+		]);
+
+		$response = $this->controller->search(query: 'meeting notes');
+
+		$this->assertSame(Http::STATUS_GATEWAY_TIMEOUT, $response->getStatus());
+		$this->assertSame('search_timeout', $response->getData()['code'] ?? null);
+		$this->assertStringNotContainsString('cURL', (string)($response->getData()['error'] ?? ''));
+	}
+
+	public function testOtherSearchFailuresStay500(): void {
+		$this->authenticateUserWithToken();
+		$this->client->method('search')->willReturn(['error' => 'Unexpected HTTP 500 from MCP server']);
+
+		$response = $this->controller->search(query: 'meeting notes');
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		$this->assertArrayNotHasKey('code', $response->getData());
+	}
 }
