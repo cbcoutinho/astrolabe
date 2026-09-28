@@ -915,6 +915,11 @@ class McpServerClient {
 			if ($status < 200 || $status >= 300) {
 				/** @var mixed $message */
 				$message = is_array($data) ? ($data['message'] ?? null) : null;
+				// 4xx are the caller's answers (not found, conflict, ...) and reach
+				// the UI; a 5xx is the MCP server failing and needs a log line.
+				if ($status >= 500) {
+					$this->logger->error($errorMessage, ['status' => $status]);
+				}
 				return [
 					'error' => is_string($message) ? $message : "Unexpected HTTP $status from MCP server",
 					'status' => $status,
