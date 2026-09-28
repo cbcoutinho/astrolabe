@@ -481,11 +481,6 @@ final class McpServerClientTest extends TestCase {
 	}
 
 	/**
-	 * A case search goes to the case's search route, one row per document,
-	 * paged, without PCA, and reports the MCP server's total_found as
-	 * total_documents.
-	 */
-	/**
 	 * A search that ran into Nextcloud's HTTP timeout is flagged, for the
 	 * normal and the case search alike, so the controller can answer 504.
 	 */
@@ -511,6 +506,11 @@ final class McpServerClientTest extends TestCase {
 		$this->assertArrayNotHasKey('timeout', $result);
 	}
 
+	/**
+	 * A case search goes to the case's search route, one row per document,
+	 * paged, without PCA, and reports the MCP server's total_found as
+	 * total_documents.
+	 */
 	public function testCaseSearchSendsDocumentRowsToTheCase(): void {
 		$captured = null;
 		$this->httpClient->method('sendRequest')

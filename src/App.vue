@@ -1521,6 +1521,8 @@ export default {
 			const controller = new AbortController()
 			this.searchAbort = controller
 			clearTimeout(this.slowSearchTimer)
+			// A superseded search may have been slow; this one has just started.
+			this.searchSlow = false
 			this.slowSearchTimer = setTimeout(() => {
 				this.searchSlow = true
 			}, SLOW_SEARCH_MS)

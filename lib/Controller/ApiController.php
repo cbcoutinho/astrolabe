@@ -928,7 +928,7 @@ class ApiController extends Controller {
 	 * Statuses the MCP server's SAR endpoints answer with that are passed
 	 * through to the browser; anything else becomes a 500.
 	 */
-	private const SAR_PASSTHROUGH_STATUSES = [400, 401, 403, 404, 409, 422, 502, 503];
+	private const SAR_PASSTHROUGH_STATUSES = [400, 401, 403, 404, 409, 422, 502, 503, 504];
 
 	/**
 	 * @param array<string, mixed> $result

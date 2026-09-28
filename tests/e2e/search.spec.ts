@@ -185,7 +185,8 @@ test.describe('Astrolabe search', () => {
 	})
 
 	test('a slow search says why and can be cancelled', async ({ authenticatedPage: page }) => {
-		// Hold the search past the "still searching" threshold (8 s).
+		// Hold the search past the "still searching" threshold (8 s), twice.
+		test.setTimeout(60_000)
 		await page.route('**/apps/astrolabe/api/search?**', async (route) => {
 			await new Promise((resolve) => setTimeout(resolve, 20_000))
 			await route.abort().catch(() => {})
@@ -195,6 +196,11 @@ test.describe('Astrolabe search', () => {
 		await input.fill('quarterly report')
 		await input.press('Control+Enter')
 
+		await expect(page.getByText('Still searching. The embedding service may be starting up.')).toBeVisible({ timeout: 15_000 })
+		// A new search supersedes the slow one and starts without the hint.
+		await input.fill('annual report')
+		await input.press('Control+Enter')
+		await expect(page.getByText('Still searching.')).toHaveCount(0, { timeout: 3_000 })
 		await expect(page.getByText('Still searching. The embedding service may be starting up.')).toBeVisible({ timeout: 15_000 })
 		await page.getByRole('button', { name: 'Cancel' }).click()
 		await expect(page.getByText('Search cancelled.')).toBeVisible()
