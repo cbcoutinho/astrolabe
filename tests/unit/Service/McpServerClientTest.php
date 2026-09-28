@@ -481,6 +481,34 @@ final class McpServerClientTest extends TestCase {
 	}
 
 	/**
+	 * A search that ran into Nextcloud's HTTP timeout is flagged, for the
+	 * normal and the case search alike, so the controller can answer 504.
+	 */
+	public function testTimedOutSearchIsFlagged(): void {
+		$this->httpClient->method('sendRequest')
+			->willThrowException(new \RuntimeException('cURL error 28: Operation timed out after 30001 milliseconds with 0 bytes received'));
+
+		$plain = $this->client->search('q', 'hybrid', 20, true, ['file'], 'tok');
+		$inCase = $this->client->search('q', 'hybrid', 20, true, ['file'], 'tok', null, null, null, 101, 0);
+
+		$this->assertTrue($plain['timeout'] ?? false);
+		$this->assertTrue($inCase['timeout'] ?? false);
+		$this->assertSame(504, $inCase['status'] ?? null);
+	}
+
+	public function testOtherTransportFailuresAreNotTimeouts(): void {
+		$this->httpClient->method('sendRequest')
+			// A connect-level timeout is the MCP server being unreachable, not
+			// a search waiting on the embedding service.
+			->willThrowException(new \RuntimeException('cURL error 7: Failed to connect to mcp port 8000: Connection timed out'));
+
+		$result = $this->client->search('q', 'hybrid', 20, true, ['file'], 'tok');
+
+		$this->assertArrayHasKey('error', $result);
+		$this->assertArrayNotHasKey('timeout', $result);
+	}
+
+	/**
 	 * A case search goes to the case's search route, one row per document,
 	 * paged, without PCA, and reports the MCP server's total_found as
 	 * total_documents.

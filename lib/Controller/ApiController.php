@@ -366,6 +366,16 @@ class ApiController extends Controller {
 			$offset,
 		);
 
+		if (($result['timeout'] ?? false) === true) {
+			// Not a fault to report as 500 with cURL's text: the search is
+			// usually waiting on the embedding service. Keyword search does
+			// not need it, which the UI offers instead.
+			return new JSONResponse([
+				'success' => false,
+				'code' => 'search_timeout',
+				'error' => 'The search did not finish in time. The embedding service may be starting up or unavailable.',
+			], Http::STATUS_GATEWAY_TIMEOUT);
+		}
 		if ($sar_case > 0 && isset($result['error'])) {
 			// The case's own answers (closed, gone, not the user's) reach the UI.
 			return $this->sarResponse($result, Http::STATUS_OK);
@@ -790,10 +800,13 @@ class ApiController extends Controller {
 		);
 
 		if (isset($result['error'])) {
+			// A document the index no longer holds (deleted, unindexed, a stale
+			// deep link) is a 404, not a server fault; the viewer says so.
+			$notIndexed = ($result['status'] ?? null) === Http::STATUS_NOT_FOUND;
 			return new JSONResponse([
 				'success' => false,
 				'error' => $result['error'],
-			], Http::STATUS_INTERNAL_SERVER_ERROR);
+			], $notIndexed ? Http::STATUS_NOT_FOUND : Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 
 		return new JSONResponse($result);
@@ -915,7 +928,7 @@ class ApiController extends Controller {
 	 * Statuses the MCP server's SAR endpoints answer with that are passed
 	 * through to the browser; anything else becomes a 500.
 	 */
-	private const SAR_PASSTHROUGH_STATUSES = [400, 401, 403, 404, 409, 422, 502, 503];
+	private const SAR_PASSTHROUGH_STATUSES = [400, 401, 403, 404, 409, 422, 502, 503, 504];
 
 	/**
 	 * @param array<string, mixed> $result

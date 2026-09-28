@@ -206,7 +206,7 @@ class McpServerClient {
 			return is_array($data) ? $data : [];
 		} catch (\Exception $e) {
 			$this->logger->error($errorMessage, ['error' => $e->getMessage()] + $logContext);
-			return ['error' => $e->getMessage()];
+			return ['error' => $e->getMessage()] + (self::isTimeout($e) ? ['timeout' => true] : []);
 		}
 	}
 
@@ -353,7 +353,8 @@ class McpServerClient {
 	 *   algorithm_used?: string,
 	 *   total_documents?: int,
 	 *   error?: string,
-	 *   status?: int
+	 *   status?: int,
+	 *   timeout?: bool
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -817,7 +818,9 @@ class McpServerClient {
 	 *                             provided, the MCP server uses the always-indexed chunk_index field
 	 *                             for lookup instead of the offset filter.
 	 * @param int|null $totalChunks Total chunks in document (optional)
-	 * @return array
+	 * @return array The context, or ['error' => ..., 'status' => HTTP status]
+	 *               (404 when the document is not in the index; 502 when the
+	 *               MCP server could not be reached)
 	 */
 	public function getChunkContext(
 		string $docType,
@@ -845,7 +848,7 @@ class McpServerClient {
 			$query['total_chunks'] = $totalChunks;
 		}
 
-		return $this->sendAndDecode(
+		return $this->sendPassingStatus(
 			fn (): ResponseInterface => $this->send('GET',
 				$this->baseUrl . '/api/v1/chunk-context',
 				$this->withUserAgent([
@@ -854,7 +857,6 @@ class McpServerClient {
 				]),
 			),
 			'Failed to get chunk context',
-			['doc_type' => $docType, 'doc_id' => $docId],
 		);
 	}
 
@@ -914,6 +916,11 @@ class McpServerClient {
 			if ($status < 200 || $status >= 300) {
 				/** @var mixed $message */
 				$message = is_array($data) ? ($data['message'] ?? null) : null;
+				// 4xx are the caller's answers (not found, conflict, ...) and reach
+				// the UI; a 5xx is the MCP server failing and needs a log line.
+				if ($status >= 500) {
+					$this->logger->error($errorMessage, ['status' => $status]);
+				}
 				return [
 					'error' => is_string($message) ? $message : "Unexpected HTTP $status from MCP server",
 					'status' => $status,
@@ -926,7 +933,21 @@ class McpServerClient {
 			return $data;
 		} catch (\Exception $e) {
 			$this->logger->error($errorMessage, ['error' => $e->getMessage()]);
-			return ['error' => $e->getMessage(), 'status' => 502];
+			return self::isTimeout($e)
+				? ['error' => $e->getMessage(), 'status' => 504, 'timeout' => true]
+				: ['error' => $e->getMessage(), 'status' => 502];
 		}
+	}
+
+	/**
+	 * Whether a request failed because the MCP server did not answer in time
+	 * (Nextcloud's HTTP client gives up after 30 s). A search usually waits
+	 * that long on the embedding service, e.g. a GPU backend starting up.
+	 * Only cURL's operation timeout (error 28) counts: a connect-level failure
+	 * ("Connection timed out", error 7) is the MCP server being unreachable,
+	 * which keyword search would not get around either.
+	 */
+	private static function isTimeout(\Exception $e): bool {
+		return str_contains($e->getMessage(), 'cURL error 28');
 	}
 }

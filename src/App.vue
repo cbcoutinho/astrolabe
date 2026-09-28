@@ -224,10 +224,38 @@
 				<div v-if="loading" class="mcp-loading">
 					<NcLoadingIcon :size="32" />
 					<span>{{ t('astrolabe', 'Searching…') }}</span>
+					<!-- A search that needs the embedding service can wait on it
+						 for a while (e.g. a GPU starting up): say so, and let the
+						 user stop waiting. -->
+					<template v-if="searchSlow">
+						<span class="mcp-slow-hint">
+							{{ t('astrolabe', 'Still searching. The embedding service may be starting up.') }}
+						</span>
+						<NcButton variant="tertiary" @click="cancelSearch">
+							{{ t('astrolabe', 'Cancel') }}
+						</NcButton>
+					</template>
 				</div>
 
+				<!-- Timed out: the embedding service did not answer. Keyword search
+					 does not need it, so offer that instead of a dead end. -->
+				<NcNoteCard v-if="searchTimedOut" type="warning" class="mcp-error">
+					<div>{{ error }}</div>
+					<div class="mcp-timeout-actions">
+						<NcButton variant="secondary" @click="performSearch(retryLoadMore)">
+							{{ t('astrolabe', 'Try again') }}
+						</NcButton>
+						<NcButton
+							v-if="canSearchByKeyword"
+							variant="primary"
+							@click="searchByKeyword">
+							{{ t('astrolabe', 'Search by keyword instead') }}
+						</NcButton>
+					</div>
+				</NcNoteCard>
+
 				<!-- Error State -->
-				<NcNoteCard v-if="error" type="error" class="mcp-error">
+				<NcNoteCard v-else-if="error" type="error" class="mcp-error">
 					<div>{{ error }}</div>
 				</NcNoteCard>
 
@@ -507,7 +535,11 @@
 							</template>
 							{{ t('astrolabe', 'Summarize section') }}
 						</NcButton>
-						<NcButton variant="tertiary" @click="closeViewer">
+						<NcButton
+							variant="tertiary"
+							:aria-label="t('astrolabe', 'Close')"
+							:title="t('astrolabe', 'Close')"
+							@click="closeViewer">
 							<template #icon>
 								<Close :size="20" />
 							</template>
@@ -651,6 +683,8 @@ const SUMMARY_TIMEOUT_MS = 3 * 60 * 1000
 const ACTIVE_SAR_CASE_KEY = `astrolabe.activeSarCase.${getCurrentUser()?.uid ?? ''}`
 // Case items per request: the MCP server's maximum page.
 const SAR_PAGE = 1000
+// After this long a search is probably waiting on the embedding service.
+const SLOW_SEARCH_MS = 8000
 
 function readActiveSarCase() {
 	try {
@@ -756,6 +790,11 @@ export default {
 			scoreThreshold: 0,
 			loading: false,
 			error: null,
+			// A search still running after SLOW_SEARCH_MS, and one that timed
+			// out waiting on the embedding service (the server's 504).
+			searchSlow: false,
+			searchTimedOut: false,
+			retryLoadMore: false,
 			results: [],
 			algorithmUsed: '',
 			searched: false,
@@ -844,6 +883,12 @@ export default {
 		 */
 		canSummarize() {
 			return this.summaryModes.length > 0 && !this.viewerLoading
+		},
+
+		// Keyword search runs without the embedding service: the way out of a
+		// search that timed out waiting on it.
+		canSearchByKeyword() {
+			return this.algorithm !== 'bm25' && this.algorithmOptions.some((opt) => opt.id === 'bm25')
 		},
 
 		algorithmOptions() {
@@ -1120,6 +1165,8 @@ export default {
 	},
 
 	beforeUnmount() {
+		clearTimeout(this.slowSearchTimer)
+		this.searchAbort?.abort()
 		if (this._scoreThresholdTimer) {
 			clearTimeout(this._scoreThresholdTimer)
 			this._scoreThresholdTimer = null
@@ -1458,9 +1505,14 @@ export default {
 
 			if (loadMore) {
 				this.loadingMore = true
+				if (this.searchTimedOut) {
+					this.searchTimedOut = false
+					this.error = null
+				}
 			} else {
 				this.loading = true
 				this.error = null
+				this.searchTimedOut = false
 				this.searched = true
 				this.coordinates = []
 				this.queryCoords = []
@@ -1468,6 +1520,19 @@ export default {
 				this.sarNextOffset = 0
 				this.sarLastQuery = queryText
 			}
+
+			// Cancellable, and flagged as slow once it has taken long enough that
+			// it is probably waiting on the embedding service. A newer search
+			// supersedes this one: it aborts it, and owns the shared state.
+			this.searchAbort?.abort()
+			const controller = new AbortController()
+			this.searchAbort = controller
+			clearTimeout(this.slowSearchTimer)
+			// A superseded search may have been slow; this one has just started.
+			this.searchSlow = false
+			this.slowSearchTimer = setTimeout(() => {
+				this.searchSlow = true
+			}, SLOW_SEARCH_MS)
 
 			try {
 				const url = generateUrl('/apps/astrolabe/api/search')
@@ -1513,7 +1578,7 @@ export default {
 					this.sarLastParams = { ...params }
 				}
 
-				const response = await axios.get(url, { params })
+				const response = await axios.get(url, { params, signal: controller.signal })
 
 				if (response.data.success) {
 					const page = response.data.results || []
@@ -1541,8 +1606,24 @@ export default {
 					this.results = []
 				}
 			} catch (err) {
+				if (axios.isCancel(err)) {
+					// Cancelled by the user, or superseded by a newer search (which
+					// then owns the error and results).
+					if (this.searchAbort === controller) {
+						this.error = this.t('astrolabe', 'Search cancelled.')
+					}
+					return
+				}
 				console.error('Search error:', err)
-				if (err.response && err.response.data && err.response.data.error) {
+				if (err.response?.data?.code === 'search_timeout') {
+					this.searchTimedOut = true
+					// A timed-out "Load more" is retried as "Load more", keeping
+					// the rows already shown.
+					this.retryLoadMore = loadMore
+					this.error = this.canSearchByKeyword
+						? this.t('astrolabe', 'The search did not finish in time. The embedding service may be starting up or unavailable. Try again shortly, or search by keyword, which does not need it.')
+						: this.t('astrolabe', 'The search did not finish in time. Try again shortly.')
+				} else if (err.response && err.response.data && err.response.data.error) {
 					this.error = err.response.data.error
 				} else if (err.response && err.response.status === 503) {
 					this.error = this.t('astrolabe', 'Search service unavailable. Please try again later.')
@@ -1556,9 +1637,23 @@ export default {
 					this.onSarCaseError(err, this.error)
 				}
 			} finally {
-				this.loading = false
-				this.loadingMore = false
+				if (this.searchAbort === controller) {
+					this.searchAbort = null
+					clearTimeout(this.slowSearchTimer)
+					this.searchSlow = false
+					this.loading = false
+					this.loadingMore = false
+				}
 			}
+		},
+
+		cancelSearch() {
+			this.searchAbort?.abort()
+		},
+
+		searchByKeyword() {
+			this.algorithm = 'bm25'
+			this.performSearch()
 		},
 
 		async loadVectorStatus() {
@@ -1903,6 +1998,9 @@ export default {
 				// check guards). Surface a friendly message instead of a stack trace.
 				if (err.response && err.response.status === 403) {
 					this.error = this.t('astrolabe', 'You no longer have access to this document.')
+				} else if (err.response && err.response.status === 404) {
+					// Deleted or unindexed since the search, or a stale deep link.
+					this.error = this.t('astrolabe', 'This document is no longer in the search index.')
 				} else {
 					console.error('Error loading chunk:', err)
 				}
@@ -2316,11 +2414,23 @@ export default {
 // Loading and error states
 .mcp-loading {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: center;
 	gap: 12px;
 	padding: 48px;
 	color: var(--color-text-maxcontrast);
+}
+
+.mcp-slow-hint {
+	flex-basis: 100%;
+	text-align: center;
+}
+
+.mcp-timeout-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
 }
 
 .mcp-error {

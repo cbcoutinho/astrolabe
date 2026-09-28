@@ -197,6 +197,15 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 		$this->assertSame(['sar.read', 'sar.read', 'sar.write', 'sar.write', 'sar.write', 'sar.write semantic.read', ''], $minted);
 	}
 
+	public function testTimeoutPassesThroughAs504(): void {
+		// A SAR call that hit the HTTP timeout keeps its meaning rather than
+		// turning into a generic 500.
+		$this->available();
+		$this->client->method('sarCases')->willReturn(['error' => 'timed out', 'status' => 504, 'timeout' => true]);
+
+		$this->assertSame(Http::STATUS_GATEWAY_TIMEOUT, $this->controller->sarList()->getStatus());
+	}
+
 	public function testUnexpectedStatusBecomes500(): void {
 		$this->available();
 		$this->client->method('sarCases')->willReturn(['error' => 'teapot', 'status' => 418]);

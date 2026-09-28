@@ -405,6 +405,47 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
+	 * Chunk context for a document the index does not hold: 404, which the app
+	 * passes through so the viewer can say the document is no longer indexed.
+	 */
+	public function testChunkContextForAnUnindexedDocumentIs404(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('GET')
+			->setPath('/api/v1/chunk-context')
+			->setQuery([
+				'doc_type' => 'file',
+				'doc_id' => '999999',
+				'start' => '0',
+				'end' => '10',
+				'context' => '500',
+			])
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'));
+
+		$response = (new ProviderResponse())
+			->setStatus(404)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'success' => false,
+				'error' => $matcher->like('Failed to fetch chunk context for file 999999'),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('file 999999 is not in the index')
+			->uponReceiving('a chunk-context request for an unindexed document')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->getChunkContext('file', '999999', 0, 10, 'mint-token');
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame(404, $result['status'] ?? null);
+	}
+
+	/**
 	 * SAR case export: starting the redacted archive (202; the case locks).
 	 */
 	public function testExportSarCaseHonoursTheContract(): void {
