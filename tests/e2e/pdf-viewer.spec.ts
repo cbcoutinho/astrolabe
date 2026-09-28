@@ -25,6 +25,7 @@
  */
 
 import { expect, test } from './fixtures.ts'
+import { completeAuthorization } from './helpers/authorize.ts'
 
 // Nextcloud's global, available inside page.evaluate but not to the Node-side
 // type checker.
@@ -121,6 +122,9 @@ test.describe('browser-side PDF rendering', () => {
 	test('a document missing from the index answers 404 and says so', async ({ authenticatedPage: page }) => {
 		// The uploaded fixture is never indexed: a stale deep link to it must
 		// read as "not in the index" (404), not as a server fault (500).
+		// The MCP server looks documents up only for a user with background
+		// access; without it, it answers 401 before it gets that far.
+		await completeAuthorization(page)
 		const propfind = await fetch(`${NC}/remote.php/dav/files/admin/${PDF_PATH}`, {
 			method: 'PROPFIND',
 			headers: { Authorization: ADMIN_AUTH, Depth: '0', 'Content-Type': 'application/xml' },
