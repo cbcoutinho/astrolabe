@@ -25,6 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.45.0 (2026-09-28)
+
+### Feat
+
+- **search**: explain a slow or timed-out search and offer keyword search
+
+### Fix
+
+- **search**: narrow timeout detection; retry "Load more" as "Load more"
+- **search**: a new search starts without the previous one's slow hint
+- **client**: log MCP server 5xx answers that pass through to the UI
+- **viewer**: release PDFs, name the close button, and say when a document left the index
+- **viewer**: load pdf.js's legacy build so PDFs open on every browser
+
 ## v0.44.1 (2026-09-27)
 
 ### Fix
