@@ -242,7 +242,7 @@
 				<NcNoteCard v-if="searchTimedOut" type="warning" class="mcp-error">
 					<div>{{ error }}</div>
 					<div class="mcp-timeout-actions">
-						<NcButton variant="secondary" @click="performSearch">
+						<NcButton variant="secondary" @click="performSearch(retryLoadMore)">
 							{{ t('astrolabe', 'Try again') }}
 						</NcButton>
 						<NcButton
@@ -794,6 +794,7 @@ export default {
 			// out waiting on the embedding service (the server's 504).
 			searchSlow: false,
 			searchTimedOut: false,
+			retryLoadMore: false,
 			results: [],
 			algorithmUsed: '',
 			searched: false,
@@ -1164,6 +1165,8 @@ export default {
 	},
 
 	beforeUnmount() {
+		clearTimeout(this.slowSearchTimer)
+		this.searchAbort?.abort()
 		if (this._scoreThresholdTimer) {
 			clearTimeout(this._scoreThresholdTimer)
 			this._scoreThresholdTimer = null
@@ -1502,6 +1505,10 @@ export default {
 
 			if (loadMore) {
 				this.loadingMore = true
+				if (this.searchTimedOut) {
+					this.searchTimedOut = false
+					this.error = null
+				}
 			} else {
 				this.loading = true
 				this.error = null
@@ -1610,6 +1617,9 @@ export default {
 				console.error('Search error:', err)
 				if (err.response?.data?.code === 'search_timeout') {
 					this.searchTimedOut = true
+					// A timed-out "Load more" is retried as "Load more", keeping
+					// the rows already shown.
+					this.retryLoadMore = loadMore
 					this.error = this.canSearchByKeyword
 						? this.t('astrolabe', 'The search did not finish in time. The embedding service may be starting up or unavailable. Try again shortly, or search by keyword, which does not need it.')
 						: this.t('astrolabe', 'The search did not finish in time. Try again shortly.')

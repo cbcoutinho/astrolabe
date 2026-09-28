@@ -943,9 +943,11 @@ class McpServerClient {
 	 * Whether a request failed because the MCP server did not answer in time
 	 * (Nextcloud's HTTP client gives up after 30 s). A search usually waits
 	 * that long on the embedding service, e.g. a GPU backend starting up.
+	 * Only cURL's operation timeout (error 28) counts: a connect-level failure
+	 * ("Connection timed out", error 7) is the MCP server being unreachable,
+	 * which keyword search would not get around either.
 	 */
 	private static function isTimeout(\Exception $e): bool {
-		$message = $e->getMessage();
-		return str_contains($message, 'cURL error 28') || stripos($message, 'timed out') !== false;
+		return str_contains($e->getMessage(), 'cURL error 28');
 	}
 }

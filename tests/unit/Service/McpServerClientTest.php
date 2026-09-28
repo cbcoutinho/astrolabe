@@ -498,7 +498,9 @@ final class McpServerClientTest extends TestCase {
 
 	public function testOtherTransportFailuresAreNotTimeouts(): void {
 		$this->httpClient->method('sendRequest')
-			->willThrowException(new \RuntimeException('cURL error 7: Failed to connect'));
+			// A connect-level timeout is the MCP server being unreachable, not
+			// a search waiting on the embedding service.
+			->willThrowException(new \RuntimeException('cURL error 7: Failed to connect to mcp port 8000: Connection timed out'));
 
 		$result = $this->client->search('q', 'hybrid', 20, true, ['file'], 'tok');
 
