@@ -54,7 +54,7 @@ jobs:
           # isolated `uvx` environment fails at import.
           # --no-build: wheels only, so no sdist gets to run its build backend
           # on the runner (githubactions:S8541).
-          if ! output=$(uvx --no-build --from commitizen==4.18.1 cz --config .cz.toml bump --yes 2>&1); then
+          if ! output=$(uvx --no-build --from commitizen==4.19.0 cz --config .cz.toml bump --yes 2>&1); then
             if echo "$output" | grep -q "\[NO_COMMITS_TO_BUMP\]"; then
               echo "No commits eligible for version bump"
               echo "$output"
