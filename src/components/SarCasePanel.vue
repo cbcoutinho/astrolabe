@@ -60,8 +60,7 @@
 					</div>
 					<NcTextField
 						:modelValue="field(item, 'reason')"
-						:label="t('astrolabe', 'Reason for inclusion')"
-						:error="!field(item, 'reason').trim()"
+						:label="t('astrolabe', 'Reason for inclusion (optional)')"
 						:disabled="!isOpen"
 						@update:modelValue="edit(item, 'reason', $event)"
 						@blur="saveItem(item)" />

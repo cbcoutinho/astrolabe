@@ -89,7 +89,7 @@ test.describe('Subject Access Request cases', () => {
 			await expect(sidebar.locator('.sar-queries')).toContainText(term)
 
 			// Give the reason in the sidebar and export.
-			const reason = sidebar.getByRole('textbox', { name: 'Reason for inclusion' })
+			const reason = sidebar.getByRole('textbox', { name: 'Reason for inclusion (optional)' })
 			// Typing while a save is in flight survives the reload the save
 			// returns: hold the save until the typing is done.
 			let release = () => {}
@@ -114,6 +114,9 @@ test.describe('Subject Access Request cases', () => {
 			await expect(sidebar.locator('.sar-state')).toHaveText('Ready for audit', { timeout: 120_000 })
 			await expect(sidebar.locator('.sar-exports')).toContainText('v1 · ready for review')
 			await expect(page.getByText('SAR case SAR-e2e is not open')).toBeVisible()
+			// A case that is not open takes no more documents: no add buttons.
+			await expect(result).toHaveCount(1)
+			await expect(page.locator('.mcp-add-to-sar')).toHaveCount(0)
 
 			// The case and the archive are in Nextcloud.
 			const stored = await (await nc('GET', `${caseDir}/sar-case.json`)).json()
