@@ -317,7 +317,7 @@
 										{{ t('astrolabe', 'Show Chunk') }}
 									</NcButton>
 									<NcButton
-										v-if="sarAvailable"
+										v-if="sarCollecting"
 										variant="tertiary"
 										class="mcp-add-to-sar"
 										:disabled="inSar(result)"
@@ -1434,12 +1434,7 @@ export default {
 		 * @param {object} result A search result
 		 */
 		async addToSar(result) {
-			if (!this.sarCollecting) {
-				this.activeSection = 'sar'
-				showError(this.t('astrolabe', 'Open or create a case first.'))
-				return
-			}
-			if (this.inSar(result)) {
+			if (!this.sarCollecting || this.inSar(result)) {
 				return
 			}
 			try {

@@ -870,7 +870,7 @@ class ApiController extends Controller {
 	}
 
 	/**
-	 * @param list<array<array-key, mixed>> $add {doc_type, doc_id, reason, title?, found_by?, page_start?, page_end?}
+	 * @param list<array<array-key, mixed>> $add {doc_type, doc_id, reason?, title?, found_by?, page_start?, page_end?}
 	 * @param list<array<array-key, mixed>> $remove {doc_type, doc_id}
 	 * @param list<array<array-key, mixed>> $queries {text, hits?}
 	 */
