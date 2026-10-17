@@ -13,7 +13,7 @@
 
 services:
   db:
-    image: docker.io/library/mariadb:lts@sha256:2bdff1534a7e569fecaf4b10b66ad0d410806e382d9db29ba305448addda97c4
+    image: docker.io/library/mariadb:lts@sha256:faae028e4d73efc946526ae1d5ba57181d4f162d64e60b6482c85095da31a084
     restart: "no"
     command: --transaction-isolation=READ-COMMITTED
     environment:
