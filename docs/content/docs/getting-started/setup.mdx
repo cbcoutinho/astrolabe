@@ -1,6 +1,6 @@
 ---
 title: Set up Astrolabe Cloud
-description: Install the apps, register two OIDC clients, create your tenant (with billing), and point Astrolabe at your Cloud backend.
+description: Install the apps, register two OIDC clients, create your tenant (with billing), point Astrolabe at your Cloud backend, and set the clients' redirect URIs.
 ---
 
 This guide connects your self-hosted Nextcloud to the managed Astrolabe Cloud
@@ -35,6 +35,15 @@ Then go to **Settings → Administration → OpenID Connect Provider** and creat
   ID** and **Client secret**. Astrolabe Cloud uses these to provision your
   tenant and mint per-user tokens server-side. Both stay readable on the
   client's detail panel, so you can come back for them later.
+
+<Callout title="Redirect URIs: use a placeholder for now">
+
+Nextcloud asks for a **Redirect URI** on each client, but the real values only
+exist once your tenant is live. Enter the temporary placeholder
+`https://placeholder.invalid/callback` on both clients now — `.invalid` is
+reserved and never resolves — and replace it in step 5.
+
+</Callout>
 
 <Callout title="Which id goes where?">
 
@@ -110,8 +119,9 @@ provisioning.
 
 <Step n="04" title="Point Astrolabe at your tenant">
 
-When provisioning finishes you'll receive an **email**. Your tenant URI is the
-**Public URL** shown on the tenant page, of the form
+When provisioning finishes you'll receive a **tenant-ready email** with your
+**tenant URI** and the two **redirect URIs** you'll need in step 5. The tenant
+URI is also the **Public URL** shown on the tenant page, of the form
 `https://<your-slug>.tenants.astrolabecloud.com`. Back in Nextcloud, open
 **Settings → Administration → Astrolabe** and fill in:
 
@@ -141,6 +151,32 @@ identifier”**.
   height={708}
   caption="When it's connected, the service-status panel reports the backend reachable with Auth Mode: oauth."
 />
+
+</Step>
+
+<Step n="05" title="Update the redirect URIs">
+
+Now that the tenant is live, replace the placeholder redirect URIs from step 1.
+In Nextcloud, open **Settings → Administration → OpenID Connect Provider**,
+edit each client, and set its **Redirect URI** to the value from your
+tenant-ready email — or, if your email doesn't list them, build them from the
+table below:
+
+| Client | Redirect URI |
+| --- | --- |
+| **Astrolabe Cloud — confidential client** | `https://<your-slug>.tenants.astrolabecloud.com/oauth/callback` |
+| **Astrolabe frontend — public client** | `https://<your-nextcloud>/apps/astrolabe/oauth/callback` |
+
+- The **confidential** client's URI is the MCP server's OAuth callback on your
+  tenant: your **tenant URI** followed by `/oauth/callback`, with no trailing
+  slash.
+- The **public** client's URI is on your own Nextcloud: the **Nextcloud URL**
+  you entered in step 2 (including any subpath, but no trailing slash),
+  followed by `/apps/astrolabe/oauth/callback`.
+
+Redirect URIs are matched exactly, so copy them rather than retyping them.
+Remove the `https://placeholder.invalid/callback` placeholder afterwards so it's no longer
+an accepted redirect target.
 
 </Step>
 
