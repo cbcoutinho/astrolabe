@@ -39,9 +39,9 @@ Then go to **Settings → Administration → OpenID Connect Provider** and creat
 <Callout title="Redirect URIs: use a placeholder for now">
 
 Nextcloud asks for a **Redirect URI** on each client, but the real values only
-exist once your tenant is live. Enter a placeholder such as
-`https://example.com/callback` on both clients now — you'll replace them in
-step 5 with the values from your tenant-ready email.
+exist once your tenant is live. Enter the temporary placeholder
+`http://localhost/callback` on both clients now — it's non-routable, so it
+can't send anyone anywhere — and replace it in step 5.
 
 </Callout>
 
@@ -159,7 +159,8 @@ identifier”**.
 Now that the tenant is live, replace the placeholder redirect URIs from step 1.
 In Nextcloud, open **Settings → Administration → OpenID Connect Provider**,
 edit each client, and set its **Redirect URI** to the value from your
-tenant-ready email:
+tenant-ready email — or, if your email doesn't list them, build them from the
+table below:
 
 | Client | Redirect URI |
 | --- | --- |
@@ -167,14 +168,14 @@ tenant-ready email:
 | **Astrolabe frontend — public client** | `https://<your-nextcloud>/apps/astrolabe/oauth/callback` |
 
 - The **confidential** client's URI is the MCP server's OAuth callback on your
-  tenant. Use your **tenant URI** exactly as shown on the tenant page, followed
-  by `/oauth/callback`, with no trailing slash.
+  tenant: your **tenant URI** followed by `/oauth/callback`, with no trailing
+  slash.
 - The **public** client's URI is on your own Nextcloud: the **Nextcloud URL**
   you entered in step 2, followed by `/apps/astrolabe/oauth/callback`.
 
-Redirect URIs are matched exactly, so copy them from the email rather than
-retyping them. Remove the placeholder afterwards so it's no longer an accepted
-redirect target.
+Redirect URIs are matched exactly, so copy them rather than retyping them.
+Remove the `http://localhost/callback` placeholder afterwards so it's no longer
+an accepted redirect target.
 
 </Step>
 
