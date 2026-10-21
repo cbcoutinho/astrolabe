@@ -4,13 +4,17 @@
 		:description="t('astrolabe', 'Astrolabe authenticates to the MCP server on behalf of the current session user. With the oidc app (Nextcloud is the identity provider) it mints a short-lived JWT for the OIDC client below. With the user_oidc app (sign-in through an external identity provider such as Keycloak) it uses the user’s own token from that provider.')"
 		docUrl="https://docs.astrolabecloud.com/getting-started/setup">
 		<form class="connection-settings" @submit.prevent="save">
+			<!-- type="text", never "url": a url input strips leading/trailing
+				whitespace from .value (HTML value sanitization), which would hide
+				exactly the stray space this form exists to flag. -->
 			<NcTextField
 				v-for="field in textFields"
 				:key="field.key"
 				v-model="form[field.key]"
 				:label="field.label"
 				:placeholder="field.placeholder"
-				:type="field.url ? 'url' : 'text'"
+				type="text"
+				:inputmode="field.url ? 'url' : undefined"
 				:error="errors[field.key] !== ''"
 				:aria-invalid="errors[field.key] !== '' ? 'true' : undefined"
 				:helperText="errors[field.key] || field.help"

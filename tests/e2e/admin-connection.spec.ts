@@ -37,6 +37,15 @@ test.describe('Astrolabe admin connection settings', () => {
 		await serverUrl.fill(` ${original}`)
 		await expect(page.getByText(EDGE_ERROR)).toBeVisible()
 
+		// A real keystroke too, not just fill(): the field must never sanitize the
+		// space away (as an <input type="url"> would).
+		await serverUrl.fill(original)
+		await expect(page.getByText(EDGE_ERROR)).toBeHidden()
+		await serverUrl.press('End')
+		await serverUrl.press('Space')
+		await expect(serverUrl).toHaveValue(`${original} `)
+		await expect(page.getByText(EDGE_ERROR)).toBeVisible()
+
 		await serverUrl.fill(original)
 		await expect(page.getByText(EDGE_ERROR)).toBeHidden()
 
