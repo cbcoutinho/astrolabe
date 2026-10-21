@@ -1,5 +1,9 @@
 <template>
 	<div class="astrolabe-admin">
+		<!-- Rendered regardless of the status below: a bad URL is exactly when
+			the server is unreachable and this form is needed. -->
+		<ConnectionSettings :config="initialData.config || {}" @saved="onConnectionSaved" />
+
 		<NcSettingsSection v-if="loading" :name="t('astrolabe', 'Astrolabe')">
 			<NcLoadingIcon :size="44" class="loading-icon" />
 		</NcSettingsSection>
@@ -9,7 +13,7 @@
 				<p><strong>{{ t('astrolabe', 'Cannot connect to MCP server') }}</strong></p>
 				<p>{{ error }}</p>
 				<p class="help-text">
-					{{ t('astrolabe', 'Ensure MCP server is running and accessible. Check config.php for correct mcp_server_url.') }}
+					{{ t('astrolabe', 'Ensure the MCP server is running and accessible, and check the MCP server connection settings above.') }}
 				</p>
 				<NcButton variant="primary" @click="retryConnection">
 					<template #icon>
@@ -117,7 +121,7 @@
 
 				<NcNoteCard v-else-if="!webhookSecretConfigured" type="warning">
 					<p><strong>{{ t('astrolabe', 'Webhook secret not configured') }}</strong></p>
-					<p>{{ t('astrolabe', 'Set the “Webhook shared secret” in the MCP Server Configuration above to match the MCP server’s WEBHOOK_SECRET. Until then, change events cannot be delivered and the MCP server relies on periodic polling.') }}</p>
+					<p>{{ t('astrolabe', 'Set the “Webhook shared secret” in the MCP server connection settings above to match the MCP server’s WEBHOOK_SECRET. Until then, change events cannot be delivered and the MCP server relies on periodic polling.') }}</p>
 				</NcNoteCard>
 
 				<div v-if="webhooksLoading" class="loading-indicator">
@@ -344,6 +348,7 @@ import {
 } from '@nextcloud/vue'
 import { computed, onMounted, ref } from 'vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import ConnectionSettings from './ConnectionSettings.vue'
 import UserProvisioning from './UserProvisioning.vue'
 
 // Reactive state
@@ -472,6 +477,12 @@ async function loadServerStatus() {
 async function refreshStatus() {
 	await loadServerStatus()
 	showSuccess(t('astrolabe', 'Status refreshed'))
+}
+
+// A new URL or client id may fix (or break) the connection, so re-probe it.
+async function onConnectionSaved(config) {
+	webhookSecretConfigured.value = config.webhookSecretConfigured
+	await retryConnection()
 }
 
 async function retryConnection() {

@@ -224,17 +224,6 @@
       <code><![CDATA[AdminSection]]></code>
     </UnusedClass>
   </file>
-  <file src="lib/Settings/AstrolabeAdminSettings.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[AstrolabeAdminSettings]]></code>
-    </ClassMustBeFinal>
-    <MissingOverrideAttribute>
-      <code><![CDATA[public function getSchema(): array {]]></code>
-    </MissingOverrideAttribute>
-    <PossiblyUnusedMethod>
-      <code><![CDATA[__construct]]></code>
-    </PossiblyUnusedMethod>
-  </file>
   <file src="lib/Settings/Personal.php">
     <ClassMustBeFinal>
       <code><![CDATA[Personal]]></code>

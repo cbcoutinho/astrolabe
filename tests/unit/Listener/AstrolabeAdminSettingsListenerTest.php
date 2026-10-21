@@ -7,7 +7,6 @@ namespace OCA\Astrolabe\Tests\Unit\Listener;
 use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Listener\AstrolabeAdminSettingsListener;
 use OCP\IAppConfig;
-use OCP\IConfig;
 use OCP\IUser;
 use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
 use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
@@ -16,99 +15,46 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 /**
- * Unit tests for AstrolabeAdminSettingsListener.
- *
- * After the auth refactor the listener handles three system-config fields:
- * mcp_server_url, mcp_server_public_url, astrolabe_client_id.
+ * Unit tests for AstrolabeAdminSettingsListener, which persists the agent
+ * declarative form. The MCP connection settings have their own validated
+ * endpoint (ApiController::saveConnectionSettings) and are no longer handled here.
  */
 final class AstrolabeAdminSettingsListenerTest extends TestCase {
-	private IConfig&MockObject $config;
 	private IAppConfig&MockObject $appConfig;
 	private LoggerInterface&MockObject $logger;
 	private AstrolabeAdminSettingsListener $listener;
 
 	protected function setUp(): void {
 		parent::setUp();
-		$this->config = $this->createMock(IConfig::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->listener = new AstrolabeAdminSettingsListener(
-			$this->config,
 			$this->appConfig,
 			$this->logger,
 		);
 	}
 
-	/**
-	 * @dataProvider provideKnownFields
-	 */
-	public function testRoundTripsKnownFields(string $fieldId, string $value): void {
-		$this->config->expects($this->once())
-			->method('setSystemValue')
-			->with($fieldId, $value);
+	public function testRetiredConnectionFormIsIgnored(): void {
+		// The old declarative "MCP Server Configuration" form bypassed validation;
+		// a save aimed at it (e.g. a stale browser tab) must not be persisted.
+		$this->appConfig->expects($this->never())->method($this->anything());
 
-		$saveEvent = $this->buildSetEvent($fieldId, $value);
-		$this->listener->handle($saveEvent);
-		$this->assertTrue($saveEvent->isPropagationStopped());
-
-		$this->config->expects($this->once())
-			->method('getSystemValue')
-			->with($fieldId, '')
-			->willReturn($value);
-
-		$readEvent = $this->buildGetEvent($fieldId);
-		$this->listener->handle($readEvent);
-		$this->assertSame($value, $readEvent->getValue());
-	}
-
-	/**
-	 * @return array<string, array{string, string}>
-	 */
-	public static function provideKnownFields(): array {
-		return [
-			'internal MCP URL' => ['mcp_server_url', 'http://localhost:8000'],
-			'public MCP URL' => ['mcp_server_public_url', 'https://mcp.example.com'],
-			'OIDC client identifier' => ['astrolabe_client_id', 'astrolabe-client'],
-		];
-	}
-
-	public function testSecretIsNeverEchoedOnRead(): void {
-		// The stored secret must not be sent back to the browser: the Get handler
-		// returns an empty string without ever reading the stored value.
-		$this->config->expects($this->never())->method('getSystemValue');
-
-		$event = $this->buildGetEvent('mcp_webhook_secret');
+		$event = new DeclarativeSettingsSetValueEvent(
+			$this->createMock(IUser::class),
+			Application::APP_ID,
+			'astrolabe-admin-settings',
+			'mcp_server_url',
+			' https://tenant.example.com ',
+		);
 		$this->listener->handle($event);
 
-		$this->assertSame('', $event->getValue());
-	}
-
-	public function testSecretPersistsOnNonEmptySet(): void {
-		$this->config->expects($this->once())
-			->method('setSystemValue')
-			->with('mcp_webhook_secret', 's3cr3t');
-
-		$event = $this->buildSetEvent('mcp_webhook_secret', 's3cr3t');
-		$this->listener->handle($event);
-
-		$this->assertTrue($event->isPropagationStopped());
-	}
-
-	public function testEmptySecretSetLeavesStoredValueUnchanged(): void {
-		// A blank save must not clobber the stored secret (the field renders blank).
-		$this->config->expects($this->never())->method('setSystemValue');
-
-		$event = $this->buildSetEvent('mcp_webhook_secret', '');
-		$this->listener->handle($event);
-
-		// Still consumed so no other handler treats the blank as a real value.
-		$this->assertTrue($event->isPropagationStopped());
+		$this->assertFalse($event->isPropagationStopped());
 	}
 
 	public function testUnknownFieldDoesNotStopPropagationOnSave(): void {
 		// Unknown field IDs must not be silently consumed — otherwise a
 		// future rename would drop saves with no log trail.
-		$this->config->expects($this->never())->method('setSystemValue');
+		$this->appConfig->expects($this->never())->method($this->anything());
 
 		$event = $this->buildSetEvent('some_unknown_field', 'whatever');
 		$this->listener->handle($event);
@@ -120,10 +66,6 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	}
 
 	public function testUnknownFieldIsIgnoredOnRead(): void {
-		// The listener must not touch config for unknown field IDs;
-		// another handler in the chain may own the field.
-		$this->config->expects($this->never())->method('getSystemValue');
-
 		$event = $this->buildGetEvent('some_unknown_field');
 		$this->listener->handle($event);
 
@@ -135,31 +77,14 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	}
 
 	public function testIgnoresEventForDifferentApp(): void {
-		$this->config->expects($this->never())->method('setSystemValue');
+		$this->appConfig->expects($this->never())->method($this->anything());
 
-		$user = $this->createMock(IUser::class);
 		$event = new DeclarativeSettingsSetValueEvent(
-			$user,
+			$this->createMock(IUser::class),
 			'someotherapp',
-			'astrolabe-admin-settings',
-			'mcp_server_url',
-			'https://other',
-		);
-
-		$this->listener->handle($event);
-		$this->assertFalse($event->isPropagationStopped());
-	}
-
-	public function testIgnoresEventForDifferentForm(): void {
-		$this->config->expects($this->never())->method('setSystemValue');
-
-		$user = $this->createMock(IUser::class);
-		$event = new DeclarativeSettingsSetValueEvent(
-			$user,
-			Application::APP_ID,
-			'some-other-form',
-			'mcp_server_url',
-			'https://other',
+			'astrolabe-agent-settings',
+			'agent_enabled',
+			true,
 		);
 
 		$this->listener->handle($event);
@@ -167,30 +92,26 @@ final class AstrolabeAdminSettingsListenerTest extends TestCase {
 	}
 
 	private function buildSetEvent(string $fieldId, mixed $value): DeclarativeSettingsSetValueEvent {
-		$user = $this->createMock(IUser::class);
 		return new DeclarativeSettingsSetValueEvent(
-			$user,
+			$this->createMock(IUser::class),
 			Application::APP_ID,
-			'astrolabe-admin-settings',
+			'astrolabe-agent-settings',
 			$fieldId,
 			$value,
 		);
 	}
 
 	private function buildGetEvent(string $fieldId): DeclarativeSettingsGetValueEvent {
-		$user = $this->createMock(IUser::class);
 		return new DeclarativeSettingsGetValueEvent(
-			$user,
+			$this->createMock(IUser::class),
 			Application::APP_ID,
-			'astrolabe-admin-settings',
+			'astrolabe-agent-settings',
 			$fieldId,
 		);
 	}
 
 	/**
-	 * Agent settings live in app config, not system config, and are handled here
-	 * only because DeclarativeManager resolves an app's storage type from its
-	 * first schema — a second form cannot pick a different one.
+	 * Agent settings live in app config, not system config.
 	 */
 	public function testReadsAnAgentSettingFromAppConfig(): void {
 		$this->appConfig->method('getValueBool')->willReturn(true);

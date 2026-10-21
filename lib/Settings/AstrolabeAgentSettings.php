@@ -11,9 +11,9 @@ use OCP\Settings\IDeclarativeSettingsForm;
 /**
  * Admin controls for the Assistant agent.
  *
- * A form of its own so the agent's switches sit apart from the MCP connection
- * settings, which are about reaching the server at all rather than about what
- * the Assistant may do with it.
+ * Kept apart from the MCP connection settings (Astrolabe's own admin form,
+ * see ConnectionSettings), which are about reaching the server at all rather
+ * than about what the Assistant may do with it.
  *
  * Its values live in **app** config rather than system config, which would
  * ordinarily make `STORAGE_TYPE_INTERNAL` the obvious choice — Nextcloud can
@@ -37,11 +37,11 @@ final class AstrolabeAgentSettings implements IDeclarativeSettingsForm {
 			'section_id' => 'astrolabe',
 			// External, and persisted by AstrolabeAdminSettingsListener, even though
 			// these are plain app-config values that Nextcloud could store itself.
-			// DeclarativeManager::getStorageType() scans an app's schemas in order
-			// and returns the *first* schema's storage type once a field is not
-			// found in it, so a second form declaring a different type has that
-			// type ignored — every field here would resolve as external anyway and
-			// then fail for want of a handler.
+			// This dates from when a second (external) form shared the section:
+			// DeclarativeManager::getStorageType() returns the *first* schema's
+			// storage type once a field is not found in it, so this form could not
+			// choose its own. It is now the only form, so switching to internal
+			// storage is possible, but would need the stored keys to line up.
 			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL,
 			'title' => $this->l->t('Assistant agent'),
 			'description' => $this->l->t(

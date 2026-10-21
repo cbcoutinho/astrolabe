@@ -15,6 +15,7 @@ use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Service\UnsupportedSearchTypeException;
 use OCA\Astrolabe\Service\WebhookPresets;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
+use OCA\Astrolabe\Settings\ConnectionSettings;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -527,6 +528,54 @@ class ApiController extends Controller {
 				'scoreThreshold' => $scoreThreshold,
 				'limit' => $limit,
 				'showVisualization' => $showVisualization,
+			],
+		]);
+	}
+
+	/**
+	 * Save the MCP connection settings (system config). Admin-only.
+	 *
+	 * All-or-nothing: if any value is invalid nothing is stored, and the 422
+	 * names each bad field so the form can mark it. An empty webhook secret
+	 * keeps the stored one — the form never receives it, so it can't send it back.
+	 */
+	public function saveConnectionSettings(
+		string $serverUrl = '',
+		string $publicUrl = '',
+		string $clientId = '',
+		string $webhookSecret = '',
+	): JSONResponse {
+		$values = [
+			ConnectionSettings::SERVER_URL => $serverUrl,
+			ConnectionSettings::PUBLIC_URL => $publicUrl,
+			ConnectionSettings::CLIENT_ID => $clientId,
+			ConnectionSettings::WEBHOOK_SECRET => $webhookSecret,
+		];
+
+		$errors = ConnectionSettings::validate($values);
+		if ($errors !== []) {
+			return new JSONResponse([
+				'success' => false,
+				'errors' => $errors,
+			], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		if ($webhookSecret === '') {
+			unset($values[ConnectionSettings::WEBHOOK_SECRET]);
+		}
+		$this->config->setSystemValues($values);
+
+		$this->logger->info('Admin connection settings saved', [
+			'fields' => array_keys($values),
+		]);
+
+		return new JSONResponse([
+			'success' => true,
+			'config' => [
+				'serverUrl' => $serverUrl,
+				'publicUrl' => $publicUrl,
+				'clientId' => $clientId,
+				'webhookSecretConfigured' => $this->config->getSystemValue(ConnectionSettings::WEBHOOK_SECRET, '') !== '',
 			],
 		]);
 	}

@@ -93,7 +93,7 @@ class McpTokenMinter {
 		if ($clientId === '') {
 			throw new McpTokenMintException(
 				'astrolabe_client_id system config is not set; set it in Nextcloud '
-				. 'admin settings -> MCP Server Configuration to the OIDC client '
+				. 'admin settings -> Astrolabe -> MCP server connection to the OIDC client '
 				. "Astrolabe should mint tokens for (a client registered in the 'oidc' "
 				. 'app, or the IdP client the MCP server accepts when using an '
 				. 'external identity provider).'
