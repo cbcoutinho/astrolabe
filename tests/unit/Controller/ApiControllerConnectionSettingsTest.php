@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
+use OCA\Astrolabe\Controller\ApiController;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 
 /**
  * Tests for the admin MCP connection-settings endpoint: invalid values never
@@ -50,6 +53,16 @@ final class ApiControllerConnectionSettingsTest extends AbstractApiControllerTes
 		$data = $response->getData();
 		$this->assertFalse($data['success']);
 		$this->assertSame(['mcp_server_url', 'astrolabe_client_id'], array_keys($data['errors']));
+	}
+
+	public function testEndpointStaysAdminOnly(): void {
+		// Admin-only comes from the *absence* of these attributes (Nextcloud's
+		// middleware default), so pin it: this endpoint rewrites where Astrolabe
+		// sends user app passwords.
+		$method = new \ReflectionMethod(ApiController::class, 'saveConnectionSettings');
+
+		$this->assertSame([], $method->getAttributes(NoAdminRequired::class));
+		$this->assertSame([], $method->getAttributes(PublicPage::class));
 	}
 
 	public function testEmptySecretKeepsTheStoredOne(): void {
