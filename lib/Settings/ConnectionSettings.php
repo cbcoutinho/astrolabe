@@ -69,6 +69,10 @@ final class ConnectionSettings {
 			|| ($parts['host'] ?? '') === '') {
 			return 'Must be a full http:// or https:// URL.';
 		}
+		// Credentials in the URL would end up in config.php and in log lines.
+		if (isset($parts['user']) || isset($parts['pass'])) {
+			return 'Must not contain a username or password.';
+		}
 		return null;
 	}
 }

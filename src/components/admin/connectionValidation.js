@@ -23,21 +23,35 @@ export function connectionFieldError(value, { url = false } = {}) {
 	if (INVALID_CHAR.test(value)) {
 		return t('astrolabe', 'Must not contain spaces or invisible characters.')
 	}
-	if (url && !isHttpUrl(value)) {
+	if (!url) {
+		return ''
+	}
+	const parsed = parseHttpUrl(value)
+	if (parsed === null) {
 		return t('astrolabe', 'Must be a full http:// or https:// URL.')
+	}
+	// Credentials in the URL would end up in config.php and in log lines.
+	if (parsed.username !== '' || parsed.password !== '') {
+		return t('astrolabe', 'Must not contain a username or password.')
 	}
 	return ''
 }
 
 /**
  * @param {string} value candidate URL
- * @return {boolean} whether it parses as an http(s) URL with a host
+ * @return {URL|null} the parsed http(s) URL with a host, or null
  */
-function isHttpUrl(value) {
+function parseHttpUrl(value) {
+	// `new URL` collapses extra slashes after the scheme ("https:///path" gets
+	// host "path"); PHP's parse_url() rejects that, so require the host to follow
+	// "//" directly, as the backend does.
+	if (!/^https?:\/\/[^/]/i.test(value)) {
+		return null
+	}
 	try {
 		const parsed = new URL(value)
-		return ['http:', 'https:'].includes(parsed.protocol) && parsed.hostname !== ''
+		return parsed.hostname !== '' ? parsed : null
 	} catch {
-		return false
+		return null
 	}
 }

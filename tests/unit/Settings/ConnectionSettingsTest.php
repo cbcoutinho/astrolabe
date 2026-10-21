@@ -59,6 +59,11 @@ final class ConnectionSettingsTest extends TestCase {
 			'scheme without host' => [ConnectionSettings::PUBLIC_URL, 'https://', $url],
 			// Rejected by both parse_url() and the form's `new URL()`.
 			'out-of-range port' => [ConnectionSettings::SERVER_URL, 'http://host:99999', $url],
+			'port without host' => [ConnectionSettings::SERVER_URL, 'http://:80', $url],
+			// `new URL` would read the host as "path"; the form checks for "//<host>".
+			'triple slash' => [ConnectionSettings::SERVER_URL, 'https:///path', $url],
+			'credentials in URL' => [ConnectionSettings::PUBLIC_URL, 'https://user:pw@mcp.example.com', 'Must not contain a username or password.'],
+			'username only' => [ConnectionSettings::SERVER_URL, 'https://user@mcp.example.com', 'Must not contain a username or password.'],
 		];
 	}
 
