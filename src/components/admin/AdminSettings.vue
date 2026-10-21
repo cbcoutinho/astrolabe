@@ -2,7 +2,7 @@
 	<div class="astrolabe-admin">
 		<!-- Rendered regardless of the status below: a bad URL is exactly when
 			the server is unreachable and this form is needed. -->
-		<ConnectionSettings :config="initialData.config || {}" @saved="onConnectionSaved" />
+		<ConnectionSettings :config="connectionConfig" @saved="onConnectionSaved" />
 
 		<NcSettingsSection v-if="loading" :name="t('astrolabe', 'Astrolabe')">
 			<NcLoadingIcon :size="44" class="loading-icon" />
@@ -380,6 +380,9 @@ const allowUserSelfProvision = ref(initialData.allowUserSelfProvision ?? true)
 // UI warns when that secret is missing or the master switch is off.
 const nativeSyncEnabled = ref(initialData.nativeSyncEnabled ?? true)
 const webhookSecretConfigured = ref(initialData.webhookSecretConfigured ?? false)
+// The initial state keeps webhookSecretConfigured at the top level (the webhook
+// panel reads it too), so hand it to the connection form alongside `config`.
+const connectionConfig = { ...initialData.config, webhookSecretConfigured: webhookSecretConfigured.value }
 
 // Searchable-sources (admin consent) state. Only installed sources are
 // provided by the backend; each carries its current enabled state.
