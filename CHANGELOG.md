@@ -25,6 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.46.0 (2026-10-21)
+
+### Feat
+
+- **admin**: validate MCP connection settings with inline feedback
+
+### Fix
+
+- **admin**: show the stored webhook secret as configured on load
+- **admin**: use text inputs so URL whitespace is never sanitized away
+- **admin**: reject credentials in MCP URLs; align triple-slash handling
+- **admin**: string-cast connection settings; fix toast e2e locator
+
 ## v0.45.2 (2026-10-03)
 
 ### Fix
