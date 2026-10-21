@@ -9,7 +9,6 @@ use OCA\Astrolabe\Settings\Admin;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\IAppConfig;
-use OCP\IConfig;
 use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
 use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
 use Psr\Log\LoggerInterface;
@@ -18,20 +17,13 @@ use Psr\Log\LoggerInterface;
  * @template-implements IEventListener<DeclarativeSettingsGetValueEvent|DeclarativeSettingsSetValueEvent>
  */
 class AstrolabeAdminSettingsListener implements IEventListener {
-	private const KNOWN_FIELDS = [
-		'mcp_server_url',
-		'mcp_server_public_url',
-		'astrolabe_client_id',
-		'mcp_webhook_secret',
-	];
-
 	/**
-	 * Agent fields, which live in **app** config rather than system config.
+	 * Agent fields, which live in **app** config — see AstrolabeAgentSettings
+	 * for why they are persisted here rather than by Nextcloud's internal storage.
 	 *
-	 * They are handled here rather than by Nextcloud's internal storage because
-	 * DeclarativeManager resolves an app's storage type from the first schema
-	 * that does not contain the field, so a second form cannot choose a different
-	 * one — see AstrolabeAgentSettings.
+	 * (The MCP connection settings used to be a declarative form handled here
+	 * too; they now have Astrolabe's own form, saved by
+	 * ApiController::saveConnectionSettings with validation.)
 	 *
 	 * @var array<string, 'bool'|'int'|'string'>
 	 */
@@ -42,17 +34,7 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		Admin::SETTING_AGENT_TIMEOUT => 'int',
 	];
 
-	/**
-	 * Fields holding a secret: never echoed back on Get, and an empty value on
-	 * Set means "leave the stored value unchanged" (so the admin needn't re-enter
-	 * the secret on every save).
-	 */
-	private const SECRET_FIELDS = [
-		'mcp_webhook_secret',
-	];
-
 	public function __construct(
-		private IConfig $config,
 		private IAppConfig $appConfig,
 		private LoggerInterface $logger,
 	) {
@@ -67,7 +49,7 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 			return;
 		}
 
-		if (!in_array($event->getFormId(), ['astrolabe-admin-settings', 'astrolabe-agent-settings'], true)) {
+		if ($event->getFormId() !== 'astrolabe-agent-settings') {
 			return;
 		}
 
@@ -83,21 +65,7 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 
 		if (isset(self::AGENT_FIELDS[$fieldId])) {
 			$event->setValue($this->readAgentValue($fieldId));
-			return;
 		}
-
-		if (!in_array($fieldId, self::KNOWN_FIELDS, true)) {
-			return;
-		}
-
-		// Never echo a stored secret back to the browser; the admin UI shows a
-		// "configured" indicator (via Admin::getForm initial state) instead.
-		if (in_array($fieldId, self::SECRET_FIELDS, true)) {
-			$event->setValue('');
-			return;
-		}
-
-		$event->setValue($this->config->getSystemValue($fieldId, ''));
 	}
 
 	private function handleSetValue(DeclarativeSettingsSetValueEvent $event): void {
@@ -106,38 +74,7 @@ class AstrolabeAdminSettingsListener implements IEventListener {
 		if (isset(self::AGENT_FIELDS[$fieldId])) {
 			$this->writeAgentValue($fieldId, $event->getValue());
 			$event->stopPropagation();
-			return;
 		}
-
-		if (!in_array($fieldId, self::KNOWN_FIELDS, true)) {
-			return;
-		}
-
-		$value = (string)$event->getValue();
-
-		// Empty submission for a secret field means "keep the current value" — the
-		// field is rendered blank on Get, so a blank save must not clobber it.
-		if ($value === '' && in_array($fieldId, self::SECRET_FIELDS, true)) {
-			$event->stopPropagation();
-			return;
-		}
-
-		try {
-			$this->config->setSystemValue($fieldId, $value);
-			$this->logger->info('Astrolabe admin setting updated', [
-				'field' => $fieldId,
-				'app' => Application::APP_ID,
-			]);
-		} catch (\Exception $e) {
-			$this->logger->error('Failed to update Astrolabe admin setting', [
-				'field' => $fieldId,
-				'error' => $e->getMessage(),
-				'app' => Application::APP_ID,
-			]);
-			throw $e;
-		}
-
-		$event->stopPropagation();
 	}
 
 	/**

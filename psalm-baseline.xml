@@ -202,10 +202,6 @@
       <code><![CDATA[public function getPriority(): int {]]></code>
       <code><![CDATA[public function getSection(): string {]]></code>
     </MissingOverrideAttribute>
-    <MixedAssignment>
-      <code><![CDATA[$clientId]]></code>
-      <code><![CDATA[$serverUrl]]></code>
-    </MixedAssignment>
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
     </PossiblyUnusedMethod>
@@ -223,17 +219,6 @@
     <UnusedClass>
       <code><![CDATA[AdminSection]]></code>
     </UnusedClass>
-  </file>
-  <file src="lib/Settings/AstrolabeAdminSettings.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[AstrolabeAdminSettings]]></code>
-    </ClassMustBeFinal>
-    <MissingOverrideAttribute>
-      <code><![CDATA[public function getSchema(): array {]]></code>
-    </MissingOverrideAttribute>
-    <PossiblyUnusedMethod>
-      <code><![CDATA[__construct]]></code>
-    </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/Personal.php">
     <ClassMustBeFinal>

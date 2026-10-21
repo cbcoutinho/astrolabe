@@ -131,6 +131,11 @@ return [
 			'verb' => 'POST',
 		],
 		[
+			'name' => 'api#saveConnectionSettings',
+			'url' => '/api/admin/connection-settings',
+			'verb' => 'POST',
+		],
+		[
 			'name' => 'api#saveSearchSources',
 			'url' => '/api/admin/search-sources',
 			'verb' => 'POST',

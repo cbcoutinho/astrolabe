@@ -121,8 +121,9 @@ class Admin implements ISettings {
 	 */
 	public function getForm(): TemplateResponse {
 		// Get configuration from config.php (local, fast)
-		$serverUrl = $this->config->getSystemValue('mcp_server_url', '');
-		$clientId = $this->config->getSystemValue('astrolabe_client_id', '');
+		$serverUrl = (string)$this->config->getSystemValue(ConnectionSettings::SERVER_URL, '');
+		$publicUrl = (string)$this->config->getSystemValue(ConnectionSettings::PUBLIC_URL, '');
+		$clientId = (string)$this->config->getSystemValue(ConnectionSettings::CLIENT_ID, '');
 		$clientIdConfigured = !empty($clientId);
 
 		// Load search settings from app config
@@ -168,7 +169,7 @@ class Admin implements ISettings {
 			self::SETTING_NATIVE_SYNC_ENABLED,
 			self::DEFAULT_NATIVE_SYNC_ENABLED,
 		);
-		$webhookSecretConfigured = $this->config->getSystemValue('mcp_webhook_secret', '') !== '';
+		$webhookSecretConfigured = $this->config->getSystemValue(ConnectionSettings::WEBHOOK_SECRET, '') !== '';
 
 		// Installed search sources with their current admin-consent state.
 		// Only installed apps are listed — admins consent to what they actually
@@ -180,6 +181,10 @@ class Admin implements ISettings {
 		$this->initialState->provideInitialState('admin-config', [
 			'config' => [
 				'serverUrl' => $serverUrl,
+				'publicUrl' => $publicUrl,
+				// The client id is not a secret (it is the client_id claim of every
+				// minted token); the webhook secret is never sent, only whether it is set.
+				'clientId' => $clientId,
 				'clientIdConfigured' => $clientIdConfigured,
 			],
 			'searchSettings' => $searchSettings,
@@ -209,9 +214,8 @@ class Admin implements ISettings {
 	/**
 	 * @return int Priority (lower = higher up)
 	 *
-	 * Rendered after the declarative "MCP Server Configuration" form
-	 * (priority 10) so that the connection config is the first section on the
-	 * page and the Vue status/webhooks/search/provisioning sections follow.
+	 * The Vue page opens with the MCP connection form, followed by the
+	 * status/webhooks/search/provisioning sections.
 	 */
 	public function getPriority(): int {
 		return 50;
