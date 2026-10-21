@@ -57,6 +57,8 @@ final class ConnectionSettingsTest extends TestCase {
 			'URL without scheme' => [ConnectionSettings::SERVER_URL, 'acme.example.com', $url],
 			'non-http scheme' => [ConnectionSettings::SERVER_URL, 'ftp://acme.example.com', $url],
 			'scheme without host' => [ConnectionSettings::PUBLIC_URL, 'https://', $url],
+			// Rejected by both parse_url() and the form's `new URL()`.
+			'out-of-range port' => [ConnectionSettings::SERVER_URL, 'http://host:99999', $url],
 		];
 	}
 

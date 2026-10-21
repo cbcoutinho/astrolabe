@@ -121,9 +121,9 @@ class Admin implements ISettings {
 	 */
 	public function getForm(): TemplateResponse {
 		// Get configuration from config.php (local, fast)
-		$serverUrl = $this->config->getSystemValue(ConnectionSettings::SERVER_URL, '');
+		$serverUrl = (string)$this->config->getSystemValue(ConnectionSettings::SERVER_URL, '');
 		$publicUrl = (string)$this->config->getSystemValue(ConnectionSettings::PUBLIC_URL, '');
-		$clientId = $this->config->getSystemValue(ConnectionSettings::CLIENT_ID, '');
+		$clientId = (string)$this->config->getSystemValue(ConnectionSettings::CLIENT_ID, '');
 		$clientIdConfigured = !empty($clientId);
 
 		// Load search settings from app config

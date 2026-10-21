@@ -202,10 +202,6 @@
       <code><![CDATA[public function getPriority(): int {]]></code>
       <code><![CDATA[public function getSection(): string {]]></code>
     </MissingOverrideAttribute>
-    <MixedAssignment>
-      <code><![CDATA[$clientId]]></code>
-      <code><![CDATA[$serverUrl]]></code>
-    </MixedAssignment>
     <PossiblyUnusedMethod>
       <code><![CDATA[__construct]]></code>
     </PossiblyUnusedMethod>
