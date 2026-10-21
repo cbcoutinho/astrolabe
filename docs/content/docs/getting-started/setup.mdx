@@ -40,8 +40,8 @@ Then go to **Settings → Administration → OpenID Connect Provider** and creat
 
 Nextcloud asks for a **Redirect URI** on each client, but the real values only
 exist once your tenant is live. Enter the temporary placeholder
-`http://localhost/callback` on both clients now — it's non-routable, so it
-can't send anyone anywhere — and replace it in step 5.
+`https://placeholder.invalid/callback` on both clients now — `.invalid` is
+reserved and never resolves — and replace it in step 5.
 
 </Callout>
 
@@ -171,10 +171,11 @@ table below:
   tenant: your **tenant URI** followed by `/oauth/callback`, with no trailing
   slash.
 - The **public** client's URI is on your own Nextcloud: the **Nextcloud URL**
-  you entered in step 2, followed by `/apps/astrolabe/oauth/callback`.
+  you entered in step 2 (including any subpath, but no trailing slash),
+  followed by `/apps/astrolabe/oauth/callback`.
 
 Redirect URIs are matched exactly, so copy them rather than retyping them.
-Remove the `http://localhost/callback` placeholder afterwards so it's no longer
+Remove the `https://placeholder.invalid/callback` placeholder afterwards so it's no longer
 an accepted redirect target.
 
 </Step>
