@@ -194,7 +194,7 @@ class AgentLoop {
 		$deadline = time() + $this->timeout();
 		$maxIterations = $this->maxIterations();
 
-		/** @var list<array{call: string, result: string}> $observations */
+		/** @var list<array{round: int, call: string, result: string}> $observations */
 		$observations = [];
 		$toolResults = '';
 		$output = '';
@@ -236,6 +236,7 @@ class AgentLoop {
 			// until it hit the iteration cap.
 			foreach ($calls as $call) {
 				$observations[] = [
+					'round' => $iteration,
 					'call' => $this->callLabel($call),
 					'result' => $this->invoke($client, $call, $citations),
 				];
@@ -416,21 +417,30 @@ class AgentLoop {
 	 *
 	 * Filled from the newest backwards: results that no longer fit become a
 	 * one-line stub rather than vanishing, so the model can still see it already
-	 * made that call — losing that is what made it cycle. The newest is always
-	 * shown in full: it is what the model asked for last, and it is already
-	 * bounded by MAX_TOOL_RESULT_CHARS.
+	 * made that call — losing that is what made it cycle. The whole latest round
+	 * is always shown in full, however many calls it made: it is what the model
+	 * asked for last, and each result is already bounded by
+	 * MAX_TOOL_RESULT_CHARS. Stubs fall outside the budget; their number is
+	 * bounded by the iteration cap.
 	 *
-	 * @param list<array{call: string, result: string}> $observations
+	 * @param list<array{round: int, call: string, result: string}> $observations
 	 */
 	private function renderObservations(array $observations): string {
+		if ($observations === []) {
+			return '';
+		}
+		$latestRound = $observations[count($observations) - 1]['round'];
 		$rendered = [];
 		$used = 0;
 		$full = true;
-		foreach (array_reverse($observations) as $i => $observation) {
+		foreach (array_reverse($observations) as $observation) {
 			$text = sprintf("Result of %s:\n%s", $observation['call'], $observation['result']);
 			// Once one result is stubbed, every older one is too: the window is
 			// a contiguous run of the most recent results, not a best fit.
-			$full = $full && ($i === 0 || $used + strlen($text) <= self::MAX_OBSERVATIONS_BYTES);
+			$full = $full && (
+				$observation['round'] === $latestRound
+				|| $used + strlen($text) <= self::MAX_OBSERVATIONS_BYTES
+			);
 			if ($full) {
 				$rendered[] = $text;
 				$used += strlen($text);

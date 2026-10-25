@@ -387,6 +387,35 @@ final class AgentLoopTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A round with several calls must come back whole: stubbing part of what the
+	 * model just asked for invites it to ask again.
+	 */
+	public function testKeepsEveryResultOfTheLatestRoundInFull(): void {
+		$tasks = $this->withModelTurns([
+			['output' => '', 'tool_calls' => json_encode([['name' => 'nc_semantic_search', 'args' => ['query' => 'old']]])],
+			['output' => '', 'tool_calls' => json_encode(array_map(
+				static fn (int $n): array => ['name' => 'nc_semantic_search', 'args' => ['query' => "new$n"]],
+				range(1, 4),
+			))],
+			['output' => 'done', 'tool_calls' => ''],
+		]);
+		$this->client->method('callTool')->willReturnCallback(
+			static fn (string $name, array $args): CallToolResult => new CallToolResult([
+				new TextContent('marker-' . (string)$args['query'] . ' ' . str_repeat('a', 7900)),
+			]),
+		);
+
+		$this->loop()->run('alice', 'q', []);
+
+		$thirdPrompt = (string)($tasks())[2]->getInput()['input'];
+		// Four ~8 KB results exceed the 24 KB window, yet all four stay.
+		foreach (['new1', 'new2', 'new3', 'new4'] as $kept) {
+			$this->assertStringContainsString("marker-$kept ", $thirdPrompt);
+		}
+		$this->assertStringContainsString('Earlier call nc_semantic_search({"query":"old"}): result omitted', $thirdPrompt);
+	}
+
 	public function testBoundsTheArgumentsEchoedInACallsLabel(): void {
 		$tasks = $this->withModelTurns([
 			['output' => '', 'tool_calls' => json_encode([
