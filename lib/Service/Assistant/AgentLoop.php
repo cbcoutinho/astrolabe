@@ -43,6 +43,13 @@ class AgentLoop {
 	private const MAX_TOOL_RESULT_CHARS = 8000;
 
 	/**
+	 * Cap on characters of observations carried across rounds. Every round's
+	 * results are fed back, not just the last one's, so the total needs its own
+	 * bound; past it the oldest observations go first. Three full-size results.
+	 */
+	private const MAX_OBSERVATIONS_CHARS = 3 * self::MAX_TOOL_RESULT_CHARS;
+
+	/**
 	 * Turns of prior conversation carried into a new one.
 	 *
 	 * The whole history is resent on every turn, so without a bound an active
@@ -179,6 +186,8 @@ class AgentLoop {
 		$deadline = time() + $this->timeout();
 		$maxIterations = $this->maxIterations();
 
+		/** @var list<string> $observations */
+		$observations = [];
 		$toolResults = '';
 		$output = '';
 		$truncated = true;
@@ -212,14 +221,20 @@ class AgentLoop {
 			// the model and works against any provider, at the cost of the formal
 			// call/result linkage. Revisit if that provider learns to emit the
 			// assistant tool-call turn.
-			$observations = [];
+			//
+			// Observations accumulate across rounds, each labelled with the call
+			// that produced it. Feeding back only the latest round left the model
+			// unable to see what it had already tried, so it cycled between tools
+			// until it hit the iteration cap.
 			foreach ($calls as $call) {
 				$observations[] = sprintf(
-					"Result of %s:\n%s",
+					"Result of %s(%s):\n%s",
 					$call['name'],
+					(string)json_encode($call['arguments'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
 					$this->invoke($client, $call, $citations),
 				);
 			}
+			$observations = $this->recentObservations($observations);
 			$toolResults = implode("\n\n", $observations);
 		}
 
@@ -368,6 +383,23 @@ class AgentLoop {
 	 */
 	private function recentTurns(array $history): array {
 		return array_slice($history, -self::MAX_HISTORY_TURNS);
+	}
+
+	/**
+	 * The newest observations that fit the budget, oldest dropped first.
+	 *
+	 * The newest is always kept, whatever its size: it is what the model asked
+	 * for last, and it is already bounded by MAX_TOOL_RESULT_CHARS.
+	 *
+	 * @param list<string> $observations
+	 * @return list<string>
+	 */
+	private function recentObservations(array $observations): array {
+		$total = array_sum(array_map('strlen', $observations));
+		while (count($observations) > 1 && $total > self::MAX_OBSERVATIONS_CHARS) {
+			$total -= strlen((string)array_shift($observations));
+		}
+		return $observations;
 	}
 
 	/**
