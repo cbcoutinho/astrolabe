@@ -354,7 +354,7 @@ final class AgentLoopTest extends TestCase {
 		$this->assertStringContainsString('Result of nc_notes_search_notes({"query":"todo"})', $thirdPrompt);
 	}
 
-	public function testDropsTheOldestObservationsOnceTheBudgetIsExceeded(): void {
+	public function testStubsTheOldestObservationsOnceTheBudgetIsExceeded(): void {
 		$this->maxIterations = 6;
 		$tasks = $this->withModelTurns(array_merge(
 			array_map(
@@ -372,9 +372,38 @@ final class AgentLoopTest extends TestCase {
 		$this->loop()->run('alice', 'q', []);
 
 		$lastPrompt = (string)($tasks())[5]->getInput()['input'];
-		$this->assertStringNotContainsString('marker-q1 ', $lastPrompt, 'oldest observation dropped first');
-		$this->assertStringContainsString('marker-q5 ', $lastPrompt, 'newest observation always kept');
-		$this->assertLessThan(30000, strlen($lastPrompt));
+		// ~7 KB each against a 24 KB window: the three newest stay in full.
+		$this->assertSame(3, substr_count($lastPrompt, 'Result of '));
+		foreach (['q3', 'q4', 'q5'] as $kept) {
+			$this->assertStringContainsString("marker-$kept ", $lastPrompt);
+		}
+		// The two oldest lose their bodies but not the fact they were asked.
+		foreach (['q1', 'q2'] as $stubbed) {
+			$this->assertStringNotContainsString("marker-$stubbed ", $lastPrompt);
+			$this->assertStringContainsString(
+				"Earlier call nc_semantic_search({\"query\":\"$stubbed\"}): result omitted",
+				$lastPrompt,
+			);
+		}
+	}
+
+	public function testBoundsTheArgumentsEchoedInACallsLabel(): void {
+		$tasks = $this->withModelTurns([
+			['output' => '', 'tool_calls' => json_encode([
+				['name' => 'nc_semantic_search', 'args' => ['query' => str_repeat('b', 5000)]],
+				['name' => 'nc_semantic_search', 'args' => []],
+			])],
+			['output' => 'done', 'tool_calls' => ''],
+		]);
+		$this->withToolResult('result');
+
+		$this->loop()->run('alice', 'q', []);
+
+		$secondPrompt = (string)($tasks())[1]->getInput()['input'];
+		$this->assertStringNotContainsString(str_repeat('b', 600), $secondPrompt);
+		$this->assertStringContainsString('…):', $secondPrompt);
+		// No arguments reads as an empty call, not a JSON empty list.
+		$this->assertStringContainsString('Result of nc_semantic_search():', $secondPrompt);
 	}
 
 	public function testCarriesPriorTurnsIntoTheModelCallAndReturnsThemExtended(): void {

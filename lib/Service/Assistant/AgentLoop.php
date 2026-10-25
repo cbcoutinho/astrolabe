@@ -43,11 +43,19 @@ class AgentLoop {
 	private const MAX_TOOL_RESULT_CHARS = 8000;
 
 	/**
-	 * Cap on characters of observations carried across rounds. Every round's
-	 * results are fed back, not just the last one's, so the total needs its own
-	 * bound; past it the oldest observations go first. Three full-size results.
+	 * Cap on bytes of tool results carried across rounds. Every round's results
+	 * are fed back, not just the last one's, so the total needs its own bound;
+	 * past it the oldest results shrink to a one-line stub. Three full-size
+	 * results — the window is a deliberate trade of older detail for prompt size.
 	 */
-	private const MAX_OBSERVATIONS_CHARS = 3 * self::MAX_TOOL_RESULT_CHARS;
+	private const MAX_OBSERVATIONS_BYTES = 3 * self::MAX_TOOL_RESULT_CHARS;
+
+	/**
+	 * Cap on bytes of a call's encoded arguments in its observation label. Every
+	 * label is carried for the rest of the turn, stubs included, so an argument
+	 * such as a whole note body must not ride along in full.
+	 */
+	private const MAX_CALL_LABEL_ARGS_BYTES = 500;
 
 	/**
 	 * Turns of prior conversation carried into a new one.
@@ -186,7 +194,7 @@ class AgentLoop {
 		$deadline = time() + $this->timeout();
 		$maxIterations = $this->maxIterations();
 
-		/** @var list<string> $observations */
+		/** @var list<array{call: string, result: string}> $observations */
 		$observations = [];
 		$toolResults = '';
 		$output = '';
@@ -227,15 +235,12 @@ class AgentLoop {
 			// unable to see what it had already tried, so it cycled between tools
 			// until it hit the iteration cap.
 			foreach ($calls as $call) {
-				$observations[] = sprintf(
-					"Result of %s(%s):\n%s",
-					$call['name'],
-					(string)json_encode($call['arguments'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-					$this->invoke($client, $call, $citations),
-				);
+				$observations[] = [
+					'call' => $this->callLabel($call),
+					'result' => $this->invoke($client, $call, $citations),
+				];
 			}
-			$observations = $this->recentObservations($observations);
-			$toolResults = implode("\n\n", $observations);
+			$toolResults = $this->renderObservations($observations);
 		}
 
 		if ($truncated && trim($output) === '') {
@@ -386,20 +391,49 @@ class AgentLoop {
 	}
 
 	/**
-	 * The newest observations that fit the budget, oldest dropped first.
+	 * A call as the model will read it back: name plus its (bounded) arguments.
 	 *
-	 * The newest is always kept, whatever its size: it is what the model asked
-	 * for last, and it is already bounded by MAX_TOOL_RESULT_CHARS.
-	 *
-	 * @param list<string> $observations
-	 * @return list<string>
+	 * @param array{id: string, name: string, arguments: array<string, mixed>} $call
 	 */
-	private function recentObservations(array $observations): array {
-		$total = array_sum(array_map('strlen', $observations));
-		while (count($observations) > 1 && $total > self::MAX_OBSERVATIONS_CHARS) {
-			$total -= strlen((string)array_shift($observations));
+	private function callLabel(array $call): string {
+		if ($call['arguments'] === []) {
+			return $call['name'] . '()';
 		}
-		return $observations;
+		$args = (string)json_encode($call['arguments'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+		if (strlen($args) > self::MAX_CALL_LABEL_ARGS_BYTES) {
+			$args = mb_strcut($args, 0, self::MAX_CALL_LABEL_ARGS_BYTES) . '…';
+		}
+		return $call['name'] . '(' . $args . ')';
+	}
+
+	/**
+	 * Every observation so far, oldest first, within the byte budget.
+	 *
+	 * Filled from the newest backwards: results that no longer fit become a
+	 * one-line stub rather than vanishing, so the model can still see it already
+	 * made that call — losing that is what made it cycle. The newest is always
+	 * shown in full: it is what the model asked for last, and it is already
+	 * bounded by MAX_TOOL_RESULT_CHARS.
+	 *
+	 * @param list<array{call: string, result: string}> $observations
+	 */
+	private function renderObservations(array $observations): string {
+		$rendered = [];
+		$used = 0;
+		$full = true;
+		foreach (array_reverse($observations) as $i => $observation) {
+			$text = sprintf("Result of %s:\n%s", $observation['call'], $observation['result']);
+			// Once one result is stubbed, every older one is too: the window is
+			// a contiguous run of the most recent results, not a best fit.
+			$full = $full && ($i === 0 || $used + strlen($text) <= self::MAX_OBSERVATIONS_BYTES);
+			if ($full) {
+				$rendered[] = $text;
+				$used += strlen($text);
+			} else {
+				$rendered[] = sprintf('Earlier call %s: result omitted to save space.', $observation['call']);
+			}
+		}
+		return implode("\n\n", array_reverse($rendered));
 	}
 
 	/**
