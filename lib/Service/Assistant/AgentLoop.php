@@ -399,7 +399,12 @@ class AgentLoop {
 		if ($call['arguments'] === []) {
 			return $call['name'] . '()';
 		}
-		$args = (string)json_encode($call['arguments'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+		// Substitute rather than fail on invalid UTF-8: a false return cast to ''
+		// would read back as a call made with no arguments.
+		$args = (string)json_encode(
+			$call['arguments'],
+			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
+		);
 		if (strlen($args) > self::MAX_CALL_LABEL_ARGS_BYTES) {
 			$args = mb_strcut($args, 0, self::MAX_CALL_LABEL_ARGS_BYTES) . '…';
 		}
