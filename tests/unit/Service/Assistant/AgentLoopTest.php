@@ -329,6 +329,112 @@ final class AgentLoopTest extends TestCase {
 		$this->assertStringContainsString('truncated', $secondPrompt);
 	}
 
+	/**
+	 * Only the latest round used to be fed back, so the model forgot what it had
+	 * already tried and cycled between tools until the iteration cap.
+	 */
+	public function testCarriesEveryEarlierRoundsResultsIntoTheNextPrompt(): void {
+		$tasks = $this->withModelTurns([
+			['output' => '', 'tool_calls' => json_encode([['name' => 'nc_semantic_search', 'args' => ['query' => 'notes']]])],
+			['output' => '', 'tool_calls' => json_encode([['name' => 'nc_notes_search_notes', 'args' => ['query' => 'todo']]])],
+			['output' => 'done', 'tool_calls' => ''],
+		]);
+		$this->client->method('callTool')->willReturnOnConsecutiveCalls(
+			new CallToolResult([new TextContent('first round result')]),
+			new CallToolResult([new TextContent('second round result')]),
+		);
+
+		$this->loop()->run('alice', 'q', []);
+
+		$thirdPrompt = (string)($tasks())[2]->getInput()['input'];
+		$this->assertStringContainsString('first round result', $thirdPrompt);
+		$this->assertStringContainsString('second round result', $thirdPrompt);
+		// Labelled with the call, so the model can see what it already asked.
+		$this->assertStringContainsString('Result of nc_semantic_search({"query":"notes"})', $thirdPrompt);
+		$this->assertStringContainsString('Result of nc_notes_search_notes({"query":"todo"})', $thirdPrompt);
+	}
+
+	public function testStubsTheOldestObservationsOnceTheBudgetIsExceeded(): void {
+		$this->maxIterations = 6;
+		$tasks = $this->withModelTurns(array_merge(
+			array_map(
+				static fn (int $n): array => ['output' => '', 'tool_calls' => json_encode([['name' => 'nc_semantic_search', 'args' => ['query' => "q$n"]]])],
+				range(1, 5),
+			),
+			[['output' => 'done', 'tool_calls' => '']],
+		));
+		$this->client->method('callTool')->willReturnCallback(
+			static fn (string $name, array $args): CallToolResult => new CallToolResult([
+				new TextContent('marker-' . (string)$args['query'] . ' ' . str_repeat('a', 7000)),
+			]),
+		);
+
+		$this->loop()->run('alice', 'q', []);
+
+		$lastPrompt = (string)($tasks())[5]->getInput()['input'];
+		// ~7 KB each against a 24 KB window: the three newest stay in full.
+		$this->assertSame(3, substr_count($lastPrompt, 'Result of '));
+		foreach (['q3', 'q4', 'q5'] as $kept) {
+			$this->assertStringContainsString("marker-$kept ", $lastPrompt);
+		}
+		// The two oldest lose their bodies but not the fact they were asked.
+		foreach (['q1', 'q2'] as $stubbed) {
+			$this->assertStringNotContainsString("marker-$stubbed ", $lastPrompt);
+			$this->assertStringContainsString(
+				"Earlier call nc_semantic_search({\"query\":\"$stubbed\"}): result omitted",
+				$lastPrompt,
+			);
+		}
+	}
+
+	/**
+	 * A round with several calls must come back whole: stubbing part of what the
+	 * model just asked for invites it to ask again.
+	 */
+	public function testKeepsEveryResultOfTheLatestRoundInFull(): void {
+		$tasks = $this->withModelTurns([
+			['output' => '', 'tool_calls' => json_encode([['name' => 'nc_semantic_search', 'args' => ['query' => 'old']]])],
+			['output' => '', 'tool_calls' => json_encode(array_map(
+				static fn (int $n): array => ['name' => 'nc_semantic_search', 'args' => ['query' => "new$n"]],
+				range(1, 4),
+			))],
+			['output' => 'done', 'tool_calls' => ''],
+		]);
+		$this->client->method('callTool')->willReturnCallback(
+			static fn (string $name, array $args): CallToolResult => new CallToolResult([
+				new TextContent('marker-' . (string)$args['query'] . ' ' . str_repeat('a', 7900)),
+			]),
+		);
+
+		$this->loop()->run('alice', 'q', []);
+
+		$thirdPrompt = (string)($tasks())[2]->getInput()['input'];
+		// Four ~8 KB results exceed the 24 KB window, yet all four stay.
+		foreach (['new1', 'new2', 'new3', 'new4'] as $kept) {
+			$this->assertStringContainsString("marker-$kept ", $thirdPrompt);
+		}
+		$this->assertStringContainsString('Earlier call nc_semantic_search({"query":"old"}): result omitted', $thirdPrompt);
+	}
+
+	public function testBoundsTheArgumentsEchoedInACallsLabel(): void {
+		$tasks = $this->withModelTurns([
+			['output' => '', 'tool_calls' => json_encode([
+				['name' => 'nc_semantic_search', 'args' => ['query' => str_repeat('b', 5000)]],
+				['name' => 'nc_semantic_search', 'args' => []],
+			])],
+			['output' => 'done', 'tool_calls' => ''],
+		]);
+		$this->withToolResult('result');
+
+		$this->loop()->run('alice', 'q', []);
+
+		$secondPrompt = (string)($tasks())[1]->getInput()['input'];
+		$this->assertStringNotContainsString(str_repeat('b', 600), $secondPrompt);
+		$this->assertStringContainsString('…):', $secondPrompt);
+		// No arguments reads as an empty call, not a JSON empty list.
+		$this->assertStringContainsString('Result of nc_semantic_search():', $secondPrompt);
+	}
+
 	public function testCarriesPriorTurnsIntoTheModelCallAndReturnsThemExtended(): void {
 		$tasks = $tasks = $this->withModelTurns([['output' => 'Cilium.', 'tool_calls' => '']]);
 		$history = [
