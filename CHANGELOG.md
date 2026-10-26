@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.46.1 (2026-10-26)
+
+### Fix
+
+- **assistant**: always show the whole latest round of tool results
+- **assistant**: keep call labels truthful for invalid UTF-8 arguments
+- **assistant**: stub evicted tool results and bound call labels
+- **assistant**: carry every round's tool results into the next prompt
+
 ## v0.46.0 (2026-10-21)
 
 ### Feat
