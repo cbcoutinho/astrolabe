@@ -25,6 +25,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.47.0 (2026-10-27)
+
+### Feat
+
+- **search**: rerank unified search results when the server offers it
+- **search**: send fusion, granularity and min_relevance; rerank automatically
+
+### Fix
+
+- **search**: retry unified search only on the reranker's 422, and pact it
+- **viz**: plot a row with no relevance by its relative score, labelled as such
+- **viz**: one scoring mode per page, and guard non-finite scores
+- **viz**: size and colour plot points by relevance, not raw retrieval score
+- **search**: retry once without rerank when the server rejects it
+- **search**: disable per-document results for dense-only search
+- **sar**: keep the server's error token on a case search 422 without a message
+- **search**: show the server's readable 422 message instead of its error token
+- **search**: address review: compat-safe granularity, one 422 helper, tests
+
 ## v0.46.1 (2026-10-26)
 
 ### Fix
