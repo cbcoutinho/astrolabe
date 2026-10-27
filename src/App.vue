@@ -1683,7 +1683,9 @@ export default {
 						? this.t('astrolabe', 'The search did not finish in time. The embedding service may be starting up or unavailable. Try again shortly, or search by keyword, which does not need it.')
 						: this.t('astrolabe', 'The search did not finish in time. Try again shortly.')
 				} else if (err.response && err.response.data && err.response.data.error) {
-					this.error = err.response.data.error
+					// A 422 from the MCP server carries a readable `message`
+					// next to its machine-readable `error` token: show that.
+					this.error = err.response.data.message || err.response.data.error
 				} else if (err.response && err.response.status === 503) {
 					this.error = this.t('astrolabe', 'Search service unavailable. Please try again later.')
 				} else {
