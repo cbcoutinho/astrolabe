@@ -675,6 +675,68 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
+	 * Unified Search (the Nextcloud global search bar) reranks too:
+	 * SemanticSearchProvider sends `rerank: true` on the bearer-authenticated
+	 * `/api/v1/search` whenever the status advertises `rerank_available`, and
+	 * reports each row's calibrated `relevance` in its subline.
+	 */
+	public function testRerankedUnifiedSearchHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/search')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => $matcher->like('leadership award'),
+				'algorithm' => $matcher->like('hybrid'),
+				'fusion' => $matcher->like('rrf'),
+				'score_threshold' => $matcher->number(0.0),
+				'limit' => $matcher->like(10),
+				'offset' => $matcher->like(0),
+				'include_pca' => $matcher->boolean(false),
+				'include_chunks' => $matcher->boolean(true),
+				'doc_types' => $matcher->eachLike('note'),
+				// The field under test -- pinned exactly.
+				'rerank' => true,
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'results' => $matcher->eachLike([
+					'id' => $matcher->integer(12),
+					'doc_type' => $matcher->like('note'),
+					'title' => $matcher->like('Award nominations'),
+					'score' => $matcher->number(0.0328),
+					'relevance' => $matcher->number(0.87),
+				]),
+				'total_found' => $matcher->integer(1),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('the server has reranking configured')
+			->uponReceiving('a reranked unified search request')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->searchForUnifiedSearch(
+			'leadership award',
+			'mint-token',
+			limit: 10,
+			docTypes: ['note'],
+			rerank: true,
+		);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertIsFloat($result['results'][0]['relevance'] ?? null);
+	}
+
+	/**
 	 * Consent-purge contract: when an admin disables a source for semantic
 	 * search, McpServerClient::purgeDocTypes() asks the MCP server to delete the
 	 * already-indexed content for that source's doc type(s). This pins the

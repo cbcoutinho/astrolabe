@@ -603,7 +603,7 @@ final class McpServerClientTest extends TestCase {
 		return json_decode((string)$captured->getBody(), true);
 	}
 
-	public function testUnifiedSearchSendsRerankOnlyWhenOn(): void {
+	public function testUnifiedSearchOmitsRerankByDefault(): void {
 		$off = $this->searchBody(fn () => $this->client->searchForUnifiedSearch('q', 'tok'));
 		$this->assertArrayNotHasKey('rerank', $off);
 	}

@@ -569,7 +569,9 @@ class McpServerClient {
 	 *   }>,
 	 *   total_found?: int,
 	 *   algorithm_used?: string,
-	 *   error?: string
+	 *   error?: string,
+	 *   unsupported?: true,
+	 *   message?: string
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.

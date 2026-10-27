@@ -40,12 +40,14 @@ final class SemanticSearchProviderTest extends TestCase {
 	private McpServerClient&MockObject $client;
 	private IConfig&MockObject $config;
 	private SearchSources&MockObject $searchSources;
+	private ICache&MockObject $statusCache;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->client = $this->createMock(McpServerClient::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->searchSources = $this->createMock(SearchSources::class);
+		$this->statusCache = $this->createMock(ICache::class);
 	}
 
 	/**
@@ -64,10 +66,9 @@ final class SemanticSearchProviderTest extends TestCase {
 		$tokenMinter = $this->createMock(McpTokenMinter::class);
 		$tokenMinter->method('mintForUser')->willReturn('mint-token');
 
-		$cache = $this->createMock(ICache::class);
-		$cache->method('get')->willReturn(null); // force the live status fetch
+		$this->statusCache->method('get')->willReturn(null); // force the live status fetch
 		$cacheFactory = $this->createMock(ICacheFactory::class);
-		$cacheFactory->method('createDistributed')->willReturn($cache);
+		$cacheFactory->method('createDistributed')->willReturn($this->statusCache);
 
 		$this->searchSources->method('effectiveEnabledDocTypes')->willReturn(['note']);
 
@@ -218,21 +219,62 @@ final class SemanticSearchProviderTest extends TestCase {
 	}
 
 	/**
-	 * The status is cached, so the reranker may be gone by the time the search
-	 * runs. A failed reranked search is retried without rerank.
+	 * Run one reranked search whose first attempt returns $firstAttempt, and
+	 * return the rerank flag of each call made.
+	 *
+	 * @param array<string, mixed> $firstAttempt
+	 * @return list<bool>
 	 */
-	public function testRetriesWithoutRerankWhenTheRerankedSearchFails(): void {
+	private function rerankAttempts(array $firstAttempt): array {
 		$this->stubStoredAlgorithm('hybrid');
 		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid'], ['rerank_available' => true]);
 		$calls = [];
 		$this->client->method('searchForUnifiedSearch')->willReturnCallback(
-			function (...$args) use (&$calls): array {
+			function (...$args) use (&$calls, $firstAttempt): array {
 				$calls[] = $args[8];
-				return $args[8] ? ['error' => 'rerank unavailable'] : ['results' => [], 'total_found' => 0];
+				return count($calls) === 1 ? $firstAttempt : ['results' => [], 'total_found' => 0];
 			},
 		);
 		$provider->search($this->user(), $this->query());
-		$this->assertSame([true, false], $calls);
+		return $calls;
+	}
+
+	/**
+	 * The status is cached, so the reranker may be gone by the time the search
+	 * runs. The server's 422 for that is retried without rerank, and the stale
+	 * status is dropped so the next keystroke does not pay for it again.
+	 */
+	public function testRetriesWithoutRerankWhenTheServerRejectsIt(): void {
+		$this->statusCache->expects($this->once())->method('remove')->with('mcp_status');
+		$this->assertSame([true, false], $this->rerankAttempts(['error' => 'rerank unavailable', 'unsupported' => true]));
+	}
+
+	/** A timeout or outage would only fail again, doubling the wait. */
+	public function testDoesNotRetryOtherFailuresOfARerankedSearch(): void {
+		$this->assertSame([true], $this->rerankAttempts(['error' => 'timed out']));
+	}
+
+	/**
+	 * The subline (shown when a row has no chunk/page metadata) reports the
+	 * calibrated relevance, not the raw fused score near 0.033.
+	 *
+	 * @dataProvider sublineScores
+	 * @param array<string, float> $scores
+	 */
+	public function testSublineReportsRelevanceOverRawScore(array $scores, string $expected): void {
+		$this->stubStoredAlgorithm('hybrid');
+		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid']);
+		$this->client->method('searchForUnifiedSearch')
+			->willReturn(['results' => [['id' => 1, 'doc_type' => 'note', 'title' => 'T'] + $scores], 'total_found' => 1]);
+		$entries = $provider->search($this->user(), $this->query())->jsonSerialize()['entries'];
+		$this->assertStringContainsString($expected, $entries[0]->jsonSerialize()['subline']);
+	}
+
+	/** @return iterable<string, array{array<string, float>, string}> */
+	public static function sublineScores(): iterable {
+		yield 'relevance present' => [['relevance' => 0.8, 'score' => 0.03], '80%'];
+		yield 'relevance zero is kept' => [['relevance' => 0.0, 'score' => 0.03], '0%'];
+		yield 'relevance absent' => [['score' => 0.5], '50%'];
 	}
 
 	public function testDoesNotRetryAFailedSearchThatWasNotReranked(): void {
