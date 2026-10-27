@@ -167,8 +167,9 @@
 									min="0"
 									max="100"
 									step="5"
-									class="mcp-score-slider">
-								<p class="mcp-option-hint">
+									class="mcp-score-slider"
+									aria-describedby="mcp-server-relevance-hint">
+								<p id="mcp-server-relevance-hint" class="mcp-option-hint">
 									{{ t('astrolabe', 'Applied by the server before the page is cut to the result limit, so a filtered search still returns a full page. Filters the search itself.') }}
 								</p>
 							</div>
@@ -182,8 +183,9 @@
 									min="0"
 									max="100"
 									step="5"
-									class="mcp-score-slider">
-								<p class="mcp-option-hint">
+									class="mcp-score-slider"
+									aria-describedby="mcp-minimum-score-hint">
+								<p id="mcp-minimum-score-hint" class="mcp-option-hint">
 									{{ t('astrolabe', 'Hides rows from the results already returned. Does not fetch more, so raising it shortens the list.') }}
 								</p>
 							</div>

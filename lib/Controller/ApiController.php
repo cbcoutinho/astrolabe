@@ -388,7 +388,10 @@ class ApiController extends Controller {
 
 		// Result shape. "document" returns one row per document rather than per
 		// passage — the shape "which files mention X" needs.
-		$granularity = strtolower(trim($granularity)) ?: 'chunk';
+		$granularity = strtolower(trim($granularity));
+		if ($granularity === '') {
+			$granularity = 'chunk';
+		}
 		if (!in_array($granularity, ['chunk', 'document'], true)) {
 			return new JSONResponse([
 				'success' => false,
@@ -417,7 +420,7 @@ class ApiController extends Controller {
 			}
 		}
 
-		$result = $this->client->search(
+		$search = fn (bool $rerank): array => $this->client->search(
 			$query,
 			$algorithm,
 			$limit,
@@ -429,11 +432,18 @@ class ApiController extends Controller {
 			$pathPrefixesArray !== [] ? $pathPrefixesArray : null,
 			$sar_case > 0 ? $sar_case : null,
 			$offset,
-			$rerankBool,
+			$rerank,
 			$fusion,
 			$granularity,
 			$minRelevance,
 		);
+		$result = $search($rerankBool);
+		// Reranking degrades, it never fails a search. The capability is cached
+		// for up to 30 s, so a reranker removed in that window answers 422:
+		// retry once without it. Any other 422 just repeats on the retry.
+		if ($rerankBool && (($result['unsupported'] ?? false) === true || ($result['status'] ?? null) === Http::STATUS_UNPROCESSABLE_ENTITY)) {
+			$result = $search(false);
+		}
 
 		if (($result['timeout'] ?? false) === true) {
 			// Not a fault to report as 500 with cURL's text: the search is

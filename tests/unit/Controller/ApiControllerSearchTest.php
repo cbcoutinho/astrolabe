@@ -361,4 +361,40 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
 		$this->assertSame('This server has no reranker.', $response->getData()['error']);
 	}
+
+	/**
+	 * A reranker removed while the capability is still cached answers 422:
+	 * the search is retried without reranking instead of failing. search()
+	 * arg 11 is $rerank.
+	 */
+	public function testRetriesWithoutRerankWhenTheServerRejectsIt(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')->willReturn(true);
+
+		$sent = [];
+		$this->client->expects($this->exactly(2))->method('search')
+			->willReturnCallback(function (...$args) use (&$sent): array {
+				$sent[] = $args[11];
+				return $args[11]
+					? ['error' => 'rerank_not_configured', 'unsupported' => true]
+					: ['results' => [], 'algorithm_used' => 'hybrid', 'reranked' => false];
+			});
+
+		$response = $this->controller->search(query: 'spec');
+
+		$this->assertSame([true, false], $sent);
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertFalse($response->getData()['reranked']);
+	}
+
+	public function testDoesNotRetryAnUnrerankedSearch(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')->willReturn(false);
+		$this->client->expects($this->once())->method('search')
+			->willReturn(['error' => 'unsupported_search_type', 'unsupported' => true]);
+
+		$response = $this->controller->search(query: 'spec');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+	}
 }
