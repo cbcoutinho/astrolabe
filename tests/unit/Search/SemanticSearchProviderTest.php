@@ -53,12 +53,13 @@ final class SemanticSearchProviderTest extends TestCase {
 	 * searchForUnifiedSearch() call, with the MCP status advertising $supported.
 	 *
 	 * @param list<string> $supported
+	 * @param array<string, mixed> $status extra status fields
 	 */
-	private function providerAdvertising(array $supported): SemanticSearchProvider {
+	private function providerAdvertising(array $supported, array $status = []): SemanticSearchProvider {
 		$this->client->method('getStatus')->willReturn([
 			'vector_sync_enabled' => true,
 			'supported_search_types' => $supported,
-		]);
+		] + $status);
 
 		$tokenMinter = $this->createMock(McpTokenMinter::class);
 		$tokenMinter->method('mintForUser')->willReturn('mint-token');
@@ -132,7 +133,7 @@ final class SemanticSearchProviderTest extends TestCase {
 	 * Run one search and return the args sent to searchForUnifiedSearch.
 	 *
 	 * Named args arrive positionally in declaration order:
-	 * (query, token, limit, offset, algorithm, fusion, scoreThreshold, docTypes)
+	 * (query, token, limit, offset, algorithm, fusion, scoreThreshold, docTypes, rerank)
 	 *
 	 * @return list<mixed>
 	 */
@@ -195,5 +196,50 @@ final class SemanticSearchProviderTest extends TestCase {
 		// fused score — `bm25` is not a sparse-only path.
 		yield 'hybrid' => ['hybrid'];
 		yield 'bm25' => ['bm25'];
+	}
+
+	/** @return iterable<string, array{array<string, mixed>, bool}> */
+	public static function rerankStatuses(): iterable {
+		yield 'advertised' => [['rerank_available' => true], true];
+		yield 'not advertised' => [['rerank_available' => false], false];
+		yield 'older server' => [[], false];
+	}
+
+	/**
+	 * The search bar reranks exactly when the server advertises a reranker.
+	 *
+	 * @dataProvider rerankStatuses
+	 * @param array<string, mixed> $status
+	 */
+	public function testReranksOnlyWhenTheServerAdvertisesIt(array $status, bool $expected): void {
+		$this->stubStoredAlgorithm('hybrid');
+		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid'], $status);
+		$this->assertSame($expected, $this->capturedCall($provider)[8]);
+	}
+
+	/**
+	 * The status is cached, so the reranker may be gone by the time the search
+	 * runs. A failed reranked search is retried without rerank.
+	 */
+	public function testRetriesWithoutRerankWhenTheRerankedSearchFails(): void {
+		$this->stubStoredAlgorithm('hybrid');
+		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid'], ['rerank_available' => true]);
+		$calls = [];
+		$this->client->method('searchForUnifiedSearch')->willReturnCallback(
+			function (...$args) use (&$calls): array {
+				$calls[] = $args[8];
+				return $args[8] ? ['error' => 'rerank unavailable'] : ['results' => [], 'total_found' => 0];
+			},
+		);
+		$provider->search($this->user(), $this->query());
+		$this->assertSame([true, false], $calls);
+	}
+
+	public function testDoesNotRetryAFailedSearchThatWasNotReranked(): void {
+		$this->stubStoredAlgorithm('hybrid');
+		$provider = $this->providerAdvertising(['semantic', 'bm25', 'hybrid']);
+		$this->client->expects($this->once())->method('searchForUnifiedSearch')
+			->willReturn(['error' => 'down']);
+		$provider->search($this->user(), $this->query());
 	}
 }

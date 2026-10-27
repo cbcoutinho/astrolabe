@@ -179,9 +179,15 @@ class SemanticSearchProvider implements IProvider {
 			return SearchResult::complete($this->getName(), []);
 		}
 
+		// Rerank whenever the server advertises a reranker, as the Astrolabe
+		// search page does. The status is cached for STATUS_CACHE_TTL, so a
+		// server that dropped its reranker since can still fail the request:
+		// retry once without rerank rather than show nothing.
+		$rerank = ($status['rerank_available'] ?? false) === true;
+
 		// Execute semantic search with OAuth token and admin settings
 		// Server extracts user_id from token - results filtered to that user's documents
-		$results = $this->client->searchForUnifiedSearch(
+		$search = fn (bool $rerank): array => $this->client->searchForUnifiedSearch(
 			query: $term,
 			token: $accessToken,
 			limit: $effectiveLimit,
@@ -207,7 +213,12 @@ class SemanticSearchProvider implements IProvider {
 			// App.vue, relative to the best result, which is scale-invariant.
 			scoreThreshold: $algorithm === 'semantic' ? (float)$scoreThreshold / 100.0 : 0.0,
 			docTypes: $enabledDocTypes,
+			rerank: $rerank,
 		);
+		$results = $search($rerank);
+		if ($rerank && ($results['error'] ?? '') !== '') {
+			$results = $search(false);
+		}
 
 		if (!empty($results['error'])) {
 			$this->logger->warning('Semantic search failed', [
@@ -277,7 +288,10 @@ class SemanticSearchProvider implements IProvider {
 	private function transformResult(array $result): SearchResultEntry {
 		$docType = $result['doc_type'] ?? 'unknown';
 		$title = $result['title'] ?? $this->l10n->t('Untitled');
-		$score = $result['score'] ?? 0;
+		// `relevance` (ADR-034) is a calibrated 0-1 value, reranked when the
+		// server reranks. The raw `score` of a fused search tops out near 0.033,
+		// which would print as "3% relevant".
+		$score = $result['relevance'] ?? $result['score'] ?? 0;
 		$id = isset($result['id']) ? (string)$result['id'] : null;
 		$mimeType = $result['mime_type'] ?? null;
 

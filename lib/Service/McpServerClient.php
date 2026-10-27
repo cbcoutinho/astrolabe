@@ -562,6 +562,7 @@ class McpServerClient {
 	 *     doc_type?: string,
 	 *     excerpt?: string,
 	 *     score?: float,
+	 *     relevance?: float,
 	 *     path?: string,
 	 *     board_id?: int,
 	 *     card_id?: int
@@ -582,6 +583,7 @@ class McpServerClient {
 		string $fusion = 'rrf',
 		float $scoreThreshold = 0.0,
 		?array $docTypes = null,
+		bool $rerank = false,
 	): array {
 		$body = [
 			'query' => $query,
@@ -593,6 +595,10 @@ class McpServerClient {
 			'include_pca' => false,
 			'include_chunks' => true,
 		];
+		// Only sent when on: a server without a reranker rejects it with a 422.
+		if ($rerank) {
+			$body['rerank'] = true;
+		}
 		// Restrict to admin-approved, installed source types when provided.
 		if ($docTypes !== null) {
 			$body['doc_types'] = $docTypes;

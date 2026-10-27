@@ -603,6 +603,16 @@ final class McpServerClientTest extends TestCase {
 		return json_decode((string)$captured->getBody(), true);
 	}
 
+	public function testUnifiedSearchSendsRerankOnlyWhenOn(): void {
+		$off = $this->searchBody(fn () => $this->client->searchForUnifiedSearch('q', 'tok'));
+		$this->assertArrayNotHasKey('rerank', $off);
+	}
+
+	public function testUnifiedSearchSendsRerankWhenOn(): void {
+		$on = $this->searchBody(fn () => $this->client->searchForUnifiedSearch('q', 'tok', rerank: true));
+		$this->assertTrue($on['rerank']);
+	}
+
 	public function testGranularityIsOnlySentWhenNotTheDefault(): void {
 		$body = $this->searchBody(fn () => $this->client->search('q', 'hybrid', 20, true, null, 'tok'));
 		$this->assertArrayNotHasKey('granularity', $body);
