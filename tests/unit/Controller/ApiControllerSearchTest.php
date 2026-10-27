@@ -286,4 +286,64 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertTrue($on->getData()['reranked']);
 		$this->assertFalse($off->getData()['reranked']);
 	}
+
+	/** @return array<string, array{string, string, string}> */
+	public static function invalidSearchParams(): array {
+		return [
+			'fusion' => ['fusion', 'borda', 'fusion must be one of'],
+			'granularity' => ['granularity', 'page', 'granularity must be one of'],
+			'min_relevance above 1' => ['min_relevance', '1.5', 'between 0 and 1'],
+			'min_relevance not a number' => ['min_relevance', 'high', 'min_relevance'],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('invalidSearchParams')]
+	public function testRejectsInvalidSearchParamWith400(string $param, string $value, string $message): void {
+		$this->authenticateUserWithToken();
+		$this->client->expects($this->never())->method('search');
+
+		$response = $this->controller->search(...['query' => 'spec', $param => $value]);
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertStringContainsString($message, $response->getData()['error']);
+	}
+
+	/**
+	 * An empty fusion comes from the admin setting. A bad stored value is the
+	 * admin's config, not this request's fault, so it falls back to the
+	 * default instead of failing every search. search() arg 12 is $fusion.
+	 */
+	public function testFusionFallsBackToAdminSettingThenToDefault(): void {
+		$this->authenticateUserWithToken();
+		$this->appConfig->method('getValueString')->willReturnOnConsecutiveCalls('DBSF', 'garbage');
+
+		$captured = [];
+		$this->client->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured[] = $args[12];
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$this->controller->search(query: 'spec');
+		$this->controller->search(query: 'spec');
+
+		$this->assertSame(['dbsf', 'rrf'], $captured);
+	}
+
+	/** A 422 from the MCP server is the caller's to correct: 422, not 500. */
+	public function testUnsupportedSearchIsPassedThroughAs422(): void {
+		$this->authenticateUserWithToken();
+		$this->client->method('search')->willReturn([
+			'error' => 'granularity_unsupported_for_algorithm',
+			'unsupported' => true,
+		]);
+
+		$response = $this->controller->search(query: 'spec', granularity: 'document', algorithm: 'semantic');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(
+			['success' => false, 'error' => 'granularity_unsupported_for_algorithm'],
+			$response->getData(),
+		);
+	}
 }

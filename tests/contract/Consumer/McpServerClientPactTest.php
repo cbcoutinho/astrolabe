@@ -585,7 +585,6 @@ final class McpServerClientPactTest extends TestCase {
 				'limit' => $matcher->like(10),
 				'include_pca' => $matcher->boolean(true),
 				'fusion' => $matcher->like('rrf'),
-				'granularity' => $matcher->like('chunk'),
 			]);
 
 		$response = (new ProviderResponse())
@@ -633,7 +632,6 @@ final class McpServerClientPactTest extends TestCase {
 				'limit' => $matcher->like(10),
 				'include_pca' => $matcher->boolean(false),
 				'fusion' => $matcher->like('rrf'),
-				'granularity' => $matcher->like('chunk'),
 				// The field under test -- pinned exactly.
 				'rerank' => true,
 			]);

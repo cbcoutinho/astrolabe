@@ -1553,6 +1553,9 @@ export default {
 				this.loading = true
 				this.error = null
 				this.searchTimedOut = false
+				// A stale "reranked" label must not sit next to this search's
+				// error or results.
+				this.rerankedUsed = false
 				this.searched = true
 				this.coordinates = []
 				this.queryCoords = []

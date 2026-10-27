@@ -201,15 +201,7 @@ class McpServerClient {
 				// RuntimeException discards that and surfaces to the user as an
 				// opaque 500 that reads like an outage.
 				if ($statusCode === 422) {
-					/** @var mixed $decoded */
-					$decoded = json_decode((string)$response->getBody(), true);
-					if (is_array($decoded) && isset($decoded['error']) && is_string($decoded['error'])) {
-						return $decoded + ['unsupported' => true];
-					}
-					return [
-						'error' => 'Request not supported by this server',
-						'unsupported' => true,
-					];
+					return $this->unsupportedResponse($response);
 				}
 				if ($statusCode < 200 || $statusCode >= 300) {
 					throw new \RuntimeException("Unexpected HTTP $statusCode from MCP server");
@@ -228,6 +220,35 @@ class McpServerClient {
 	}
 
 	/**
+	 * A 422 from the MCP server: a well-formed request this deployment cannot
+	 * serve (unsupported algorithm, document granularity on a dense-only
+	 * algorithm, reranking when unconfigured). Its error is actionable, so it
+	 * is passed on instead of becoming an opaque 500.
+	 *
+	 * Only `error` and `message` are kept: they are what the UI shows, and
+	 * forwarding arbitrary server JSON to the browser is not. `unsupported`
+	 * is set here and cannot be overridden by the body.
+	 *
+	 * @return array{error: string, unsupported: true, message?: string}
+	 */
+	private function unsupportedResponse(ResponseInterface $response): array {
+		/** @var mixed $decoded */
+		$decoded = json_decode((string)$response->getBody(), true);
+		/** @var mixed $error */
+		$error = is_array($decoded) ? ($decoded['error'] ?? null) : null;
+		/** @var mixed $message */
+		$message = is_array($decoded) ? ($decoded['message'] ?? null) : null;
+		$result = [
+			'error' => is_string($error) ? $error : 'Request not supported by this server',
+			'unsupported' => true,
+		];
+		if (is_string($message)) {
+			$result['message'] = $message;
+		}
+		return $result;
+	}
+
+	/**
 	 * Convert a non-2xx response into a structured error array.
 	 *
 	 * Webhook-related methods set ``http_errors => false`` on the Guzzle
@@ -239,13 +260,11 @@ class McpServerClient {
 	 * this helper turns any non-2xx into an explicit error array.
 	 *
 	 * 428 → ``provisioning_required => true`` (mapped to a CTA in the UI).
-	 * 422 → the server's own structured error, plus ``unsupported => true``.
+	 * 422 → the server's error, see {@see unsupportedResponse()}.
 	 * Any other non-2xx → generic error with the status code in the message.
 	 * 2xx → null (caller continues with the success path).
 	 *
-	 * @return array{error: string, provisioning_required?: true, unsupported?: true}|null
-	 *
-	 * @psalm-suppress InvalidReturnType - the 422 branch forwards the server's structured body (see below).
+	 * @return array{error: string, provisioning_required?: true, unsupported?: true, message?: string}|null
 	 */
 	private function detectErrorResponse(ResponseInterface $response): ?array {
 		$statusCode = $response->getStatusCode();
@@ -264,13 +283,7 @@ class McpServerClient {
 		// surfaces to the user as an opaque 500. Pass the server's own error
 		// through so the caller can act on it.
 		if ($statusCode === 422) {
-			/** @var mixed $decoded */
-			$decoded = json_decode((string)$response->getBody(), true);
-			if (is_array($decoded) && isset($decoded['error']) && is_string($decoded['error'])) {
-				/** @psalm-suppress InvalidReturnStatement - extra keys are the server's structured 422 body, forwarded to the client on purpose. */
-				return ['error' => $decoded['error'], 'unsupported' => true] + $decoded;
-			}
-			return ['error' => 'Request not supported by this server', 'unsupported' => true];
+			return $this->unsupportedResponse($response);
 		}
 
 		if ($statusCode < 200 || $statusCode >= 300) {
@@ -396,7 +409,8 @@ class McpServerClient {
 	 *   error?: string,
 	 *   status?: int,
 	 *   timeout?: bool,
-	 *   unsupported?: true
+	 *   unsupported?: true,
+	 *   message?: string
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -434,8 +448,13 @@ class McpServerClient {
 			// `relevance_for()` applies, so omitting it pinned the reported
 			// relevance to the RRF-ordinal mapping regardless of configuration.
 			'fusion' => $fusion,
-			'granularity' => $granularity,
 		];
+
+		// Only sent when not the default, like min_relevance and rerank below:
+		// a server that predates the field never sees it on an ordinary search.
+		if ($granularity !== 'chunk') {
+			$requestBody['granularity'] = $granularity;
+		}
 
 		// Only sent when actually filtering. The server treats 0.0 as "no
 		// filter" anyway, but omitting it keeps the request identical to the
@@ -759,7 +778,7 @@ class McpServerClient {
 	 *
 	 * @param int $webhookId Webhook ID to delete
 	 * @param string $token OAuth bearer token
-	 * @return array{success?: bool, error?: string, provisioning_required?: true, unsupported?: true}
+	 * @return array{success?: bool, error?: string, provisioning_required?: true, unsupported?: true, message?: string}
 	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition; slated for removal once native default is proven.
 	 */
 	public function deleteWebhook(int $webhookId, string $token): array {
