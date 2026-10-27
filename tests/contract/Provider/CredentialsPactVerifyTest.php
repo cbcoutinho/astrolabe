@@ -36,6 +36,9 @@ use PHPUnit\Framework\TestCase;
  *   PACT_USERNAME      broker basic-auth user
  *   PACT_PASSWORD      broker basic-auth password
  * Optional:
+ *   PACT_PROVIDER_AUTH      "user:app-password" of a Nextcloud admin, sent as
+ *                           Basic auth in place of the pacts' placeholder creds
+ *   PACT_PROVIDER_REQUIRED  "true" to fail, not skip, without a provider (CI)
  *   PACT_PROVIDER_VERSION   provider version (git SHA) for published results
  *   PACT_PROVIDER_BRANCH    provider branch (default "main")
  *   PACT_PUBLISH_RESULTS    "true" to publish verification results
@@ -46,6 +49,12 @@ final class CredentialsPactVerifyTest extends TestCase {
 		$brokerUrl = getenv('PACT_BROKER') ?: '';
 		$brokerUser = getenv('PACT_USERNAME') ?: '';
 		$brokerPass = getenv('PACT_PASSWORD') ?: '';
+		$providerAuth = getenv('PACT_PROVIDER_AUTH') ?: '';
+		// pact.yml stands up a provider, so a missing URL there is a broken
+		// job, not a reason to skip and report green.
+		if (getenv('PACT_PROVIDER_REQUIRED') === 'true' && ($providerUrl === '' || $providerAuth === '')) {
+			$this->fail('PACT_PROVIDER_REQUIRED is set but PACT_PROVIDER_URL or PACT_PROVIDER_AUTH is not');
+		}
 		// Require the broker creds too, so a broker-set-but-creds-missing CI
 		// skips cleanly rather than silently attempting unauthenticated access.
 		if ($providerUrl === '' || $brokerUrl === '' || $brokerUser === '' || $brokerPass === '') {
@@ -64,6 +73,14 @@ final class CredentialsPactVerifyTest extends TestCase {
 			->setScheme($providerUri->getScheme())
 			->setHost($providerUri->getHost())
 			->setPort($providerUri->getPort() ?? $defaultPort);
+
+		// The pacts carry the consumer's placeholder credentials (a dummy
+		// Bearer token, or none for OCS). Replace them with a real app password
+		// ("user:app-password"): the credentials endpoint is admin-only, and an
+		// app password also exempts the request from the CSRF check.
+		if ($providerAuth !== '') {
+			$config->getCustomHeaders()->addHeader('Authorization', 'Basic ' . base64_encode($providerAuth));
+		}
 
 		// Pact POSTs {consumer, state, action, params} here before/after each
 		// interaction to set up the declared provider state. The endpoint lives

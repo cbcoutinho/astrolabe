@@ -95,11 +95,13 @@ card (Deck board 11 "Contract Testing") — never leave the gap silent.
 
 Known gaps (tracked on board 11):
 
-- The Pact **provider-state endpoint**
-  (`POST /apps/astrolabe/api/v1/test/pact-provider-state`, guarded by system
-  config `astrolabe.pact_state_endpoint_enabled`) is **not implemented**, so
-  provider verification of the authenticated surface (search, webhooks CRUD,
-  apps, chunk-context, pdf-preview, vector-sync/purge) is effectively a no-op.
+- Provider verification (`pact.yml`) replays only what nextcloud-mcp-server
+  pacts against astrolabe: the credentials-status endpoint and OCS
+  capabilities. Its states are seeded by the TEST-ONLY provider-state endpoint
+  (`POST /apps/astrolabe/api/v1/test/pact-provider-state`, 404 unless the system
+  config `astrolabe.pact_state_endpoint_enabled` is set). Any other astrolabe
+  route the MCP server starts calling needs a consumer pact there and a state
+  handler here.
 - `can-i-deploy` runs in non-blocking **shadow mode** (`pact.yml`).
 - `ci.yml`'s summary gate does **not** include the e2e or pact jobs — they run as
   separate workflows (`e2e.yml`, `pact.yml`) with their own gates.

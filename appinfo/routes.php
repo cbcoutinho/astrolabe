@@ -32,6 +32,14 @@ return [
 			'verb' => 'GET',
 		],
 
+		// Pact provider-state hook (ADR-029). TEST-ONLY: 404 unless the system
+		// config flag astrolabe.pact_state_endpoint_enabled is set.
+		[
+			'name' => 'pact_provider_state#handle',
+			'url' => '/api/v1/test/pact-provider-state',
+			'verb' => 'POST',
+		],
+
 		// Admin provisioning (admin-only via SecurityMiddleware — these methods
 		// carry no #[NoAdminRequired] attribute)
 		[
