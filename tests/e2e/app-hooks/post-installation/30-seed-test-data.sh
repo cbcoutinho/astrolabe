@@ -70,7 +70,7 @@ Notes on implementing semantic search for personal knowledge management.
 NOTEEOF
 
 # Long enough (well over the MCP server's 2048-character chunks) to index as
-# several passages that all match a Kubernetes query, so search.spec.ts can
+# several passages that all match a Kubernetes query, so search-options.spec.ts can
 # tell "one row per document" from "best passages".
 cat > "$NOTES_DIR/Kubernetes Cluster Operations Runbook.md" << 'NOTEEOF'
 # Kubernetes Cluster Operations Runbook

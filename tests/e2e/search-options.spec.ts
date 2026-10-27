@@ -40,12 +40,14 @@ async function search(page: Page, query = QUERY): Promise<Response> {
 	return res
 }
 
-function titles(page: Page) {
-	return page.locator('.mcp-result-title')
+// The note is a file in the user's Notes folder too, so it is indexed once as
+// a note and once as a file: count the rows of one document, the note.
+function longNoteRows(page: Page) {
+	return page.locator('.mcp-result-item.mcp-doc-type-note', { hasText: LONG_NOTE })
 }
 
 function resultLimit(page: Page) {
-	return page.getByRole('main').locator('.mcp-option-group', { hasText: 'Result Limit' }).locator('input')
+	return page.getByRole('main').locator('.mcp-option-group', { hasText: 'Result Limit' }).locator('input[type="number"]')
 }
 
 test.describe('Astrolabe search options', () => {
@@ -74,15 +76,18 @@ test.describe('Astrolabe search options', () => {
 
 		// Best passages: the long note matches in several of its chunks.
 		await search(page)
-		await expect.poll(() => titles(page).filter({ hasText: LONG_NOTE }).count()).toBeGreaterThan(1)
+		// This relies on the server's defaults (no relevance cut, no rerank)
+		// keeping at least two of the note's passages in the first page.
+		await expect.poll(() => longNoteRows(page).count()).toBeGreaterThan(1)
 
 		await page.getByLabel('Results per document').selectOption('document')
 		const res = await search(page)
 		expect(new URL(res.url()).searchParams.get('granularity')).toBe('document')
 
-		await expect(titles(page).filter({ hasText: LONG_NOTE })).toHaveCount(1)
-		const all = await titles(page).allTextContents()
-		expect(new Set(all).size).toBe(all.length)
+		await expect(longNoteRows(page)).toHaveCount(1)
+		const rows: { doc_type: string, id: unknown }[] = (await res.json()).results
+		const docs = rows.map((r) => `${r.doc_type}:${String(r.id)}`)
+		expect(new Set(docs).size).toBe(docs.length)
 	})
 
 	test('a server relevance cut still returns a full page', async ({ authenticatedPage: page }) => {
@@ -100,6 +105,7 @@ test.describe('Astrolabe search options', () => {
 		await expect(page.locator('.mcp-result-item')).toHaveCount(2)
 		const body = await res.json()
 		for (const row of body.results) {
+			expect(typeof row.relevance).toBe('number')
 			expect(row.relevance).toBeGreaterThanOrEqual(0.05)
 		}
 	})
@@ -120,7 +126,7 @@ test.describe('Astrolabe search options', () => {
 	})
 
 	test('a reranked search says so and shows calibrated relevance', async ({ authenticatedPage: page }) => {
-		await page.route('**/apps/astrolabe/api/search?**', (route) => route.fulfill({
+		await page.route(/\/apps\/astrolabe\/api\/search\?/, (route) => route.fulfill({
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify({
@@ -156,13 +162,13 @@ test.describe('Astrolabe search options', () => {
 		// in the logged-in session. Driving the header widget itself is left
 		// out: its markup differs across the Nextcloud majors e2e.yml covers.
 		const res = await page.request.get('/ocs/v2.php/search/providers/astrolabe_semantic/search', {
-			params: { term: 'kubernetes cluster architecture' },
+			params: { term: QUERY },
 			headers: { 'OCS-APIRequest': 'true', Accept: 'application/json' },
 		})
 		expect(res.status()).toBe(200)
 		const data = (await res.json()).ocs.data
 		expect(data.name).toBe('Astrolabe')
 		const entryTitles: string[] = data.entries.map((e: { title: string }) => e.title)
-		expect(entryTitles.some((t) => t.includes('Kubernetes'))).toBe(true)
+		expect(entryTitles.some((t) => t.includes(LONG_NOTE))).toBe(true)
 	})
 })
