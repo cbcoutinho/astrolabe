@@ -649,4 +649,27 @@ final class McpServerClientTest extends TestCase {
 
 		$this->assertSame(['error' => 'Request not supported by this server', 'unsupported' => true], $result);
 	}
+
+	/** Reranking reaches case searches too: they share the request body. */
+	public function testSarCaseSearchSendsRerank(): void {
+		$body = $this->searchBody(fn () => $this->client->search(
+			'q', 'hybrid', 20, true, null, 'tok', sarCase: 101, rerank: true,
+		));
+		$this->assertTrue($body['rerank']);
+	}
+
+	/**
+	 * A case search's 422 keeps its status, so the controller can pass it on,
+	 * and falls back to the `error` token when the body has no `message`.
+	 */
+	public function testSarCaseSearch422KeepsStatusAndServerError(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(422, json_encode([
+			'error' => 'unsupported_search_type',
+			'requested' => 'semantic',
+		])));
+
+		$result = $this->client->search('q', 'semantic', 20, true, null, 'tok', sarCase: 101);
+
+		$this->assertSame(['error' => 'unsupported_search_type', 'status' => 422], $result);
+	}
 }

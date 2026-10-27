@@ -1009,8 +1009,10 @@ class McpServerClient {
 			/** @var mixed $data */
 			$data = json_decode((string)$response->getBody(), true);
 			if ($status < 200 || $status >= 300) {
+				// A readable `message` when the server sends one, else its
+				// `error` token (a 422 for an unsupported algorithm has only that).
 				/** @var mixed $message */
-				$message = is_array($data) ? ($data['message'] ?? null) : null;
+				$message = is_array($data) ? ($data['message'] ?? $data['error'] ?? null) : null;
 				// 4xx are the caller's answers (not found, conflict, ...) and reach
 				// the UI; a 5xx is the MCP server failing and needs a log line.
 				if ($status >= 500) {

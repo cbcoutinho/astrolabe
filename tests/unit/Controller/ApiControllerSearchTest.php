@@ -346,4 +346,19 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 			$response->getData(),
 		);
 	}
+
+	/** A case search's 422 reaches the client as a 422 too, not a 500. */
+	public function testUnsupportedCaseSearchIsPassedThroughAs422(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(true);
+		$this->client->method('search')->willReturn([
+			'error' => 'This server has no reranker.',
+			'status' => 422,
+		]);
+
+		$response = $this->controller->search(query: 'spec', sar_case: 101);
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('This server has no reranker.', $response->getData()['error']);
+	}
 }
