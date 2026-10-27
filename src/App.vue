@@ -1857,7 +1857,21 @@ export default {
 			// Plotly's pointIndex refers to the rendered trace data.
 			this._renderedResults = results
 
-			const scores = results.map((r) => r.score)
+			// Plot the same [0,1] number the list's relevance bar shows, so a row
+			// the list calls relevant is not a speck here. `score` is the raw
+			// retrieval value -- ~0.03 at most under RRF -- and sizing by it put
+			// every point at the minimum. `relevance` is the calibrated
+			// cross-encoder probability when the search was reranked. Older
+			// servers that do not send it fall back to the rank score
+			// (rerank_score ?? score) scaled across this page's range.
+			const { min, max } = this.scoreRange
+			const plotScore = (r) => {
+				if (typeof r.relevance === 'number') {
+					return Math.min(1, Math.max(0, r.relevance))
+				}
+				return max > min ? (this.rankScore(r) - min) / (max - min) : 1
+			}
+			const scores = results.map(plotScore)
 
 			// Trace 1: Document results (always visible)
 			const documentTrace = {
@@ -1868,10 +1882,16 @@ export default {
 				type: 'scatter3d',
 				name: 'Documents',
 				visible: true,
+				// The score lines are prebuilt per point: the rerank line exists
+				// only for rows the reranker scored, which one shared
+				// hovertemplate cannot express.
 				customdata: results.map((r, i) => ({
 					title: r.title,
-					raw_score: r.original_score || r.score,
-					relative_score: r.score,
+					scores: [
+						`Relevance: ${Math.round(scores[i] * 100)}%`,
+						...(typeof r.rerank_score === 'number' ? [`Rerank score: ${r.rerank_score.toFixed(3)}`] : []),
+						`Retrieval score: ${(r.score ?? 0).toFixed(3)}`,
+					].join('<br>'),
 					x: coordinates[i][0],
 					y: coordinates[i][1],
 					z: coordinates[i][2],
@@ -1879,7 +1899,7 @@ export default {
 
 				hovertemplate:
 					'<b>%{customdata.title}</b><br>'
-					+ 'Raw Score: %{customdata.raw_score:.3f} (%{customdata.relative_score:.0%} relative)<br>'
+					+ '%{customdata.scores}<br>'
 					+ '(x=%{customdata.x}, y=%{customdata.y}, z=%{customdata.z})'
 					+ '<extra></extra>',
 
@@ -1893,13 +1913,13 @@ export default {
 				},
 
 				marker: {
-					size: results.map((r) => 4 + (Math.pow(r.score, 2) * 10)),
-					opacity: results.map((r) => 0.3 + (r.score * 0.7)),
+					size: scores.map((s) => 4 + (Math.pow(s, 2) * 10)),
+					opacity: scores.map((s) => 0.3 + (s * 0.7)),
 					color: scores,
 					colorscale: 'Viridis',
 					showscale: true,
 					colorbar: {
-						title: { text: 'Relative Score' },
+						title: { text: 'Relevance' },
 						x: 1.02,
 						xanchor: 'left',
 						thickness: 20,
