@@ -261,4 +261,140 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		$this->assertArrayNotHasKey('code', $response->getData());
 	}
+
+	/**
+	 * Reranking is not a user choice: the controller asks for it exactly when
+	 * the server advertises it. search() arg 11 is $rerank (after sarCase, offset).
+	 */
+	public function testRequestsRerankIffServerAdvertisesIt(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')
+			->willReturnOnConsecutiveCalls(true, false);
+
+		$captured = [];
+		$this->client->expects($this->exactly(2))
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured[] = $args[11];
+				return ['results' => [], 'algorithm_used' => 'hybrid', 'reranked' => $args[11]];
+			});
+
+		$on = $this->controller->search(query: 'spec');
+		$off = $this->controller->search(query: 'spec');
+
+		$this->assertSame([true, false], $captured);
+		$this->assertTrue($on->getData()['reranked']);
+		$this->assertFalse($off->getData()['reranked']);
+	}
+
+	/** @return array<string, array{string, string, string}> */
+	public static function invalidSearchParams(): array {
+		return [
+			'fusion' => ['fusion', 'borda', 'fusion must be one of'],
+			'granularity' => ['granularity', 'page', 'granularity must be one of'],
+			'min_relevance above 1' => ['min_relevance', '1.5', 'between 0 and 1'],
+			'min_relevance not a number' => ['min_relevance', 'high', 'min_relevance'],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('invalidSearchParams')]
+	public function testRejectsInvalidSearchParamWith400(string $param, string $value, string $message): void {
+		$this->authenticateUserWithToken();
+		$this->client->expects($this->never())->method('search');
+
+		$response = $this->controller->search(...['query' => 'spec', $param => $value]);
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertStringContainsString($message, $response->getData()['error']);
+	}
+
+	/**
+	 * An empty fusion comes from the admin setting. A bad stored value is the
+	 * admin's config, not this request's fault, so it falls back to the
+	 * default instead of failing every search. search() arg 12 is $fusion.
+	 */
+	public function testFusionFallsBackToAdminSettingThenToDefault(): void {
+		$this->authenticateUserWithToken();
+		$this->appConfig->method('getValueString')->willReturnOnConsecutiveCalls('DBSF', 'garbage');
+
+		$captured = [];
+		$this->client->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured[] = $args[12];
+				return ['results' => [], 'algorithm_used' => 'hybrid'];
+			});
+
+		$this->controller->search(query: 'spec');
+		$this->controller->search(query: 'spec');
+
+		$this->assertSame(['dbsf', 'rrf'], $captured);
+	}
+
+	/** A 422 from the MCP server is the caller's to correct: 422, not 500. */
+	public function testUnsupportedSearchIsPassedThroughAs422(): void {
+		$this->authenticateUserWithToken();
+		$this->client->method('search')->willReturn([
+			'error' => 'granularity_unsupported_for_algorithm',
+			'unsupported' => true,
+		]);
+
+		$response = $this->controller->search(query: 'spec', granularity: 'document', algorithm: 'semantic');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(
+			['success' => false, 'error' => 'granularity_unsupported_for_algorithm'],
+			$response->getData(),
+		);
+	}
+
+	/** A case search's 422 reaches the client as a 422 too, not a 500. */
+	public function testUnsupportedCaseSearchIsPassedThroughAs422(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isSarAvailable')->willReturn(true);
+		$this->client->method('search')->willReturn([
+			'error' => 'This server has no reranker.',
+			'status' => 422,
+		]);
+
+		$response = $this->controller->search(query: 'spec', sar_case: 101);
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('This server has no reranker.', $response->getData()['error']);
+	}
+
+	/**
+	 * A reranker removed while the capability is still cached answers 422:
+	 * the search is retried without reranking instead of failing. search()
+	 * arg 11 is $rerank.
+	 */
+	public function testRetriesWithoutRerankWhenTheServerRejectsIt(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')->willReturn(true);
+
+		$sent = [];
+		$this->client->expects($this->exactly(2))->method('search')
+			->willReturnCallback(function (...$args) use (&$sent): array {
+				$sent[] = $args[11];
+				return $args[11]
+					? ['error' => 'rerank_not_configured', 'unsupported' => true]
+					: ['results' => [], 'algorithm_used' => 'hybrid', 'reranked' => false];
+			});
+
+		$response = $this->controller->search(query: 'spec');
+
+		$this->assertSame([true, false], $sent);
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertFalse($response->getData()['reranked']);
+	}
+
+	public function testDoesNotRetryAnUnrerankedSearch(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')->willReturn(false);
+		$this->client->expects($this->once())->method('search')
+			->willReturn(['error' => 'unsupported_search_type', 'unsupported' => true]);
+
+		$response = $this->controller->search(query: 'spec');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+	}
 }

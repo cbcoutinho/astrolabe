@@ -48,18 +48,22 @@ test.describe('Astrolabe search', () => {
 		await expect(mainContent.getByText('Notes')).toBeVisible()
 		await expect(mainContent.getByText('Deck Cards')).toBeVisible()
 
-		// Result limit field
-		await expect(mainContent.getByText('Result Limit')).toBeVisible()
+		// Result limit field. Exact: the server relevance hint mentions "the
+		// result limit" too.
+		await expect(mainContent.getByText('Result Limit', { exact: true })).toBeVisible()
 
-		// Relevance slider. The label has two forms and this matches the prefix
-		// common to both, deliberately: against a server that reports
-		// `relevance` (ADR-034) the cut is ABSOLUTE, because that value means
-		// the same thing on every query; against an older server it falls back
-		// to "relative to the best result", since the raw `score` is on a
-		// different scale per algorithm (cosine for semantic, an RRF fused
-		// score bounded by ~2/k for bm25/hybrid) and no absolute cut can mean
-		// one thing across them.
-		await expect(mainContent.getByText('Minimum relevance')).toBeVisible()
+		// Result shape. Dense-only search cannot group passages by document,
+		// so the per-document option is offered only for the other algorithms.
+		await expect(mainContent.getByLabel('Results per document')).toBeVisible()
+
+		// The two relevance controls, labelled so they cannot be confused: the
+		// server-side cut filters the search itself, the client-side slider
+		// hides rows already returned. The client-side label has two forms
+		// (absolute when the server reports `relevance`, ADR-034, else
+		// "relative to the best result"); this matches the prefix common to
+		// both.
+		await expect(mainContent.getByLabel(/^Server relevance cut/)).toBeVisible()
+		await expect(mainContent.getByLabel(/^Hide below relevance/)).toBeVisible()
 	})
 
 	test('complete authorization and perform search with Plotly visualization', async ({ authenticatedPage: page }) => {

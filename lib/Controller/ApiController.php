@@ -234,6 +234,9 @@ class ApiController extends Controller {
 		string $path_prefixes = '',
 		int $offset = 0,
 		int $sar_case = 0,
+		string $fusion = '',
+		string $granularity = '',
+		string $min_relevance = '',
 	): JSONResponse {
 		if ($sar_case > 0 && !$this->searchCapabilities->isSarAvailable()) {
 			return $this->sarUnavailableResponse();
@@ -353,7 +356,71 @@ class ApiController extends Controller {
 		// unbounded should-clause on the MCP server.
 		$pathPrefixesArray = array_slice($pathPrefixesArray, 0, 20);
 
-		$result = $this->client->search(
+		// Cross-encoder rerank stage: on whenever the server can serve it, not a
+		// user choice. The server only reranks when a request asks, so without
+		// this a configured reranker never runs for this app.
+		$rerankBool = $this->searchCapabilities->isRerankAvailable();
+
+		// Fusion. Empty ⇒ fall back to the admin setting, so the search page and
+		// the global search bar finally agree on which fusion the deployment
+		// uses. Validated here rather than passed through: the server clamps an
+		// unrecognized value to "rrf" silently, and a silently-ignored setting
+		// is what produced this gap in the first place.
+		$fusion = strtolower(trim($fusion));
+		if ($fusion === '') {
+			// A bad stored value is the admin's config, not this request's
+			// fault: fall back to the default rather than 400 every search.
+			$fusion = strtolower($this->appConfig->getValueString(
+				$this->appName,
+				AdminSettings::SETTING_SEARCH_FUSION,
+				AdminSettings::DEFAULT_SEARCH_FUSION,
+			));
+			if (!in_array($fusion, ['rrf', 'dbsf'], true)) {
+				$fusion = AdminSettings::DEFAULT_SEARCH_FUSION;
+			}
+		}
+		if (!in_array($fusion, ['rrf', 'dbsf'], true)) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'fusion must be one of: rrf, dbsf',
+			], Http::STATUS_BAD_REQUEST);
+		}
+
+		// Result shape. "document" returns one row per document rather than per
+		// passage — the shape "which files mention X" needs.
+		$granularity = strtolower(trim($granularity));
+		if ($granularity === '') {
+			$granularity = 'chunk';
+		}
+		if (!in_array($granularity, ['chunk', 'document'], true)) {
+			return new JSONResponse([
+				'success' => false,
+				'error' => 'granularity must be one of: chunk, document',
+			], Http::STATUS_BAD_REQUEST);
+		}
+
+		// Server-side relevance cut. Distinct from the search page's slider,
+		// which filters client-side over an already-trimmed page; this one is
+		// applied before the trim so the response still fills up to `limit`
+		// with qualifying rows.
+		$minRelevance = 0.0;
+		if (trim($min_relevance) !== '') {
+			if (!is_numeric($min_relevance)) {
+				return new JSONResponse([
+					'success' => false,
+					'error' => 'min_relevance must be a number between 0 and 1',
+				], Http::STATUS_BAD_REQUEST);
+			}
+			$minRelevance = (float)$min_relevance;
+			if ($minRelevance < 0.0 || $minRelevance > 1.0) {
+				return new JSONResponse([
+					'success' => false,
+					'error' => 'min_relevance must be between 0 and 1',
+				], Http::STATUS_BAD_REQUEST);
+			}
+		}
+
+		$search = fn (bool $rerank): array => $this->client->search(
 			$query,
 			$algorithm,
 			$limit,
@@ -365,7 +432,18 @@ class ApiController extends Controller {
 			$pathPrefixesArray !== [] ? $pathPrefixesArray : null,
 			$sar_case > 0 ? $sar_case : null,
 			$offset,
+			$rerank,
+			$fusion,
+			$granularity,
+			$minRelevance,
 		);
+		$result = $search($rerankBool);
+		// Reranking degrades, it never fails a search. The capability is cached
+		// for up to 30 s, so a reranker removed in that window answers 422:
+		// retry once without it. Any other 422 just repeats on the retry.
+		if ($rerankBool && (($result['unsupported'] ?? false) === true || ($result['status'] ?? null) === Http::STATUS_UNPROCESSABLE_ENTITY)) {
+			$result = $search(false);
+		}
 
 		if (($result['timeout'] ?? false) === true) {
 			// Not a fault to report as 500 with cURL's text: the search is
@@ -382,6 +460,19 @@ class ApiController extends Controller {
 			return $this->sarResponse($result, Http::STATUS_OK);
 		}
 		if (isset($result['error'])) {
+			// A 422 from the MCP server means the request was well-formed but
+			// this deployment cannot serve it (unsupported algorithm, document
+			// granularity on a dense-only algorithm, reranking when it is not
+			// configured). That is the caller's to correct, not a server fault
+			// — reporting it as 500 tells the user nothing and reads as an
+			// outage. Forward the server's own structured body instead.
+			if (($result['unsupported'] ?? false) === true) {
+				unset($result['unsupported']);
+				return new JSONResponse(
+					['success' => false] + $result,
+					Http::STATUS_UNPROCESSABLE_ENTITY,
+				);
+			}
 			return new JSONResponse([
 				'success' => false,
 				'error' => $result['error'],
@@ -401,6 +492,13 @@ class ApiController extends Controller {
 			'results' => $result['results'] ?? [],
 			'algorithm_used' => $result['algorithm_used'] ?? $algorithm,
 			'total_documents' => $result['total_documents'] ?? 0,
+			// Whether the rerank stage actually ran. NOT the same as what was
+			// requested: reranking degrades to retrieval order rather than
+			// failing, so a request with rerank=true can legitimately come back
+			// false (reranker down, timed out, or in its failure cooldown).
+			// Surfaced so the UI can say which ordering it is showing instead of
+			// silently implying the cross-encoder ran.
+			'reranked' => $result['reranked'] ?? false,
 		];
 
 		if ($includePcaBool) {
@@ -427,7 +525,11 @@ class ApiController extends Controller {
 				'error' => $status['error'],
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
-		return new JSONResponse(['success' => true, 'status' => $status]);
+
+		return new JSONResponse([
+			'success' => true,
+			'status' => $status,
+		]);
 	}
 
 	/**

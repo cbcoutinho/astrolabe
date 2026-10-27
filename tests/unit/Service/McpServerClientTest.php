@@ -586,4 +586,100 @@ final class McpServerClientTest extends TestCase {
 		$this->assertSame('offset=0&limit=50', $captured->getUri()->getQuery());
 		$this->assertSame('', (string)$captured->getBody());
 	}
+
+	// =========================================================================
+	// Search request body and 422 passthrough
+	// =========================================================================
+
+	/** @return array<string, mixed> the JSON body of the one request search() sends */
+	private function searchBody(callable $search): array {
+		$captured = null;
+		$this->httpClient->method('sendRequest')
+			->willReturnCallback(function (RequestInterface $r) use (&$captured): ResponseInterface {
+				$captured = $r;
+				return $this->makeResponse(200, json_encode(['results' => []]));
+			});
+		$search();
+		return json_decode((string)$captured->getBody(), true);
+	}
+
+	public function testUnifiedSearchOmitsRerankByDefault(): void {
+		$off = $this->searchBody(fn () => $this->client->searchForUnifiedSearch('q', 'tok'));
+		$this->assertArrayNotHasKey('rerank', $off);
+	}
+
+	public function testUnifiedSearchSendsRerankWhenOn(): void {
+		$on = $this->searchBody(fn () => $this->client->searchForUnifiedSearch('q', 'tok', rerank: true));
+		$this->assertTrue($on['rerank']);
+	}
+
+	public function testGranularityIsOnlySentWhenNotTheDefault(): void {
+		$body = $this->searchBody(fn () => $this->client->search('q', 'hybrid', 20, true, null, 'tok'));
+		$this->assertArrayNotHasKey('granularity', $body);
+	}
+
+	public function testDocumentGranularityIsSent(): void {
+		$body = $this->searchBody(fn () => $this->client->search('q', 'hybrid', 20, true, null, 'tok', granularity: 'document'));
+		$this->assertSame('document', $body['granularity']);
+	}
+
+	/**
+	 * A case search forces its own granularity even when the page sent one:
+	 * `+=` would have let the page's value win.
+	 */
+	public function testSarCaseSearchOverridesThePagesGranularity(): void {
+		$body = $this->searchBody(fn () => $this->client->search(
+			'q', 'semantic', 20, true, null, 'tok', sarCase: 101, granularity: 'document',
+		));
+		$this->assertSame('chunk', $body['granularity']);
+		$this->assertSame(0, $body['offset']);
+	}
+
+	public function test422KeepsOnlyErrorAndMessageAndCannotUnsetTheFlag(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(422, json_encode([
+			'error' => 'rerank_not_configured',
+			'message' => 'This server has no reranker.',
+			'unsupported' => false,
+			'internal' => 'not for the browser',
+		])));
+
+		$result = $this->client->search('q', 'hybrid', 20, true, null, 'tok', rerank: true);
+
+		$this->assertSame([
+			'error' => 'rerank_not_configured',
+			'unsupported' => true,
+			'message' => 'This server has no reranker.',
+		], $result);
+	}
+
+	public function test422WithoutAnErrorFieldGetsAFallback(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(422, 'not json'));
+
+		$result = $this->client->search('q', 'hybrid', 20, true, null, 'tok');
+
+		$this->assertSame(['error' => 'Request not supported by this server', 'unsupported' => true], $result);
+	}
+
+	/** Reranking reaches case searches too: they share the request body. */
+	public function testSarCaseSearchSendsRerank(): void {
+		$body = $this->searchBody(fn () => $this->client->search(
+			'q', 'hybrid', 20, true, null, 'tok', sarCase: 101, rerank: true,
+		));
+		$this->assertTrue($body['rerank']);
+	}
+
+	/**
+	 * A case search's 422 keeps its status, so the controller can pass it on,
+	 * and falls back to the `error` token when the body has no `message`.
+	 */
+	public function testSarCaseSearch422KeepsStatusAndServerError(): void {
+		$this->httpClient->method('sendRequest')->willReturn($this->makeResponse(422, json_encode([
+			'error' => 'unsupported_search_type',
+			'requested' => 'semantic',
+		])));
+
+		$result = $this->client->search('q', 'semantic', 20, true, null, 'tok', sarCase: 101);
+
+		$this->assertSame(['error' => 'unsupported_search_type', 'status' => 422], $result);
+	}
 }

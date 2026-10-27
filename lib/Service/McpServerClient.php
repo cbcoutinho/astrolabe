@@ -194,6 +194,15 @@ class McpServerClient {
 				// prior http_errors=true behaviour for callers that don't run
 				// their own error detection.
 				$statusCode = $response->getStatusCode();
+				// 422 is the exception: a well-formed request this deployment
+				// cannot serve (unsupported algorithm, document granularity on
+				// a dense-only algorithm, reranking when unconfigured). The
+				// server sends a structured, actionable body; turning it into a
+				// RuntimeException discards that and surfaces to the user as an
+				// opaque 500 that reads like an outage.
+				if ($statusCode === 422) {
+					return $this->unsupportedResponse($response);
+				}
 				if ($statusCode < 200 || $statusCode >= 300) {
 					throw new \RuntimeException("Unexpected HTTP $statusCode from MCP server");
 				}
@@ -211,6 +220,35 @@ class McpServerClient {
 	}
 
 	/**
+	 * A 422 from the MCP server: a well-formed request this deployment cannot
+	 * serve (unsupported algorithm, document granularity on a dense-only
+	 * algorithm, reranking when unconfigured). Its error is actionable, so it
+	 * is passed on instead of becoming an opaque 500.
+	 *
+	 * Only `error` and `message` are kept: they are what the UI shows, and
+	 * forwarding arbitrary server JSON to the browser is not. `unsupported`
+	 * is set here and cannot be overridden by the body.
+	 *
+	 * @return array{error: string, unsupported: true, message?: string}
+	 */
+	private function unsupportedResponse(ResponseInterface $response): array {
+		/** @var mixed $decoded */
+		$decoded = json_decode((string)$response->getBody(), true);
+		/** @var mixed $error */
+		$error = is_array($decoded) ? ($decoded['error'] ?? null) : null;
+		/** @var mixed $message */
+		$message = is_array($decoded) ? ($decoded['message'] ?? null) : null;
+		$result = [
+			'error' => is_string($error) ? $error : 'Request not supported by this server',
+			'unsupported' => true,
+		];
+		if (is_string($message)) {
+			$result['message'] = $message;
+		}
+		return $result;
+	}
+
+	/**
 	 * Convert a non-2xx response into a structured error array.
 	 *
 	 * Webhook-related methods set ``http_errors => false`` on the Guzzle
@@ -222,10 +260,11 @@ class McpServerClient {
 	 * this helper turns any non-2xx into an explicit error array.
 	 *
 	 * 428 → ``provisioning_required => true`` (mapped to a CTA in the UI).
+	 * 422 → the server's error, see {@see unsupportedResponse()}.
 	 * Any other non-2xx → generic error with the status code in the message.
 	 * 2xx → null (caller continues with the success path).
 	 *
-	 * @return array{error: string, provisioning_required?: true}|null
+	 * @return array{error: string, provisioning_required?: true, unsupported?: true, message?: string}|null
 	 */
 	private function detectErrorResponse(ResponseInterface $response): ?array {
 		$statusCode = $response->getStatusCode();
@@ -235,6 +274,16 @@ class McpServerClient {
 				'error' => $this->extractProvisioningMessage($response),
 				'provisioning_required' => true,
 			];
+		}
+
+		// 422 = well-formed request this server cannot serve (unsupported search
+		// algorithm, document granularity on a dense-only algorithm, reranking
+		// on a deployment without it). The server sends a structured, actionable
+		// body; collapsing it into "Unexpected HTTP 422" throws that away and
+		// surfaces to the user as an opaque 500. Pass the server's own error
+		// through so the caller can act on it.
+		if ($statusCode === 422) {
+			return $this->unsupportedResponse($response);
 		}
 
 		if ($statusCode < 200 || $statusCode >= 300) {
@@ -276,6 +325,7 @@ class McpServerClient {
 	 *   webhooks_enabled?: bool,
 	 *   supported_search_types?: list<string>,
 	 *   sar_available?: bool,
+	 *   rerank_available?: bool,
 	 *   uptime_seconds?: int,
 	 *   management_api_version?: string,
 	 *   error?: string
@@ -347,6 +397,10 @@ class McpServerClient {
 	 * @param int|null $sarCase Search for this SAR case instead: the same filters,
 	 *                          one row per document, paged by $offset, and logged in the case
 	 * @param int $offset Results to skip (SAR case searches only)
+	 * @param bool $rerank Request the cross-encoder rerank stage (opt-in per request)
+	 * @param string $fusion Hybrid fusion algorithm: "rrf" or "dbsf"
+	 * @param string $granularity Result shape: "chunk" (passages) or "document" (one row per doc)
+	 * @param float $minRelevance Server-side relevance cut in [0,1]; 0.0 = no filter
 	 * @return array{
 	 *   results?: array,
 	 *   pca_coordinates?: array,
@@ -354,7 +408,9 @@ class McpServerClient {
 	 *   total_documents?: int,
 	 *   error?: string,
 	 *   status?: int,
-	 *   timeout?: bool
+	 *   timeout?: bool,
+	 *   unsupported?: true,
+	 *   message?: string
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -371,13 +427,52 @@ class McpServerClient {
 		?array $pathPrefixes = null,
 		?int $sarCase = null,
 		int $offset = 0,
+		bool $rerank = false,
+		string $fusion = 'rrf',
+		string $granularity = 'chunk',
+		float $minRelevance = 0.0,
 	): array {
 		$requestBody = [
 			'query' => $query,
 			'algorithm' => $algorithm,
 			'limit' => min($limit, 50), // Enforce max limit
 			'include_pca' => $includePca,
+			// Fusion, granularity and min_relevance were accepted by the server
+			// but never sent from this page, so the admin's fusion choice, the
+			// document-granularity result shape, and the server-side relevance
+			// cut were all unreachable from the app's search UI. Sent
+			// explicitly now rather than relying on server defaults, so what
+			// the page requests is visible in one place.
+			//
+			// `fusion` matters beyond ranking: it selects which relevance curve
+			// `relevance_for()` applies, so omitting it pinned the reported
+			// relevance to the RRF-ordinal mapping regardless of configuration.
+			'fusion' => $fusion,
 		];
+
+		// Only sent when not the default, like min_relevance and rerank below:
+		// a server that predates the field never sees it on an ordinary search.
+		if ($granularity !== 'chunk') {
+			$requestBody['granularity'] = $granularity;
+		}
+
+		// Only sent when actually filtering. The server treats 0.0 as "no
+		// filter" anyway, but omitting it keeps the request identical to the
+		// previous behaviour for the default case.
+		if ($minRelevance > 0.0) {
+			$requestBody['min_relevance'] = $minRelevance;
+		}
+
+		// Cross-encoder rerank stage. Opt-in PER REQUEST: the MCP server's
+		// SEARCH_RERANK_ENABLED is only a capability gate, and `rerank` defaults
+		// to false server-side, so a server with reranking fully configured
+		// still returns fusion-ordered results unless this field is sent.
+		//
+		// Only sent when true. An older MCP server rejects unknown fields on
+		// some surfaces, and omitting it is exactly the previous behaviour.
+		if ($rerank) {
+			$requestBody['rerank'] = true;
+		}
 
 		// Add doc_types filter if specified
 		if ($docTypes !== null && count($docTypes) > 0) {
@@ -415,10 +510,10 @@ class McpServerClient {
 			// server's paged search and logs the query with them.
 			// One row per document, except for the dense-only algorithm, which
 			// cannot group chunks (the server answers 422 to that combination).
-			$options['json'] += [
-				'offset' => max(0, $offset),
-				'granularity' => $algorithm === 'semantic' ? 'chunk' : 'document',
-			];
+			// Assigned, not `+=`: the page's own granularity is already in the
+			// body, and a case search must override it.
+			$options['json']['offset'] = max(0, $offset);
+			$options['json']['granularity'] = $algorithm === 'semantic' ? 'chunk' : 'document';
 			$options['json']['include_pca'] = false;
 			$result = $this->sendPassingStatus(
 				fn (): ResponseInterface => $this->send('POST',
@@ -467,13 +562,16 @@ class McpServerClient {
 	 *     doc_type?: string,
 	 *     excerpt?: string,
 	 *     score?: float,
+	 *     relevance?: float,
 	 *     path?: string,
 	 *     board_id?: int,
 	 *     card_id?: int
 	 *   }>,
 	 *   total_found?: int,
 	 *   algorithm_used?: string,
-	 *   error?: string
+	 *   error?: string,
+	 *   unsupported?: true,
+	 *   message?: string
 	 * }
 	 *
 	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
@@ -487,6 +585,7 @@ class McpServerClient {
 		string $fusion = 'rrf',
 		float $scoreThreshold = 0.0,
 		?array $docTypes = null,
+		bool $rerank = false,
 	): array {
 		$body = [
 			'query' => $query,
@@ -498,6 +597,10 @@ class McpServerClient {
 			'include_pca' => false,
 			'include_chunks' => true,
 		];
+		// Only sent when on: a server without a reranker rejects it with a 422.
+		if ($rerank) {
+			$body['rerank'] = true;
+		}
 		// Restrict to admin-approved, installed source types when provided.
 		if ($docTypes !== null) {
 			$body['doc_types'] = $docTypes;
@@ -683,7 +786,7 @@ class McpServerClient {
 	 *
 	 * @param int $webhookId Webhook ID to delete
 	 * @param string $token OAuth bearer token
-	 * @return array{success?: bool, error?: string, provisioning_required?: true}
+	 * @return array{success?: bool, error?: string, provisioning_required?: true, unsupported?: true, message?: string}
 	 * @psalm-suppress PossiblyUnusedMethod — retained for the native-sync transition; slated for removal once native default is proven.
 	 */
 	public function deleteWebhook(int $webhookId, string $token): array {
@@ -914,8 +1017,10 @@ class McpServerClient {
 			/** @var mixed $data */
 			$data = json_decode((string)$response->getBody(), true);
 			if ($status < 200 || $status >= 300) {
+				// A readable `message` when the server sends one, else its
+				// `error` token (a 422 for an unsupported algorithm has only that).
 				/** @var mixed $message */
-				$message = is_array($data) ? ($data['message'] ?? null) : null;
+				$message = is_array($data) ? ($data['message'] ?? $data['error'] ?? null) : null;
 				// 4xx are the caller's answers (not found, conflict, ...) and reach
 				// the UI; a 5xx is the MCP server failing and needs a log line.
 				if ($status >= 500) {

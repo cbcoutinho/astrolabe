@@ -145,7 +145,37 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label for="mcp-minimum-score">{{ hasRelevance ? t('astrolabe', 'Minimum relevance') : t('astrolabe', 'Minimum relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
+								<label for="mcp-granularity">{{ t('astrolabe', 'Results per document') }}</label>
+								<select id="mcp-granularity" v-model="granularity" class="mcp-select">
+									<option value="chunk">
+										{{ t('astrolabe', 'Best passages — a long document may appear several times') }}
+									</option>
+									<!-- Dense-only search cannot group passages by document:
+										 the server answers that combination with a 422. -->
+									<option value="document" :disabled="algorithm === 'semantic'">
+										{{ t('astrolabe', 'One row per document') }}
+									</option>
+								</select>
+							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-server-relevance">{{ t('astrolabe', 'Server relevance cut') }}: {{ serverMinRelevance }}%</label>
+								<input
+									id="mcp-server-relevance"
+									v-model.number="serverMinRelevance"
+									type="range"
+									min="0"
+									max="100"
+									step="5"
+									class="mcp-score-slider"
+									aria-describedby="mcp-server-relevance-hint">
+								<p id="mcp-server-relevance-hint" class="mcp-option-hint">
+									{{ t('astrolabe', 'Applied by the server before the page is cut to the result limit, so a filtered search still returns a full page. Filters the search itself.') }}
+								</p>
+							</div>
+
+							<div class="mcp-option-group">
+								<label for="mcp-minimum-score">{{ hasRelevance ? t('astrolabe', 'Hide below relevance') : t('astrolabe', 'Hide below relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
 								<input
 									id="mcp-minimum-score"
 									v-model="scoreThreshold"
@@ -153,7 +183,11 @@
 									min="0"
 									max="100"
 									step="5"
-									class="mcp-score-slider">
+									class="mcp-score-slider"
+									aria-describedby="mcp-minimum-score-hint">
+								<p id="mcp-minimum-score-hint" class="mcp-option-hint">
+									{{ t('astrolabe', 'Hides rows from the results already returned. Does not fetch more, so raising it shortens the list.') }}
+								</p>
 							</div>
 
 							<div class="mcp-option-group">
@@ -266,6 +300,9 @@
 							{{ filteredResults.length }} {{ t('astrolabe', 'results') }}
 							<span v-if="filteredResults.length !== results.length" class="mcp-filter-info">
 								({{ results.length - filteredResults.length }} {{ t('astrolabe', 'filtered by score') }})
+							</span>
+							<span v-if="rerankedUsed" class="mcp-filter-info">
+								· {{ t('astrolabe', 'reranked') }}
 							</span>
 						</span>
 						<NcButton
@@ -788,6 +825,20 @@ export default {
 			pathPrefixes: [],
 			limit: 20,
 			scoreThreshold: 0,
+			// Result shape: 'chunk' (best-matching passages, a long document can
+			// occupy several rows) or 'document' (one row per document). The
+			// server supported this all along; this page never asked for it.
+			granularity: 'chunk',
+			// Server-side relevance cut, percent. NOT the same control as
+			// `scoreThreshold` below: this is sent to the server and applied
+			// before the trim to `limit`, so the page backfills with qualifying
+			// rows. `scoreThreshold` filters client-side over the rows already
+			// returned, so raising it shrinks the list.
+			serverMinRelevance: 0,
+			// Whether the LAST response was actually reranked. The server asks
+			// for it whenever it can, but reranking degrades to retrieval order
+			// instead of failing, so this reports what happened.
+			rerankedUsed: false,
 			loading: false,
 			error: null,
 			// A search still running after SLOW_SEARCH_MS, and one that timed
@@ -995,12 +1046,10 @@ export default {
 		// server returned rows in, so the filter always removes a suffix of the
 		// list rather than punching holes in it.
 		//
-		// Reranking is NOT required for any of this. This app never requests it
-		// (no `rerank` field is sent), and the server defaults it off, so today
-		// `rerank_score` is absent from every row and this falls through to
-		// `score` on every result. The branch is here so the filter keeps
-		// ranking on the better key if a rerank toggle is added later -- it must
-		// stay a fallback, never a requirement.
+		// Reranking is NOT required for any of this. Searches ask for it only
+		// when the server advertises `rerank_available`, and it degrades to
+		// retrieval order on failure, so `rerank_score` may be absent from some
+		// or all rows -- this must stay a fallback, never a requirement.
 		rankScore() {
 			return (r) => r.rerank_score ?? r.score ?? 0
 		},
@@ -1117,6 +1166,14 @@ export default {
 		algorithmOptions(opts) {
 			if (opts.length > 0 && !opts.some((opt) => opt.id === this.algorithm)) {
 				this.algorithm = opts[0].id
+			}
+		},
+
+		// Switching to dense-only search drops "One row per document", which
+		// it cannot serve, so the next search does not fail with a 422.
+		algorithm(value) {
+			if (value === 'semantic' && this.granularity === 'document') {
+				this.granularity = 'chunk'
 			}
 		},
 
@@ -1508,6 +1565,9 @@ export default {
 				this.loading = true
 				this.error = null
 				this.searchTimedOut = false
+				// A stale "reranked" label must not sit next to this search's
+				// error or results.
+				this.rerankedUsed = false
 				this.searched = true
 				this.coordinates = []
 				this.queryCoords = []
@@ -1539,6 +1599,19 @@ export default {
 					// Skip the PCA computation entirely when the admin has
 					// disabled the visualization panel.
 					include_pca: this.showVisualization,
+				}
+
+				// Result shape. 'document' asks for one row per document rather
+				// than per passage -- the shape 'which files mention X' wants.
+				params.granularity = this.granularity
+
+				// Server-side relevance cut. Distinct from the slider below,
+				// which is a client-side filter over what already came back:
+				// this one is applied BEFORE the server trims to `limit`, so a
+				// filtered request still returns a full page of qualifying rows
+				// instead of a short one. Only sent when actually filtering.
+				if (this.serverMinRelevance > 0) {
+					params.min_relevance = this.serverMinRelevance / 100
 				}
 
 				if (this.selectedDocTypes.length > 0) {
@@ -1587,6 +1660,9 @@ export default {
 							this.$refs.sarPanel?.load()
 						}
 					}
+					// What the server actually did, not what was asked for --
+					// reranking degrades to retrieval order rather than failing.
+					this.rerankedUsed = response.data.reranked === true
 					this.coordinates = response.data.coordinates_3d || []
 					this.queryCoords = response.data.query_coords || []
 
@@ -1619,7 +1695,9 @@ export default {
 						? this.t('astrolabe', 'The search did not finish in time. The embedding service may be starting up or unavailable. Try again shortly, or search by keyword, which does not need it.')
 						: this.t('astrolabe', 'The search did not finish in time. Try again shortly.')
 				} else if (err.response && err.response.data && err.response.data.error) {
-					this.error = err.response.data.error
+					// A 422 from the MCP server carries a readable `message`
+					// next to its machine-readable `error` token: show that.
+					this.error = err.response.data.message || err.response.data.error
 				} else if (err.response && err.response.status === 503) {
 					this.error = this.t('astrolabe', 'Search service unavailable. Please try again later.')
 				} else {
@@ -1701,7 +1779,7 @@ export default {
 			if (this.relevanceIsCalibrated(result)) {
 				return this.t('astrolabe', 'Relevance {pct}% — an estimated probability this result is relevant to your query. Relative to what was found: search always returns its best matches, even when nothing in your files answers the question.', { pct })
 			}
-			return this.t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. Enable reranking for a calibrated score.', { pct })
+			return this.t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. A reranker configured on the server would make it a calibrated score.', { pct })
 		},
 
 		// Clamped rather than trusting the [0,1] contract: an out-of-range value
@@ -1779,7 +1857,26 @@ export default {
 			// Plotly's pointIndex refers to the rendered trace data.
 			this._renderedResults = results
 
-			const scores = results.map((r) => r.score)
+			// Plot the same [0,1] number the list's relevance bar shows, so a row
+			// the list calls relevant is not a speck here. `score` is the raw
+			// retrieval value -- ~0.03 at most under RRF -- and sizing by it put
+			// every point at the minimum. `relevance` is the calibrated
+			// cross-encoder probability when the search was reranked. Older
+			// servers that do not send it fall back to the rank score
+			// (rerank_score ?? score) scaled across this page's range.
+			const { min, max } = this.scoreRange
+			// A row without a finite `relevance` is unknown, not 0% -- the same
+			// rule isRelevant applies -- so it falls back to the relative score
+			// and its hover says which number it shows. A non-finite fallback
+			// plots at 0 rather than as a NaN-sized marker.
+			const hasOwnRelevance = (r) => Number.isFinite(r.relevance)
+			const plotScore = (r) => {
+				const s = hasOwnRelevance(r)
+					? r.relevance
+					: (max > min ? (this.rankScore(r) - min) / (max - min) : 1)
+				return Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0
+			}
+			const scores = results.map(plotScore)
 
 			// Trace 1: Document results (always visible)
 			const documentTrace = {
@@ -1790,10 +1887,16 @@ export default {
 				type: 'scatter3d',
 				name: 'Documents',
 				visible: true,
+				// The score lines are prebuilt per point: the rerank line exists
+				// only for rows the reranker scored, which one shared
+				// hovertemplate cannot express.
 				customdata: results.map((r, i) => ({
 					title: r.title,
-					raw_score: r.original_score || r.score,
-					relative_score: r.score,
+					scores: [
+						`${hasOwnRelevance(r) ? 'Relevance' : 'Relative score'}: ${Math.round(scores[i] * 100)}%`,
+						...(Number.isFinite(r.rerank_score) ? [`Rerank score: ${r.rerank_score.toFixed(3)}`] : []),
+						`Retrieval score: ${(r.score ?? 0).toFixed(3)}`,
+					].join('<br>'),
 					x: coordinates[i][0],
 					y: coordinates[i][1],
 					z: coordinates[i][2],
@@ -1801,7 +1904,7 @@ export default {
 
 				hovertemplate:
 					'<b>%{customdata.title}</b><br>'
-					+ 'Raw Score: %{customdata.raw_score:.3f} (%{customdata.relative_score:.0%} relative)<br>'
+					+ '%{customdata.scores}<br>'
 					+ '(x=%{customdata.x}, y=%{customdata.y}, z=%{customdata.z})'
 					+ '<extra></extra>',
 
@@ -1815,13 +1918,13 @@ export default {
 				},
 
 				marker: {
-					size: results.map((r) => 4 + (Math.pow(r.score, 2) * 10)),
-					opacity: results.map((r) => 0.3 + (r.score * 0.7)),
+					size: scores.map((s) => 4 + (Math.pow(s, 2) * 10)),
+					opacity: scores.map((s) => 0.3 + (s * 0.7)),
 					color: scores,
 					colorscale: 'Viridis',
 					showscale: true,
 					colorbar: {
-						title: { text: 'Relative Score' },
+						title: { text: 'Relevance' },
 						x: 1.02,
 						xanchor: 'left',
 						thickness: 20,
@@ -2329,6 +2432,26 @@ export default {
 		margin-bottom: 8px;
 		color: var(--color-text-maxcontrast);
 	}
+}
+
+// Explanatory line under a control. Two of the relevance controls are easy to
+// confuse -- one filters the search, the other hides rows already returned --
+// so each says which it is rather than relying on the label alone.
+.mcp-option-hint {
+	margin: 6px 0 0;
+	font-size: 0.85em;
+	line-height: 1.4;
+	color: var(--color-text-maxcontrast);
+}
+
+.mcp-select {
+	width: 100%;
+	min-height: 34px;
+	padding: 4px 8px;
+	border: 2px solid var(--color-border-maxcontrast);
+	border-radius: var(--border-radius-large);
+	background-color: var(--color-main-background);
+	color: var(--color-main-text);
 }
 
 .mcp-checkbox-grid {

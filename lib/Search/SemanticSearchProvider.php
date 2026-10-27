@@ -42,6 +42,7 @@ class SemanticSearchProvider implements IProvider {
 	/** Seconds to cache the (non-user-specific) MCP status across keystrokes. */
 	private const STATUS_CACHE_TTL = 30;
 	private const STATUS_CACHE_KEY = 'mcp_status';
+	private const STATUS_CACHE_NAMESPACE = 'astrolabe_semantic_search';
 
 	public function __construct(
 		private McpServerClient $client,
@@ -179,9 +180,16 @@ class SemanticSearchProvider implements IProvider {
 			return SearchResult::complete($this->getName(), []);
 		}
 
+		// Rerank whenever the server advertises a reranker, as the Astrolabe
+		// search page does. The status is cached for STATUS_CACHE_TTL, so a
+		// server that dropped its reranker since rejects the request with a
+		// 422: retry once without rerank rather than show nothing. Only the
+		// 422 is retried; a timeout or outage would just fail twice.
+		$rerank = ($status['rerank_available'] ?? false) === true;
+
 		// Execute semantic search with OAuth token and admin settings
 		// Server extracts user_id from token - results filtered to that user's documents
-		$results = $this->client->searchForUnifiedSearch(
+		$search = fn (bool $withRerank): array => $this->client->searchForUnifiedSearch(
 			query: $term,
 			token: $accessToken,
 			limit: $effectiveLimit,
@@ -207,7 +215,14 @@ class SemanticSearchProvider implements IProvider {
 			// App.vue, relative to the best result, which is scale-invariant.
 			scoreThreshold: $algorithm === 'semantic' ? (float)$scoreThreshold / 100.0 : 0.0,
 			docTypes: $enabledDocTypes,
+			rerank: $withRerank,
 		);
+		$results = $search($rerank);
+		if ($rerank && ($results['unsupported'] ?? false) === true) {
+			// Drop the stale status so the next keystroke sees the reranker gone.
+			$this->cacheFactory->createDistributed(self::STATUS_CACHE_NAMESPACE)->remove(self::STATUS_CACHE_KEY);
+			$results = $search(false);
+		}
 
 		if (!empty($results['error'])) {
 			$this->logger->warning('Semantic search failed', [
@@ -257,7 +272,7 @@ class SemanticSearchProvider implements IProvider {
 	 * @return array Decoded MCP status payload (same shape as McpServerClient::getStatus)
 	 */
 	private function getCachedStatus(): array {
-		$cache = $this->cacheFactory->createDistributed('astrolabe_semantic_search');
+		$cache = $this->cacheFactory->createDistributed(self::STATUS_CACHE_NAMESPACE);
 		/** @var mixed $cached */
 		$cached = $cache->get(self::STATUS_CACHE_KEY);
 		if (is_array($cached)) {
@@ -277,7 +292,10 @@ class SemanticSearchProvider implements IProvider {
 	private function transformResult(array $result): SearchResultEntry {
 		$docType = $result['doc_type'] ?? 'unknown';
 		$title = $result['title'] ?? $this->l10n->t('Untitled');
-		$score = $result['score'] ?? 0;
+		// `relevance` (ADR-034) is a calibrated 0-1 value, reranked when the
+		// server reranks. The raw `score` of a fused search tops out near 0.033,
+		// which would print as "3% relevant".
+		$score = $result['relevance'] ?? $result['score'] ?? 0;
 		$id = isset($result['id']) ? (string)$result['id'] : null;
 		$mimeType = $result['mime_type'] ?? null;
 
