@@ -71,6 +71,9 @@ final class PactProviderStateController extends Controller {
 		if (!$this->config->getSystemValueBool(self::SYSTEM_FLAG, false)) {
 			return new JSONResponse([], Http::STATUS_NOT_FOUND);
 		}
+		if ($action !== 'setup' && $action !== 'teardown') {
+			return new JSONResponse(['error' => "Unknown action: $action"], Http::STATUS_BAD_REQUEST);
+		}
 		$setup = $action === 'setup';
 
 		switch ($state) {
@@ -88,7 +91,14 @@ final class PactProviderStateController extends Controller {
 				break;
 			case 'astrolabe has approved file and note for semantic search':
 				// Nothing disabled: files is core and the stack installs notes.
+				// The verifier's own narrowing goes too, in case a previous
+				// state's teardown never ran.
 				$this->appConfig->deleteKey(Application::APP_ID, AdminSettings::SETTING_DISABLED_SEARCH_SOURCES);
+				$this->config->deleteUserValue(
+					self::VERIFIER_USER,
+					Application::APP_ID,
+					SearchSources::USER_SETTING_DISABLED_SEARCH_SOURCES,
+				);
 				break;
 			case 'astrolabe has disabled all sources for semantic search':
 				if ($setup) {

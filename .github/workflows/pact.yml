@@ -167,6 +167,7 @@ jobs:
           occ() { docker compose -f provider/tests/e2e/docker-compose.yml exec -T -u www-data -e OC_PASS=admin app php occ "$@"; }
           occ config:system:set astrolabe.pact_state_endpoint_enabled --value=true --type=boolean
           token=$(occ user:auth-tokens:add --password-from-env admin | tail -n 1 | tr -d '[:space:]')
+          [ -n "$token" ] || { echo "::error::occ user:auth-tokens:add printed no app password"; exit 1; }
           echo "::add-mask::$token"
           echo "auth=admin:$token" >> "$GITHUB_OUTPUT"
 

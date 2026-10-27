@@ -50,10 +50,13 @@ final class CredentialsPactVerifyTest extends TestCase {
 		$brokerUser = getenv('PACT_USERNAME') ?: '';
 		$brokerPass = getenv('PACT_PASSWORD') ?: '';
 		$providerAuth = getenv('PACT_PROVIDER_AUTH') ?: '';
-		// pact.yml stands up a provider, so a missing URL there is a broken
+		// pact.yml stands up a provider, so anything missing there is a broken
 		// job, not a reason to skip and report green.
-		if (getenv('PACT_PROVIDER_REQUIRED') === 'true' && ($providerUrl === '' || $providerAuth === '')) {
-			$this->fail('PACT_PROVIDER_REQUIRED is set but PACT_PROVIDER_URL or PACT_PROVIDER_AUTH is not');
+		$required = ['PACT_PROVIDER_URL' => $providerUrl, 'PACT_PROVIDER_AUTH' => $providerAuth,
+			'PACT_BROKER' => $brokerUrl, 'PACT_USERNAME' => $brokerUser, 'PACT_PASSWORD' => $brokerPass];
+		$missing = array_keys(array_filter($required, fn (string $v): bool => $v === ''));
+		if (getenv('PACT_PROVIDER_REQUIRED') === 'true' && $missing !== []) {
+			$this->fail('PACT_PROVIDER_REQUIRED is set but these are not: ' . implode(', ', $missing));
 		}
 		// Require the broker creds too, so a broker-set-but-creds-missing CI
 		// skips cleanly rather than silently attempting unauthenticated access.

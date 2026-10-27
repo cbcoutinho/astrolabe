@@ -60,6 +60,15 @@ class PactProviderStateControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller->handle('no such state')->getStatus());
 	}
 
+	public function testRejectsAnUnknownActionWithoutTouchingState(): void {
+		$this->enable();
+		$this->credentialStorage->expects($this->never())->method($this->anything());
+
+		$response = $this->controller->handle('user alice has provisioned background-sync credentials', 'tear-down');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
+
 	public function testProvisionsAliceAndRemovesHerOnTeardown(): void {
 		$this->enable();
 		$state = 'user alice has provisioned background-sync credentials';
@@ -89,6 +98,8 @@ class PactProviderStateControllerTest extends TestCase {
 	public function testApprovedSourcesClearTheAdminDisabledSet(string $action): void {
 		$this->enable();
 		$this->appConfig->expects($this->once())->method('deleteKey')->with('astrolabe', 'disabled_search_sources');
+		$this->config->expects($this->once())->method('deleteUserValue')
+			->with('admin', 'astrolabe', 'user_disabled_search_sources');
 
 		$this->controller->handle('astrolabe has approved file and note for semantic search', $action);
 	}
