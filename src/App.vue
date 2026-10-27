@@ -1865,11 +1865,14 @@ export default {
 			// servers that do not send it fall back to the rank score
 			// (rerank_score ?? score) scaled across this page's range.
 			const { min, max } = this.scoreRange
+			// One mode for the whole page, so every point is on the same scale.
+			// A non-finite value plots at 0 rather than as a NaN-sized marker.
+			const useRelevance = this.hasRelevance
 			const plotScore = (r) => {
-				if (typeof r.relevance === 'number') {
-					return Math.min(1, Math.max(0, r.relevance))
-				}
-				return max > min ? (this.rankScore(r) - min) / (max - min) : 1
+				const s = useRelevance
+					? r.relevance
+					: (max > min ? (this.rankScore(r) - min) / (max - min) : 1)
+				return Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0
 			}
 			const scores = results.map(plotScore)
 
@@ -1889,7 +1892,7 @@ export default {
 					title: r.title,
 					scores: [
 						`Relevance: ${Math.round(scores[i] * 100)}%`,
-						...(typeof r.rerank_score === 'number' ? [`Rerank score: ${r.rerank_score.toFixed(3)}`] : []),
+						...(Number.isFinite(r.rerank_score) ? [`Rerank score: ${r.rerank_score.toFixed(3)}`] : []),
 						`Retrieval score: ${(r.score ?? 0).toFixed(3)}`,
 					].join('<br>'),
 					x: coordinates[i][0],
