@@ -115,7 +115,8 @@ class SearchCapabilities {
 	 * toggle. Fails CLOSED like {@see isSarAvailable()}: the server answers
 	 * `rerank: true` with a 422 when it cannot serve it, so an unreachable
 	 * server or one that predates the field gets retrieval ordering instead of
-	 * a failed search. Only a definite answer is cached.
+	 * a failed search. Only a definite answer is cached, so for up to CACHE_TTL
+	 * after a reranker is removed searches still ask for it and get a 422.
 	 */
 	public function isRerankAvailable(): bool {
 		$cache = $this->cacheFactory->createDistributed('astrolabe_search_caps');

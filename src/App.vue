@@ -150,7 +150,9 @@
 									<option value="chunk">
 										{{ t('astrolabe', 'Best passages — a long document may appear several times') }}
 									</option>
-									<option value="document">
+									<!-- Dense-only search cannot group passages by document:
+										 the server answers that combination with a 422. -->
+									<option value="document" :disabled="algorithm === 'semantic'">
 										{{ t('astrolabe', 'One row per document') }}
 									</option>
 								</select>
@@ -1162,6 +1164,14 @@ export default {
 		algorithmOptions(opts) {
 			if (opts.length > 0 && !opts.some((opt) => opt.id === this.algorithm)) {
 				this.algorithm = opts[0].id
+			}
+		},
+
+		// Switching to dense-only search drops "One row per document", which
+		// it cannot serve, so the next search does not fail with a 422.
+		algorithm(value) {
+			if (value === 'semantic' && this.granularity === 'document') {
+				this.granularity = 'chunk'
 			}
 		},
 
