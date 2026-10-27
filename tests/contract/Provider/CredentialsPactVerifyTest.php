@@ -96,10 +96,7 @@ final class CredentialsPactVerifyTest extends TestCase {
 		// Verify the consumer's main branch and whatever is deployed/released.
 		$selectors = (new ConsumerVersionSelectors())
 			->addSelector(new Selector(mainBranch: true))
-			->addSelector(new Selector(deployedOrReleased: true))
-			// TEMPORARY, reverted before merge: also verify the fixed pacts on
-			// nextcloud-mcp-server#1724's branch.
-			->addSelector(new Selector(branch: 'test/astrolabe-pact-states'));
+			->addSelector(new Selector(deployedOrReleased: true));
 
 		$broker = new Broker();
 		$broker
