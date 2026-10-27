@@ -113,13 +113,16 @@ jobs:
       # MariaDB + Redis; the MCP server is not needed). It is built from a
       # second checkout without dev dependencies, because the stack mounts the
       # checkout as the app and the verifier's pact-php/phpunit must not end up
-      # on Nextcloud's autoloader.
+      # on Nextcloud's autoloader. Like the verify step, these need the broker:
+      # without it there is nothing to verify, so they are skipped.
       - name: Checkout provider
+        if: ${{ env.PACT_BROKER != '' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: provider
 
       - name: Read package.json node and npm engines version
+        if: ${{ env.PACT_BROKER != '' }}
         uses: skjnldsv/read-package-engines-version-actions@06d6baf7d8f41934ab630e97d9e6c0bc9c9ac5e4 # v3
         id: versions
         with:
@@ -128,14 +131,17 @@ jobs:
           fallbackNpm: '^10'
 
       - name: Set up node ${{ steps.versions.outputs.nodeVersion }}
+        if: ${{ env.PACT_BROKER != '' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
 
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
+        if: ${{ env.PACT_BROKER != '' }}
         run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
 
       - name: Build provider app
+        if: ${{ env.PACT_BROKER != '' }}
         working-directory: provider
         env:
           CYPRESS_INSTALL_BINARY: 0
@@ -146,12 +152,16 @@ jobs:
           npm run build
 
       - name: Start provider (Nextcloud + astrolabe)
+        if: ${{ env.PACT_BROKER != '' }}
         timeout-minutes: 15
         run: docker compose -f provider/tests/e2e/docker-compose.yml up -d --wait app
 
       # Turn on the provider-state hook (TEST-ONLY, system config) and mint an
-      # admin app password for the verifier to authenticate with.
+      # admin app password for the verifier to authenticate with. The user must
+      # stay `admin`: the per-user state is seeded for
+      # PactProviderStateController::VERIFIER_USER.
       - name: Configure provider
+        if: ${{ env.PACT_BROKER != '' }}
         id: provider
         run: |
           occ() { docker compose -f provider/tests/e2e/docker-compose.yml exec -T -u www-data -e OC_PASS=admin app php occ "$@"; }

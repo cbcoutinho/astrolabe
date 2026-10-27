@@ -6,10 +6,14 @@ namespace OCA\Astrolabe\Tests\Unit\Controller;
 
 use OCA\Astrolabe\Controller\PactProviderStateController;
 use OCA\Astrolabe\Service\BackgroundSyncCredentialStorage;
+use OCA\Astrolabe\Service\SearchSources;
+use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserSession;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -110,5 +114,31 @@ class PactProviderStateControllerTest extends TestCase {
 
 		$this->controller->handle($state, 'setup');
 		$this->controller->handle($state, 'teardown');
+	}
+
+	public function testTheNarrowedVerifierSeesExactlyTheFileDocType(): void {
+		$this->enable();
+		$written = '';
+		$this->config->method('setUserValue')
+			->willReturnCallback(function (string $u, string $a, string $k, string $value) use (&$written): void {
+				$written = $value;
+			});
+		$this->controller->handle('astrolabe reports effective sources for a user who disabled notes');
+
+		// Read it back the way the capability does, with every source installed.
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturn($written);
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueString')->willReturn('[]');
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('isEnabledForUser')->willReturn(true);
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn(PactProviderStateController::VERIFIER_USER);
+		$session = $this->createMock(IUserSession::class);
+		$session->method('getUser')->willReturn($user);
+
+		$sources = new SearchSources($appManager, $appConfig, $config, $session);
+
+		$this->assertSame(['file'], $sources->effectiveEnabledDocTypes());
 	}
 }

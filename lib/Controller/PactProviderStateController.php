@@ -28,7 +28,8 @@ use OCP\IRequest;
  * flag `astrolabe.pact_state_endpoint_enabled` is true. That flag cannot be
  * set from the UI or app config, so the endpoint cannot be switched on by
  * accident in production. It is public because the verifier POSTs here
- * without credentials.
+ * without credentials. Never set the flag outside a throwaway CI stack:
+ * anyone who can reach the instance could then rewrite this app's settings.
  *
  * @psalm-suppress UnusedClass — routed via appinfo/routes.php.
  */
@@ -58,7 +59,8 @@ final class PactProviderStateController extends Controller {
 
 	/**
 	 * Teardown resets to the default rather than the prior value: the
-	 * provider stack is throwaway and starts from the defaults.
+	 * provider stack is throwaway and starts from the defaults. A state whose
+	 * setup already leaves the default in place has nothing to undo.
 	 *
 	 * @psalm-suppress PossiblyUnusedMethod — routed via appinfo/routes.php.
 	 */
@@ -101,7 +103,9 @@ final class PactProviderStateController extends Controller {
 				break;
 			case 'astrolabe reports effective sources for a user who disabled notes':
 				// The pact expects exactly ["file"], so narrow out every other
-				// installed source too, not just notes.
+				// installed source too, not just notes. `files` is the catalog
+				// key whose doc type is `file` (SearchSources::CATALOG); the
+				// unit test checks the result through SearchSources.
 				if ($setup) {
 					$this->config->setUserValue(
 						self::VERIFIER_USER,
