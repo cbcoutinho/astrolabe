@@ -74,10 +74,11 @@ test.describe('Astrolabe search options', () => {
 		await waitForIndexing()
 		await openSearch(page)
 
-		// Best passages: the long note matches in several of its chunks.
+		// Best passages: the long note matches in several of its chunks. This
+		// relies on the server's defaults (no relevance cut, no rerank) keeping
+		// at least two of them in a page of 20.
+		await resultLimit(page).fill('20')
 		await search(page)
-		// This relies on the server's defaults (no relevance cut, no rerank)
-		// keeping at least two of the note's passages in the first page.
 		await expect.poll(() => longNoteRows(page).count()).toBeGreaterThan(1)
 
 		await page.getByLabel('Results per document').selectOption('document')
@@ -126,6 +127,8 @@ test.describe('Astrolabe search options', () => {
 	})
 
 	test('a reranked search says so and shows calibrated relevance', async ({ authenticatedPage: page }) => {
+		// Mirrors ApiController::search()'s success body with the fields a
+		// reranked MCP response adds (see testRerankedSearchHonoursTheContract).
 		await page.route(/\/apps\/astrolabe\/api\/search\?/, (route) => route.fulfill({
 			status: 200,
 			contentType: 'application/json',
