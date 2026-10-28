@@ -557,6 +557,28 @@ final class McpServerClientTest extends TestCase {
 		$this->assertSame(3, $result['total_documents']);
 	}
 
+	/** Without a plot (fewer than two rows, or include_pca off) nothing is invented. */
+	public function testPageSearchWithoutAPlotAddsNoCoordinates(): void {
+		$this->httpClient->method('sendRequest')
+			->willReturn($this->makeResponse(200, json_encode(['results' => [], 'total_found' => 0])));
+
+		$result = $this->client->search('q', 'hybrid', 20, false, null, 'tok');
+
+		$this->assertArrayNotHasKey('coordinates_3d', $result);
+		$this->assertSame(0, $result['total_documents']);
+	}
+
+	/** An error passes through unmapped. */
+	public function testPageSearchErrorIsNotGivenATotal(): void {
+		$this->httpClient->method('sendRequest')
+			->willReturn($this->makeResponse(500, json_encode(['error' => 'boom'])));
+
+		$result = $this->client->search('q', 'hybrid', 20, true, null, 'tok');
+
+		$this->assertArrayHasKey('error', $result);
+		$this->assertArrayNotHasKey('total_documents', $result);
+	}
+
 	/**
 	 * The dense-only algorithm cannot group chunks per document (the server
 	 * answers 422), so a direct semantic case search asks for chunk rows. The
