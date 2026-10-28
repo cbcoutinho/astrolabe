@@ -403,7 +403,9 @@ class McpServerClient {
 	 * @param float $minRelevance Server-side relevance cut in [0,1]; 0.0 = no filter
 	 * @return array{
 	 *   results?: array,
-	 *   pca_coordinates?: array,
+	 *   coordinates_3d?: array,
+	 *   query_coords?: array,
+	 *   pca_variance?: array,
 	 *   algorithm_used?: string,
 	 *   total_documents?: int,
 	 *   error?: string,
@@ -413,7 +415,7 @@ class McpServerClient {
 	 *   message?: string
 	 * }
 	 *
-	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement, InvalidReturnType - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function search(
 		string $query,
@@ -531,14 +533,34 @@ class McpServerClient {
 			return $result;
 		}
 
-		return $this->sendAndDecode(
+		// /api/v1/search, not /api/v1/vector-viz/search: the latter never read
+		// `granularity`, so "One row per document" silently returned passages.
+		// This one serves the same filters plus grouping, and nests the plot
+		// under `pca_data`; lifted here so callers keep the flat shape.
+		$result = $this->sendAndDecode(
 			fn (): ResponseInterface => $this->send('POST',
-				$this->baseUrl . '/api/v1/vector-viz/search',
+				$this->baseUrl . '/api/v1/search',
 				$this->withUserAgent($options),
 			),
 			'Failed to execute search',
 			['query' => $query, 'algorithm' => $algorithm],
 		);
+		if (!isset($result['error'])) {
+			/** @var mixed $pca */
+			$pca = $result['pca_data'] ?? null;
+			unset($result['pca_data']);
+			if (is_array($pca)) {
+				$result += array_intersect_key($pca, array_flip(['coordinates_3d', 'query_coords', 'pca_variance']));
+			}
+			// An older server may omit total_found; count the rows rather than report 0 beside them.
+			/** @var mixed $rows */
+			$rows = $result['results'] ?? null;
+			/** @var mixed $found */
+			$found = $result['total_found'] ?? (is_array($rows) ? count($rows) : 0);
+			$result['total_documents'] = is_int($found) ? $found : 0;
+		}
+		/** @psalm-suppress InvalidReturnStatement, MixedReturnTypeCoercion - same runtime shape as the SAR branch above. */
+		return $result;
 	}
 
 	/**

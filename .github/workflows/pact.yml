@@ -13,9 +13,9 @@
 #   TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET  Tailscale github-runner OAuth client
 #   PACT_BROKER / PACT_USERNAME / PACT_PASSWORD  broker URL + basic auth
 #
-# NOTE: provider verification is gated on the provider-state endpoint described
-# in tests/contract/README.md, which is not yet implemented. Until it lands this
-# job verifies whatever state-less interactions exist and is a no-op otherwise.
+# provider-verify replays the pacts against this branch's astrolabe in the e2e
+# docker stack, seeding states through the provider-state hook
+# (tests/contract/README.md).
 
 name: Pact
 
@@ -109,9 +109,67 @@ jobs:
       - name: Install dependencies
         run: composer install --no-progress
 
-      # TODO: stand up Nextcloud + astrolabe as the provider and export
-      # PACT_PROVIDER_URL once the provider-state endpoint (tests/contract/
-      # README.md) exists. Until then the verify step skips (no PACT_PROVIDER_URL).
+      # The provider is this branch's astrolabe in the e2e stack (Nextcloud +
+      # MariaDB + Redis; the MCP server is not needed). It is built from a
+      # second checkout without dev dependencies, because the stack mounts the
+      # checkout as the app and the verifier's pact-php/phpunit must not end up
+      # on Nextcloud's autoloader. Like the verify step, these need the broker:
+      # without it there is nothing to verify, so they are skipped.
+      - name: Checkout provider
+        if: ${{ env.PACT_BROKER != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: provider
+
+      - name: Read package.json node and npm engines version
+        if: ${{ env.PACT_BROKER != '' }}
+        uses: skjnldsv/read-package-engines-version-actions@06d6baf7d8f41934ab630e97d9e6c0bc9c9ac5e4 # v3
+        id: versions
+        with:
+          path: provider
+          fallbackNode: '^22'
+          fallbackNpm: '^10'
+
+      - name: Set up node ${{ steps.versions.outputs.nodeVersion }}
+        if: ${{ env.PACT_BROKER != '' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.versions.outputs.nodeVersion }}
+
+      - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
+        if: ${{ env.PACT_BROKER != '' }}
+        run: npm i -g --ignore-scripts 'npm@${{ steps.versions.outputs.npmVersion }}' # NOSONAR (githubactions:S8543)
+
+      - name: Build provider app
+        if: ${{ env.PACT_BROKER != '' }}
+        working-directory: provider
+        env:
+          CYPRESS_INSTALL_BINARY: 0
+          PUPPETEER_SKIP_DOWNLOAD: true
+        run: |
+          composer install --no-dev --optimize-autoloader --no-progress
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Start provider (Nextcloud + astrolabe)
+        if: ${{ env.PACT_BROKER != '' }}
+        timeout-minutes: 15
+        run: docker compose -f provider/tests/e2e/docker-compose.yml up -d --wait app
+
+      # Turn on the provider-state hook (TEST-ONLY, system config) and mint an
+      # admin app password for the verifier to authenticate with. The user must
+      # stay `admin`: the per-user state is seeded for
+      # PactProviderStateController::VERIFIER_USER.
+      - name: Configure provider
+        if: ${{ env.PACT_BROKER != '' }}
+        id: provider
+        run: |
+          occ() { docker compose -f provider/tests/e2e/docker-compose.yml exec -T -u www-data -e OC_PASS=admin app php occ "$@"; }
+          occ config:system:set astrolabe.pact_state_endpoint_enabled --value=true --type=boolean
+          token=$(occ user:auth-tokens:add --password-from-env admin | tail -n 1 | tr -d '[:space:]')
+          [ -n "$token" ] || { echo "::error::occ user:auth-tokens:add printed no app password"; exit 1; }
+          echo "::add-mask::$token"
+          echo "auth=admin:$token" >> "$GITHUB_OUTPUT"
 
       - name: Join tailnet
         if: ${{ env.PACT_BROKER != '' }}
@@ -124,12 +182,23 @@ jobs:
       - name: Verify provider against broker pacts
         if: ${{ env.PACT_BROKER != '' }}
         env:
+          PACT_PROVIDER_URL: http://localhost:8080
+          PACT_PROVIDER_AUTH: ${{ steps.provider.outputs.auth }}
+          PACT_PROVIDER_REQUIRED: 'true'
           PACT_PROVIDER_VERSION: ${{ github.sha }}
           PACT_PROVIDER_BRANCH: ${{ github.head_ref || github.ref_name }}
           PACT_PUBLISH_RESULTS: ${{ github.ref == 'refs/heads/main' }}
         # Only the provider test here; the consumer pact is generated/published
         # by the consumer-publish job above.
         run: ./vendor/bin/phpunit -c tests/contract/phpunit.xml --filter CredentialsPactVerifyTest --colors=never
+
+      - name: Provider logs
+        if: failure()
+        run: docker compose -f provider/tests/e2e/docker-compose.yml logs --tail=300 app
+
+      - name: Tear down provider
+        if: always()
+        run: docker compose -f provider/tests/e2e/docker-compose.yml down -v --remove-orphans || true
 
   can-i-deploy:
     runs-on: ubuntu-latest

@@ -31,6 +31,7 @@ composer install                 # PHP 8.2+, pulls pact-foundation/pact-php
 export PACT_BROKER=https://pact-broker.internal.coutinho.io
 export PACT_USERNAME=...  PACT_PASSWORD=...
 export PACT_PROVIDER_URL=http://localhost:8080      # running Nextcloud
+export PACT_PROVIDER_AUTH=admin:<app password>      # see "Authentication" below
 composer test:contract
 ```
 
@@ -39,42 +40,60 @@ composer test:contract
 > are env-gated and simply skip when `PACT_BROKER`/creds are unset, so the rest
 > of the suite still runs without broker access.
 
-## REQUIRED: provider-state endpoint (not yet implemented)
+## Provider-state endpoint
 
 `CredentialsPactVerifyTest` points the verifier at a state-change endpoint that
-the verifier POSTs to before/after each interaction. **It is intentionally not
-implemented in this commit** — it mutates credential storage and must be built
-and reviewed against the running stack, not blind. Spec for the implementer:
+it POSTs to before and after each interaction. It is implemented in
+`lib/Controller/PactProviderStateController.php`.
 
-- **Route**: `POST /apps/astrolabe/api/v1/test/pact-provider-state`
-- **Guard (mandatory)**: handle only when a **system-config** flag is set, e.g.
-  `\OCP\IConfig::getSystemValueBool('astrolabe.pact_state_endpoint_enabled', false)`.
-  Return `404` otherwise. A system-config flag (config.php) cannot be toggled
-  from the UI, so it can never be enabled accidentally in production. Never wire
-  this to app-config or an env default.
+- **Route**: `POST /apps/astrolabe/api/v1/test/pact-provider-state`. It is
+  public, because the verifier sends no credentials there.
+- **Guard**: every request answers `404` unless the **system-config** flag
+  `astrolabe.pact_state_endpoint_enabled` is true:
+  `occ config:system:set astrolabe.pact_state_endpoint_enabled --value=true --type=boolean`.
+  A config.php flag cannot be toggled from the UI, so it can never be enabled
+  accidentally in production. Never wire it to app-config or an env default.
 - **Request body** (pact's `stateChangeAsBody`): `{ "consumer": "...",
-  "state": "...", "action": "setup" | "teardown", "params": { ... } }`
-- **Provider states the credentials pact declares** (must match verbatim — they
-  are defined on the consumer side in
-  `nextcloud-mcp-server/tests/contract/test_astrolabe_credentials_consumer.py`):
+  "state": "...", "action": "setup" | "teardown", "params": { ... } }`. An
+  unknown `state` answers `400`. A state the consumer adds without a handler
+  here then fails verification instead of replaying against unseeded data.
+- **Teardown resets to the default** rather than restoring a prior value. The
+  provider stack is throwaway and starts from the defaults.
 
-  | `state` string | `setup` action | `teardown` action |
-  |----------------|----------------|-------------------|
-  | `user alice has provisioned background-sync credentials` | `BackgroundSyncCredentialStorage::storeAppPassword('alice', <≥20-char dummy>)` so `hasAccess('alice')` is true and `getProvisionedAt('alice')` returns an int | `deleteAppPassword('alice')` |
-  | `user bob has no background-sync credentials` | `deleteAppPassword('bob')` (ensure none) | no-op |
+States, verbatim from the consumer tests in nextcloud-mcp-server
+(`tests/contract/test_astrolabe_credentials_consumer.py` and
+`test_astrolabe_capabilities_consumer.py`):
 
-  The endpoint must return HTTP 200 on success.
+| `state` string | `setup` | `teardown` |
+|----------------|---------|------------|
+| `user alice has provisioned background-sync credentials` | store a dummy app password for `alice` | delete it |
+| `user bob has no background-sync credentials` | delete `bob`'s app password | no-op |
+| `astrolabe has approved file and note for semantic search` | delete the `disabled_search_sources` app-config key, so nothing is disabled (the stack installs notes) | same |
+| `astrolabe has disabled all sources for semantic search` | disable every catalog source | delete the key |
+| `astrolabe reports effective sources for a user who disabled notes` | narrow the **verifying user** (`admin`) to `files` only. The pact expects exactly `["file"]` and does not pin who is asking | delete that user's preference |
 
-- **Provider states the OCS-capabilities pact declares** (defined consumer-side
-  in `nextcloud-mcp-server/tests/contract/test_astrolabe_capabilities_consumer.py`).
-  These gate `SearchSources`/`Capabilities` output, so setup sets the
-  `disabled_search_sources` app-config accordingly (and ensures the relevant
-  apps are installed) before the OCS endpoint is read:
+### Authentication
 
-  | `state` string | `setup` action | `teardown` action |
-  |----------------|----------------|-------------------|
-  | `astrolabe has approved file and note for semantic search` | ensure `files`/`notes` installed and not in `disabled_search_sources`, so `enabled_doc_types` ⊇ `["file", "note"]` | restore the prior `disabled_search_sources` value (delete the app-config key if it was unset) |
-  | `astrolabe has disabled all sources for semantic search` | set `disabled_search_sources` to every catalog source id, so `enabled_doc_types` is `[]` | restore the prior `disabled_search_sources` value (delete the app-config key if it was unset) |
+The pacts carry the consumer's placeholder credentials: `Bearer test-token`
+for the credentials endpoint, and none for OCS. Set `PACT_PROVIDER_AUTH` to
+`admin:<app password>`, and the verifier replaces the `Authorization` header
+with Basic auth for that user on every request.
+
+It must be an **app password** (`occ user:auth-tokens:add --password-from-env admin`).
+The credentials endpoint is admin-only, and only app-password auth is exempt
+from Nextcloud's CSRF check.
+
+### CI
+
+`pact.yml` → *Provider verification*:
+
+1. builds this branch's astrolabe without dev dependencies;
+2. starts the e2e stack's `app` service;
+3. sets the flag and mints the app password;
+4. runs the verifier with `PACT_PROVIDER_REQUIRED=true`, so a missing provider
+   fails the job instead of skipping it.
+
+Results are published on `main`.
 
 ## Consumer pacts (astrolabe -> MCP `/api/v1/*`)
 

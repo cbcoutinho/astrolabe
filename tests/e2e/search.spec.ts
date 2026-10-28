@@ -15,6 +15,7 @@
 
 import { test, expect } from './fixtures.ts'
 import { completeAuthorization } from './helpers/authorize.ts'
+import { waitForIndexing } from './helpers/indexing.ts'
 
 test.describe('Astrolabe search', () => {
 	test('search UI elements are visible', async ({ authenticatedPage: page }) => {
@@ -74,37 +75,7 @@ test.describe('Astrolabe search', () => {
 		await completeAuthorization(page)
 
 		// Step 2: Wait for vector sync to index the seeded test data.
-		// After auth, the MCP server discovers the user and begins indexing.
-		// Poll the MCP server's public API directly (no CSRF token needed).
-		// Use Node fetch (not page.request) to avoid sending browser cookies.
-		let pollCount = 0
-		await expect.poll(
-			async () => {
-				pollCount++
-				try {
-					const res = await fetch('http://localhost:8000/api/v1/vector-sync/status')
-					if (!res.ok) {
-						console.log(`vector-sync poll #${pollCount}: HTTP ${res.status}`)
-						return false
-					}
-					const data = await res.json()
-					// Log full response on first poll to capture API shape
-					if (pollCount === 1) {
-						console.log(`vector-sync poll #1 full response: ${JSON.stringify(data)}`)
-					}
-					// Field names changed in MCP server v0.68: indexed_count → indexed_documents,
-					// pending_count → pending_documents. Fallbacks can be removed once v0.68+ is the floor.
-					const indexed = data.indexed_documents ?? data.indexed_count ?? 0
-					const pending = data.pending_documents ?? data.pending_count ?? -1
-					console.log(`vector-sync poll #${pollCount}: indexed=${indexed} pending=${pending}`)
-					return indexed > 0 && pending === 0
-				} catch (e) {
-					console.log(`vector-sync poll #${pollCount} error: ${e instanceof Error ? e.message : String(e)}`)
-					return false
-				}
-			},
-			{ timeout: 240_000, intervals: [5_000] },
-		).toBe(true)
+		await waitForIndexing()
 
 		// Step 3: Navigate to the main search UI
 		await page.goto('/apps/astrolabe')

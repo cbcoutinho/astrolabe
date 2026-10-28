@@ -576,7 +576,7 @@ final class McpServerClientPactTest extends TestCase {
 
 		$request = (new ConsumerRequest())
 			->setMethod('POST')
-			->setPath('/api/v1/vector-viz/search')
+			->setPath('/api/v1/search')
 			->addHeader('Content-Type', 'application/json')
 			->setBody([
 				'query' => $matcher->like('leadership award'),
@@ -613,6 +613,62 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
+	 * "One row per document" (`granularity: document`) has no dense-only
+	 * implementation, so the server answers 422
+	 * `granularity_unsupported_for_algorithm` for a semantic search. The page
+	 * disables the option for semantic, but this pins the backstop: the client
+	 * passes the server's error through as `unsupported` rather than an opaque
+	 * failure.
+	 */
+	public function testSearchRejectsDocumentGranularityForSemantic(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/search')
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => $matcher->like('leadership award'),
+				// The fields under test -- pinned exactly.
+				'algorithm' => 'semantic',
+				'granularity' => 'document',
+				'limit' => $matcher->like(10),
+				'include_pca' => $matcher->boolean(false),
+				'fusion' => $matcher->like('rrf'),
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(422)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'error' => 'granularity_unsupported_for_algorithm',
+				'granularity' => 'document',
+				'algorithm' => 'semantic',
+				'supported_algorithms' => $matcher->eachLike('bm25'),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('the server advertises hybrid search support')
+			->uponReceiving('a semantic search request for one row per document')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->search(
+			'leadership award',
+			'semantic',
+			10,
+			false,
+			granularity: 'document',
+		);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame('granularity_unsupported_for_algorithm', $result['error'] ?? null);
+		$this->assertTrue($result['unsupported'] ?? null);
+	}
+
+	/**
 	 * Reranked search: astrolabe sends `rerank: true` whenever the server
 	 * advertises `rerank_available` (SearchCapabilities::isRerankAvailable),
 	 * and reads back `reranked` plus each row's `rerank_score` and calibrated
@@ -624,7 +680,7 @@ final class McpServerClientPactTest extends TestCase {
 
 		$request = (new ConsumerRequest())
 			->setMethod('POST')
-			->setPath('/api/v1/vector-viz/search')
+			->setPath('/api/v1/search')
 			->addHeader('Content-Type', 'application/json')
 			->setBody([
 				'query' => $matcher->like('leadership award'),
@@ -672,6 +728,60 @@ final class McpServerClientPactTest extends TestCase {
 		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
 		$this->assertTrue($result['reranked'] ?? null);
 		$this->assertIsFloat($result['results'][0]['rerank_score'] ?? null);
+	}
+
+	/**
+	 * The search page's plot: with `include_pca` the server nests the 3D
+	 * coordinates under `pca_data`, which McpServerClient::search() lifts to
+	 * the top-level `coordinates_3d`/`query_coords` the page draws.
+	 */
+	public function testPageSearchWithThePlotHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/search')
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => $matcher->like('leadership award'),
+				'algorithm' => $matcher->like('hybrid'),
+				'limit' => $matcher->like(10),
+				// The field under test -- pinned exactly.
+				'include_pca' => true,
+				'fusion' => $matcher->like('rrf'),
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'results' => $matcher->eachLike([
+					'id' => $matcher->integer(12),
+					'doc_type' => $matcher->like('note'),
+					'title' => $matcher->like('Award nominations'),
+					'score' => $matcher->number(0.0328),
+				]),
+				'total_found' => $matcher->integer(2),
+				'pca_data' => [
+					'coordinates_3d' => $matcher->eachLike($matcher->eachLike($matcher->number(0.12))),
+					'query_coords' => $matcher->eachLike($matcher->number(0.0)),
+				],
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('the server advertises hybrid search support')
+			->uponReceiving('a search page request with the 3D plot')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->search('leadership award', 'hybrid', 10, true);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertIsArray($result['coordinates_3d'] ?? null);
+		$this->assertIsArray($result['query_coords'] ?? null);
+		$this->assertSame(2, $result['total_documents'] ?? null);
 	}
 
 	/**

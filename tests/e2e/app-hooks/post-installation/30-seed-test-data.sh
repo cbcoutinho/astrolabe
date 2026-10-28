@@ -69,6 +69,70 @@ Notes on implementing semantic search for personal knowledge management.
 - Recursive character splitting is a good default approach
 NOTEEOF
 
+# Long enough (well over the MCP server's 2048-character chunks) to index as
+# several passages that all match a Kubernetes query, so search-options.spec.ts can
+# tell "one row per document" from "best passages".
+cat > "$NOTES_DIR/Kubernetes Cluster Operations Runbook.md" << 'NOTEEOF'
+# Kubernetes Cluster Operations Runbook
+
+## Upgrading the Kubernetes cluster
+Upgrade the Kubernetes cluster one minor version at a time. Drain each worker
+node with kubectl drain, upgrade the kubelet and container runtime, then
+uncordon the node and wait until every pod on it is ready before moving to the
+next node. Upgrade the control plane nodes first, one at a time, and confirm
+the API server, scheduler and controller manager are healthy after each one.
+Keep etcd snapshots from before the upgrade so the cluster can be restored if
+the control plane fails to come back. Read the release notes for removed API
+versions and migrate manifests before upgrading, because workloads that use a
+removed API version stop deploying after the upgrade. Schedule upgrades in a
+maintenance window and announce them to the teams that run workloads on the
+cluster, since draining nodes restarts their pods.
+
+## Scaling Kubernetes cluster nodes
+The cluster autoscaler adds worker nodes when pods are pending for lack of CPU
+or memory and removes nodes that stay underused. Set resource requests on every
+workload so the scheduler and the autoscaler can make good decisions; pods
+without requests are packed onto nodes until they run out of memory. Use pod
+disruption budgets so scale-down never evicts every replica of a service at
+once. Spread replicas across availability zones with topology spread
+constraints, and keep a small buffer of spare capacity so a node failure does
+not leave critical pods pending while a replacement node boots. Review node
+pool sizes every quarter against actual usage, and right-size instance types
+when nodes are consistently underused.
+
+## Kubernetes cluster networking
+The cluster uses a CNI plugin for pod networking and network policies to limit
+which pods may talk to each other. Every namespace starts with a default-deny
+ingress policy, and services open only the ports they need. Ingress
+controllers terminate TLS at the edge with certificates issued automatically by
+cert-manager. When pods cannot reach a service, check the service selector
+matches the pod labels, that the endpoints object lists ready pods, and that no
+network policy blocks the traffic. DNS problems inside the cluster usually come
+from an overloaded CoreDNS deployment, so scale it with the number of nodes and
+watch its error rate. Keep the pod and service CIDR ranges documented so they
+never overlap with office or VPN networks.
+
+## Kubernetes cluster storage
+Stateful workloads use persistent volume claims backed by the cluster's CSI
+driver. Choose a storage class with the right reclaim policy: Retain for
+databases, so deleting a claim never deletes the data, and Delete for scratch
+space. Back up persistent volumes with scheduled snapshots and test restoring
+them into a separate namespace every month. When a volume will not attach,
+check whether it is still attached to a node that went away; the CSI driver
+detaches it after a timeout, or an operator can force the detachment. Watch
+volume usage and expand claims before they fill up, since a full volume stops
+the database that uses it.
+
+## Kubernetes cluster incident response
+When the cluster is degraded, start with the control plane: check that the API
+server answers, that etcd has quorum, and that nodes report Ready. Then look at
+recent events for failed scheduling, image pull errors and crash loops. Roll
+back a bad deployment with kubectl rollout undo rather than editing it in
+place. Record every incident with a timeline, the impact, and the follow-up
+actions, and review them at the weekly operations meeting so the same failure
+does not happen twice.
+NOTEEOF
+
 # Scan files so Nextcloud knows about them
 php /var/www/html/occ files:scan admin
 
