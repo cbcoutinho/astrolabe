@@ -568,6 +568,16 @@ final class McpServerClientTest extends TestCase {
 		$this->assertSame(0, $result['total_documents']);
 	}
 
+	/** A server that omits total_found reports the rows it returned, not 0. */
+	public function testPageSearchWithoutTotalFoundCountsTheRows(): void {
+		$this->httpClient->method('sendRequest')
+			->willReturn($this->makeResponse(200, json_encode(['results' => [['id' => 1], ['id' => 2]]])));
+
+		$result = $this->client->search('q', 'hybrid', 20, false, null, 'tok');
+
+		$this->assertSame(2, $result['total_documents']);
+	}
+
 	/** An error passes through unmapped. */
 	public function testPageSearchErrorIsNotGivenATotal(): void {
 		$this->httpClient->method('sendRequest')

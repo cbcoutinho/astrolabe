@@ -552,8 +552,11 @@ class McpServerClient {
 			if (is_array($pca)) {
 				$result += array_intersect_key($pca, array_flip(['coordinates_3d', 'query_coords', 'pca_variance']));
 			}
+			// An older server may omit total_found; count the rows rather than report 0 beside them.
+			/** @var mixed $rows */
+			$rows = $result['results'] ?? null;
 			/** @var mixed $found */
-			$found = $result['total_found'] ?? 0;
+			$found = $result['total_found'] ?? (is_array($rows) ? count($rows) : 0);
 			$result['total_documents'] = is_int($found) ? $found : 0;
 		}
 		/** @psalm-suppress InvalidReturnStatement, MixedReturnTypeCoercion - same runtime shape as the SAR branch above. */
