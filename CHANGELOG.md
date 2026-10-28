@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.47.2 (2026-10-28)
+
+### Fix
+
+- **search**: count the rows when the server omits total_found
+- **search**: search the page through /api/v1/search so grouping applies
+
 ## v0.47.1 (2026-10-28)
 
 ### Fix

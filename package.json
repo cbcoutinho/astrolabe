@@ -1,6 +1,6 @@
 {
   "name": "astrolabe",
-  "version": "0.47.1",
+  "version": "0.47.2",
   "license": "AGPL-3.0-or-later",
   "engines": {
     "node": "^26.0.0",
