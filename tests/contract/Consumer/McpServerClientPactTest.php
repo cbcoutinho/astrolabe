@@ -576,7 +576,7 @@ final class McpServerClientPactTest extends TestCase {
 
 		$request = (new ConsumerRequest())
 			->setMethod('POST')
-			->setPath('/api/v1/vector-viz/search')
+			->setPath('/api/v1/search')
 			->addHeader('Content-Type', 'application/json')
 			->setBody([
 				'query' => $matcher->like('leadership award'),
@@ -624,7 +624,7 @@ final class McpServerClientPactTest extends TestCase {
 
 		$request = (new ConsumerRequest())
 			->setMethod('POST')
-			->setPath('/api/v1/vector-viz/search')
+			->setPath('/api/v1/search')
 			->addHeader('Content-Type', 'application/json')
 			->setBody([
 				'query' => $matcher->like('leadership award'),
