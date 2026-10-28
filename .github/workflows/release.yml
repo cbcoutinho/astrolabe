@@ -56,10 +56,16 @@ jobs:
           fi
           echo "Version validated: $INFO_VERSION"
 
-      - name: Setup Node
+      # Same engines source as ci.yml, so the App Store build runs on the
+      # Node version CI tested.
+      - name: Read package.json node and npm engines version
+        uses: skjnldsv/read-package-engines-version-actions@06d6baf7d8f41934ab630e97d9e6c0bc9c9ac5e4 # v3
+        id: versions
+
+      - name: Setup Node ${{ steps.versions.outputs.nodeVersion }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 26
+          node-version: ${{ steps.versions.outputs.nodeVersion }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
