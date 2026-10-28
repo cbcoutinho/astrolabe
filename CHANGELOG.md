@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.47.1 (2026-10-28)
+
+### Fix
+
+- **deps**: update react monorepo to v19.3.1
+
 ## v0.47.0 (2026-10-27)
 
 ### Feat
