@@ -994,6 +994,13 @@ class ApiController extends Controller {
 		], successStatus: Http::STATUS_CREATED);
 	}
 
+	/**
+	 * Nextcloud 34 rejects a `limit` above 500 before the controller runs (an
+	 * HTML 500) unless the parameter declares its own range. The page size is
+	 * clamped below, so any value is accepted here.
+	 *
+	 * @param int<min, max> $limit
+	 */
 	#[NoAdminRequired]
 	public function sarGet(int $id, int $offset = 0, int $limit = 200): JSONResponse {
 		// The MCP server's page is at most 1000 items.

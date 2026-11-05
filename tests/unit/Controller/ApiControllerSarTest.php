@@ -58,6 +58,32 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, 5, 50)->getStatus());
 	}
 
+	public function testGetClampsThePageToTheServerMaximum(): void {
+		$this->available();
+		$this->client->expects($this->once())
+			->method('sarCases')
+			->with('GET', '/101', 'alice-token', null, ['offset' => 0, 'limit' => 1000])
+			->willReturn(self::CASE);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, 0, 5000)->getStatus());
+	}
+
+	/**
+	 * Nextcloud 34's Dispatcher rejects an int `limit` outside 1..500 before
+	 * the controller runs unless the docblock declares a range (matched with
+	 * ControllerMethodReflector's pattern). The panel pages by 1000.
+	 */
+	public function testGetDeclaresARangeForLimitSoNextcloudAcceptsAPageOf1000(): void {
+		$doc = (string)(new \ReflectionMethod($this->controller, 'sarGet'))->getDocComment();
+
+		$this->assertMatchesRegularExpression(
+			'/@(?:psalm-)?param\h+int<(-?\d+|min),\h*(-?\d+|max)>\h+\$limit/',
+			$doc,
+		);
+		preg_match('/int<(-?\d+|min),\h*(-?\d+|max)>\h+\$limit/', $doc, $m);
+		$this->assertTrue($m[2] === 'max' || (int)$m[2] >= 1000);
+	}
+
 	public function testUpdateSendsOnlyGivenFields(): void {
 		$this->available();
 		$this->client->expects($this->once())
