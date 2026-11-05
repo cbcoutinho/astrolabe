@@ -79,9 +79,10 @@ test.describe('Astrolabe admin connection settings', () => {
 		await page.getByLabel('Webhook shared secret', { exact: true }).fill(WEBHOOK_SECRET)
 		await page.getByRole('button', { name: 'Save', exact: true }).first().click()
 
-		// exact: the toast is also mirrored, prefixed "Success: ", into an
-		// aria-live list for screen readers.
-		await expect(page.getByText('Connection settings saved', { exact: true })).toBeVisible()
+		// Anchored at the start, not exact: the toast's text now includes its
+		// close button ("Connection settings saved✖"), and it is also mirrored,
+		// prefixed "Success: ", into an aria-live list for screen readers.
+		await expect(page.getByText(/^Connection settings saved/)).toBeVisible()
 		await page.reload()
 		await expect(page.getByLabel('MCP Server URL (internal)')).toHaveValue(original, { timeout: 30_000 })
 		await expect(page.getByLabel('Webhook shared secret', { exact: true })).toHaveAttribute('placeholder', 'Configured — leave blank to keep')
