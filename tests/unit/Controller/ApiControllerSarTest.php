@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
 use OCP\AppFramework\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * SAR case proxy (ApiController::sar*): gated on the MCP server's advertised
@@ -56,6 +57,40 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 			->willReturn(self::CASE);
 
 		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, 5, 50)->getStatus());
+	}
+
+	#[DataProvider('clampedPages')]
+	public function testGetClampsThePageToWhatTheServerServes(int $offset, int $limit, array $sent): void {
+		$this->available();
+		$this->client->expects($this->once())
+			->method('sarCases')
+			->with('GET', '/101', 'alice-token', null, $sent)
+			->willReturn(self::CASE);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, $offset, $limit)->getStatus());
+	}
+
+	public static function clampedPages(): array {
+		return [
+			'above the maximum' => [0, 5000, ['offset' => 0, 'limit' => 1000]],
+			'zero limit, negative offset' => [-3, 0, ['offset' => 0, 'limit' => 1]],
+		];
+	}
+
+	/**
+	 * Nextcloud 34's Dispatcher rejects an int `limit` outside 1..500 before
+	 * the controller runs unless the docblock declares a range (matched with
+	 * ControllerMethodReflector's pattern). The panel pages by 1000.
+	 */
+	public function testGetDeclaresARangeForLimitSoNextcloudAcceptsAPageOf1000(): void {
+		$doc = (string)(new \ReflectionMethod($this->controller, 'sarGet'))->getDocComment();
+
+		$this->assertSame(
+			1,
+			preg_match('/@(?:psalm-)?param\h+int<(-?\d+|min),\h*(-?\d+|max)>\h+\$limit/', $doc, $m),
+			'sarGet must declare a range for $limit',
+		);
+		$this->assertTrue($m[2] === 'max' || (int)$m[2] >= 1000);
 	}
 
 	public function testUpdateSendsOnlyGivenFields(): void {
