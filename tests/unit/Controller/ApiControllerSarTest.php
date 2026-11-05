@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
 use OCP\AppFramework\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * SAR case proxy (ApiController::sar*): gated on the MCP server's advertised
@@ -58,14 +59,22 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, 5, 50)->getStatus());
 	}
 
-	public function testGetClampsThePageToTheServerMaximum(): void {
+	#[DataProvider('clampedPages')]
+	public function testGetClampsThePageToWhatTheServerServes(int $offset, int $limit, array $sent): void {
 		$this->available();
 		$this->client->expects($this->once())
 			->method('sarCases')
-			->with('GET', '/101', 'alice-token', null, ['offset' => 0, 'limit' => 1000])
+			->with('GET', '/101', 'alice-token', null, $sent)
 			->willReturn(self::CASE);
 
-		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, 0, 5000)->getStatus());
+		$this->assertSame(Http::STATUS_OK, $this->controller->sarGet(101, $offset, $limit)->getStatus());
+	}
+
+	public static function clampedPages(): array {
+		return [
+			'above the maximum' => [0, 5000, ['offset' => 0, 'limit' => 1000]],
+			'zero limit, negative offset' => [-3, 0, ['offset' => 0, 'limit' => 1]],
+		];
 	}
 
 	/**
@@ -76,11 +85,11 @@ final class ApiControllerSarTest extends AbstractApiControllerTestCase {
 	public function testGetDeclaresARangeForLimitSoNextcloudAcceptsAPageOf1000(): void {
 		$doc = (string)(new \ReflectionMethod($this->controller, 'sarGet'))->getDocComment();
 
-		$this->assertMatchesRegularExpression(
-			'/@(?:psalm-)?param\h+int<(-?\d+|min),\h*(-?\d+|max)>\h+\$limit/',
-			$doc,
+		$this->assertSame(
+			1,
+			preg_match('/@(?:psalm-)?param\h+int<(-?\d+|min),\h*(-?\d+|max)>\h+\$limit/', $doc, $m),
+			'sarGet must declare a range for $limit',
 		);
-		preg_match('/int<(-?\d+|min),\h*(-?\d+|max)>\h+\$limit/', $doc, $m);
 		$this->assertTrue($m[2] === 'max' || (int)$m[2] >= 1000);
 	}
 
