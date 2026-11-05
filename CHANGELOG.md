@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.47.4 (2026-11-05)
+
+### Fix
+
+- **sar**: accept the case panel's page size on Nextcloud 34
+
 ## v0.47.3 (2026-10-30)
 
 ### Fix
