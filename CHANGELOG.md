@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.47.5 (2026-11-06)
+
+### Fix
+
+- **mcp**: pin MCP protocol 2025-11-25 under mcp/sdk 0.9
+- **deps**: drop mcp/sdk CRLF SSE patch, fixed upstream in 0.9.0
+- **deps**: update dependency mcp/sdk to ^0.9.0
+
 ## v0.47.4 (2026-11-05)
 
 ### Fix
