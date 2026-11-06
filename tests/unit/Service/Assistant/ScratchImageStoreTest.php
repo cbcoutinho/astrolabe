@@ -125,8 +125,8 @@ final class ScratchImageStoreTest extends TestCase {
 	}
 
 	/**
-	 * The token names a path segment and comes from stored task data, so anything
-	 * outside the expected alphabet must be refused rather than normalised.
+	 * Wiring: discard() goes through the token guard before touching storage.
+	 * The guard itself is covered by the properties below.
 	 */
 	public function testDiscardRefusesAMalformedToken(): void {
 		$scratchRoot = $this->createMock(Folder::class);
@@ -167,7 +167,13 @@ final class ScratchImageStoreTest extends TestCase {
 			},
 			Generators::tuple(Generators::seq($valid), $junk, Generators::elements('start', 'end', 'middle')),
 		);
-		$this->forAll(Generators::oneOf($mixed, $nearMiss))
+		// Valid characters only, any length: the only shape that probes the
+		// length bound, since everything else is rejected for its characters.
+		$anyLength = Generators::map(
+			static fn (array $c): string => implode('', $c),
+			Generators::seq($valid),
+		);
+		$this->forAll(Generators::oneOf($mixed, $nearMiss, $anyLength))
 			->then(function (string $token): void {
 				try {
 					ScratchImageStore::assertToken($token);
@@ -176,6 +182,9 @@ final class ScratchImageStoreTest extends TestCase {
 					return;
 				}
 				$this->assertSame(0, preg_match('/[\/\\\\.\0\s]/', $token), $token);
+				// Redundant with today's regex, which is the point: it fails if
+				// the length bound is ever loosened.
+				$this->assertLessThanOrEqual(64, strlen($token));
 			});
 	}
 

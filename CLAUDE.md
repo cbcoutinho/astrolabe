@@ -98,7 +98,11 @@ controller/service tests stay example-based.
   exhausts memory.
 - **Check the property isn't vacuous**: bias generators (`frequency`) so that
   inputs actually reach the branch being checked, and break the code once
-  on purpose to see that the property fails.
+  on purpose to see that the property fails. For a validator, sample the
+  generator (`Eris\Sample`) and count accepted versus rejected inputs. Also
+  generate the near-misses an off-by-one or anchoring bug would let through,
+  such as a valid value plus one bad character or a valid alphabet at any
+  length. Uniformly random input almost never produces them.
 - **Reproduce a failure with the printed seed**:
   `ERIS_SEED=<seed> vendor/bin/phpunit -c tests/unit/phpunit.xml --filter <test>`.
 - Logic buried in a service with injected dependencies should be extracted into
