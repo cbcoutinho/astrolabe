@@ -218,6 +218,9 @@ final class CitationCollector {
 	 * the list item mid-link. Whitespace runs collapse to one space, and the
 	 * backslash is escaped along with the others so an escape never pairs with a
 	 * character the title already had.
+	 *
+	 * This guards the link's structure only: `*`, `_` or `<` in a title can still
+	 * render as emphasis or inline HTML inside the label, which is cosmetic.
 	 */
 	public static function linkLabel(string $title): string {
 		return addcslashes(preg_replace('/\s+/', ' ', $title) ?? $title, '\\[]`');
