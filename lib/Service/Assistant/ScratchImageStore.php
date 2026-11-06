@@ -143,7 +143,7 @@ class ScratchImageStore {
 	}
 
 	private function folderFor(string $userId, string $token, bool $create): Folder {
-		$safeToken = $this->assertToken($token);
+		$safeToken = self::assertToken($token);
 		$root = $this->scratchRoot($userId, $create);
 
 		if ($root->nodeExists($safeToken)) {
@@ -178,8 +178,10 @@ class ScratchImageStore {
 	 * Tokens reach this class from a task's customId, which is stored data rather
 	 * than something we generated this request — so it is re-validated as
 	 * lowercase alphanumerics before ever being used as a path segment.
+	 *
+	 * @throws NotFoundException for anything else
 	 */
-	private function assertToken(string $token): string {
+	public static function assertToken(string $token): string {
 		if (preg_match('/^[a-z0-9]{8,64}$/', $token) !== 1) {
 			throw new NotFoundException('malformed scratch token');
 		}

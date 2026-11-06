@@ -180,47 +180,10 @@ final class AgentLoopTest extends TestCase {
 	}
 
 	/**
-	 * @dataProvider toolCallShapes
-	 */
-	public function testAcceptsTheToolCallShapesProvidersActuallyEmit(string $toolCallsJson): void {
-		$this->withModelTurns([
-			['output' => '', 'tool_calls' => $toolCallsJson],
-			['output' => 'answered', 'tool_calls' => ''],
-		]);
-		$this->client->expects($this->once())
-			->method('callTool')
-			->with('nc_semantic_search', ['query' => 'kubernetes'])
-			->willReturn(new CallToolResult([new TextContent('result')]));
-
-		$this->assertSame('answered', $this->loop()->run('alice', 'q', [])['output']);
-	}
-
-	/**
-	 * @return array<string, array{string}>
-	 */
-	public static function toolCallShapes(): array {
-		return [
-			'args key (integration_openai)' => [
-				json_encode([['name' => 'nc_semantic_search', 'args' => ['query' => 'kubernetes']]]),
-			],
-			'arguments key' => [
-				json_encode([['name' => 'nc_semantic_search', 'arguments' => ['query' => 'kubernetes']]]),
-			],
-			'nested under function' => [
-				json_encode([['function' => ['name' => 'nc_semantic_search', 'arguments' => ['query' => 'kubernetes']]]]),
-			],
-			'arguments as a JSON string' => [
-				json_encode([['name' => 'nc_semantic_search', 'arguments' => '{"query":"kubernetes"}']]),
-			],
-			'wrapped in a tool_calls object' => [
-				json_encode(['tool_calls' => [['name' => 'nc_semantic_search', 'args' => ['query' => 'kubernetes']]]]),
-			],
-		];
-	}
-
-	/**
 	 * A model's tool_calls is free-form text until proven otherwise, so garbage
-	 * must cost one observation rather than the whole turn.
+	 * must cost one observation rather than the whole turn. The shapes the parser
+	 * accepts and drops are covered by ToolCallParserTest's properties; these pin
+	 * the loop's handling of each outcome.
 	 *
 	 * @dataProvider malformedToolCalls
 	 */
@@ -237,11 +200,7 @@ final class AgentLoopTest extends TestCase {
 	public static function malformedToolCalls(): array {
 		return [
 			'not json' => ['<tool>search</tool>'],
-			'json scalar' => ['"nope"'],
 			'entry without a name' => ['[{"args":{"query":"x"}}]'],
-			'entry with an empty name' => ['[{"name":"","args":{}}]'],
-			'entry that is not an object' => ['["nc_semantic_search"]'],
-			'empty string' => [''],
 		];
 	}
 

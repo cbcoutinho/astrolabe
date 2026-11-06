@@ -93,6 +93,12 @@ controller/service tests stay example-based.
 - **Pin every bug a property found as a plain example test.** Eris has no
   `@example` and no failure database, so a fixed bug is otherwise only re-found
   by chance.
+- **Cap the size of nested generators** with `->withMaxSize(n)`: Eris sizes
+  every nested `seq` independently (default 200), so `seq` of `seq` of `text`
+  exhausts memory.
+- **Check the property isn't vacuous**: bias generators (`frequency`) so that
+  inputs actually reach the branch being checked, and break the code once
+  on purpose to see that the property fails.
 - **Reproduce a failure with the printed seed**:
   `ERIS_SEED=<seed> vendor/bin/phpunit -c tests/unit/phpunit.xml --filter <test>`.
 - Logic buried in a service with injected dependencies should be extracted into
