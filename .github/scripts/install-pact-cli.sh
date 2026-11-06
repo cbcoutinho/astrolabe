@@ -11,15 +11,17 @@ set -euo pipefail
 # renovate.json extends config:best-practices, which includes
 # helpers:pinGitHubActionDigests, and that action derives the binary version
 # from github.action_ref — a digest-pinned ref matches no vX.Y.Z pattern and
-# silently falls through to releases/latest. The URL below is renovate-managed
-# via the customManager in renovate.json.
+# silently falls through to releases/latest. The version and installer digest
+# below are renovate-managed via the customManager in renovate.json.
 #
 # The installer is downloaded, checksum-verified, and only then executed. It
 # used to be piped straight into `sh` from three separate workflow steps, which
 # executed unverified remote code and allowed a redirect to drop to plain HTTP
 # (githubactions:S8482 / S6506). Renovate bumps PACT_INSTALLER_SHA256 together
 # with PACT_CLI_VERSION (github-release-attachments digest), so keep the three
-# lines below adjacent and in this order. To verify by hand:
+# lines below adjacent and in this order. The digest must be the SHA-256 of the
+# published pact-installer.sh release asset: Renovate finds the new digest by
+# matching it to an asset, so any other hash stops the bump. To verify by hand:
 #
 #   curl -fsSL https://github.com/pact-foundation/pact-cli/releases/download/<ver>/pact-installer.sh | sha256sum
 
