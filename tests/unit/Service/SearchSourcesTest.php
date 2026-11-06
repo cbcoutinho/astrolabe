@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Service;
 
+use Eris\Generators;
+use Eris\TestTrait;
 use OCA\Astrolabe\Service\SearchSources;
 use OCA\Astrolabe\Settings\Admin;
 use OCP\App\IAppManager;
@@ -21,6 +23,8 @@ use PHPUnit\Framework\TestCase;
  * disabled-set; the disabled-set is stored (so the default is "all allowed").
  */
 final class SearchSourcesTest extends TestCase {
+	use TestTrait;
+
 	private IAppManager&MockObject $appManager;
 	private IAppConfig&MockObject $appConfig;
 	private IConfig&MockObject $config;
@@ -146,19 +150,50 @@ final class SearchSourcesTest extends TestCase {
 		$this->assertSame(['files'], $sources->getDisabledSources());
 	}
 
-	public function testDocTypesForSourcesFlattensAndDedupes(): void {
-		$this->assertSame(
-			['note', 'file', 'deck_card'],
-			SearchSources::docTypesForSources(['notes', 'files', 'deck']),
-		);
-		$this->assertSame([], SearchSources::docTypesForSources([]));
+	/** Catalog ids mixed with the junk a stored config or request can carry. */
+	private static function rawSourceIds(): \Eris\Generator {
+		return Generators::seq(Generators::oneOf(
+			Generators::elements(array_keys(SearchSources::CATALOG)),
+			Generators::elements('nope', 'Notes', '', 'note'),
+			Generators::int(),
+			Generators::constant(null),
+		));
 	}
 
-	public function testNormalizeSourceIdsFiltersAndDedupes(): void {
-		$this->assertSame(
-			['notes', 'files'],
-			SearchSources::normalizeSourceIds(['notes', 'files', 'notes', 'nope', 42]),
-		);
+	/**
+	 * For any input, normalizing keeps each valid id once, drops everything
+	 * else, and is idempotent.
+	 */
+	public function testNormalizeSourceIdsKeepsEachValidIdOnce(): void {
+		$this->forAll(self::rawSourceIds())->then(function (array $raw): void {
+			$ids = SearchSources::normalizeSourceIds($raw);
+
+			$this->assertSame(array_values(array_unique($ids)), $ids);
+			$valid = array_filter($raw, static fn ($id) => is_string($id) && isset(SearchSources::CATALOG[$id]));
+			$this->assertEqualsCanonicalizing(array_values(array_unique($valid)), $ids);
+			$this->assertSame($ids, SearchSources::normalizeSourceIds($ids));
+		});
+	}
+
+	/**
+	 * For any set of sources, the doc types are exactly theirs, each once, and
+	 * each maps back to one of those sources.
+	 */
+	public function testDocTypesForSourcesIsTheInverseOfSourceForDocType(): void {
+		$this->forAll(self::rawSourceIds())->then(function (array $raw): void {
+			$ids = SearchSources::normalizeSourceIds($raw);
+			$docTypes = SearchSources::docTypesForSources($ids);
+
+			$this->assertSame(array_values(array_unique($docTypes)), $docTypes);
+			foreach ($docTypes as $docType) {
+				$this->assertContains(SearchSources::sourceForDocType($docType), $ids);
+			}
+			foreach ($ids as $id) {
+				foreach (SearchSources::CATALOG[$id]['docTypes'] as $docType) {
+					$this->assertContains($docType, $docTypes);
+				}
+			}
+		});
 	}
 
 	// --- Per-user narrowing -------------------------------------------------
