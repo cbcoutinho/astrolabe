@@ -87,6 +87,8 @@ final class ToolCallParserTest extends TestCase {
 			PropertyGenerators::text(),
 			Generators::suchThat(static fn (string $s): bool => $s !== '', PropertyGenerators::text()),
 			Generators::map(self::assoc(...), Generators::seq(Generators::tuple(
+				// No digits: PHP turns a numeric-string key into an int, which would
+				// make the round-trip comparison fail for reasons outside the parser.
 				PropertyGenerators::text(['q', 'x', '_']),
 				Generators::oneOf(PropertyGenerators::text(), Generators::int(), Generators::bool()),
 			))),

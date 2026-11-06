@@ -177,12 +177,13 @@ class ScratchImageStore {
 	/**
 	 * Tokens reach this class from a task's customId, which is stored data rather
 	 * than something we generated this request — so it is re-validated as
-	 * lowercase alphanumerics before ever being used as a path segment.
+	 * lowercase alphanumerics before ever being used as a path segment. Anchored
+	 * with `\z`, not `$`, which also matches before a trailing newline.
 	 *
 	 * @throws NotFoundException for anything else
 	 */
 	public static function assertToken(string $token): string {
-		if (preg_match('/^[a-z0-9]{8,64}$/', $token) !== 1) {
+		if (preg_match('/^[a-z0-9]{8,64}\z/', $token) !== 1) {
 			throw new NotFoundException('malformed scratch token');
 		}
 		return $token;

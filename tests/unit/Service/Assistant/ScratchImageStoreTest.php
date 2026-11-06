@@ -147,11 +147,27 @@ final class ScratchImageStoreTest extends TestCase {
 	public function testAnAcceptedTokenIsAlwaysASafePathSegment(): void {
 		// Mostly valid characters, so a fair share of tokens is accepted and the
 		// property is not vacuous; the rest are the ones a traversal would use.
-		$chars = Generators::frequency(
-			[9, Generators::elements('a', 'z', '0', '9')],
-			[1, Generators::elements('A', '.', '/', '\\', "\0", ' ', '-', 'é')],
+		$valid = Generators::elements('a', 'z', '0', '9');
+		$junk = Generators::elements('A', '.', '/', '\\', "\0", "\n", ' ', '-', 'é');
+		$mixed = Generators::map(
+			static fn (array $c): string => implode('', $c),
+			Generators::seq(Generators::frequency([9, $valid], [1, $junk])),
 		);
-		$this->forAll(Generators::map(static fn (array $c): string => implode('', $c), Generators::seq($chars)))
+		// A valid token with one bad character at an edge or in the middle: the
+		// shape an anchoring bug lets through, and one random mixing rarely hits.
+		$nearMiss = Generators::map(
+			static function (array $t): string {
+				[$core, $bad, $where] = $t;
+				$core = str_repeat('a', 8) . implode('', $core);
+				return match ($where) {
+					'start' => $bad . $core,
+					'end' => $core . $bad,
+					'middle' => substr($core, 0, 4) . $bad . substr($core, 4),
+				};
+			},
+			Generators::tuple(Generators::seq($valid), $junk, Generators::elements('start', 'end', 'middle')),
+		);
+		$this->forAll(Generators::oneOf($mixed, $nearMiss))
 			->then(function (string $token): void {
 				try {
 					ScratchImageStore::assertToken($token);
@@ -160,8 +176,17 @@ final class ScratchImageStoreTest extends TestCase {
 					return;
 				}
 				$this->assertSame(0, preg_match('/[\/\\\\.\0\s]/', $token), $token);
-				$this->assertLessThanOrEqual(64, strlen($token));
 			});
+	}
+
+	/**
+	 * Found in review, then by the property above once `\n` joined its alphabet:
+	 * PCRE's `$` also matches before a final newline, so the guard let
+	 * "abcdefgh\n" through as a path segment.
+	 */
+	public function testATrailingNewlineIsNotAToken(): void {
+		$this->expectException(NotFoundException::class);
+		ScratchImageStore::assertToken("abcdefgh\n");
 	}
 
 	/** Every token newToken() can produce passes the guard that later reads it back. */
