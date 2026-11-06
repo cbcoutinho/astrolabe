@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Service\Assistant;
 
+use Eris\TestTrait;
 use OCA\Astrolabe\Service\Assistant\CitationCollector;
+use OCA\Astrolabe\Tests\Unit\PropertyGenerators;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\TestCase;
 
@@ -15,6 +17,8 @@ use PHPUnit\Framework\TestCase;
  * passage rather than merely the app.
  */
 final class CitationCollectorTest extends TestCase {
+	use TestTrait;
+
 	private function collector(): CitationCollector {
 		$urlGenerator = $this->createMock(IURLGenerator::class);
 		$urlGenerator->method('linkToRoute')->willReturn('/apps/astrolabe/');
@@ -176,6 +180,32 @@ final class CitationCollectorTest extends TestCase {
 		]));
 
 		$this->assertStringContainsString('[Report \[final\]](', $collector->markdown());
+	}
+
+	/**
+	 * A title ending in a backslash used to escape the link's own closing
+	 * bracket, and a newline split the list item: found by the property below.
+	 */
+	public function testABackslashOrNewlineInATitleCannotBreakTheLink(): void {
+		$this->assertSame('Q3 \\\\', CitationCollector::linkLabel('Q3 \\'));
+		$this->assertSame('first second', CitationCollector::linkLabel("first\r\nsecond"));
+	}
+
+	/**
+	 * For any title, the label holds no character that could end the link or
+	 * the line, and reading its escapes back yields the title.
+	 */
+	public function testLinkLabelIsInertAndLossless(): void {
+		$this->forAll(PropertyGenerators::text())
+			->then(function (string $title): void {
+				$label = CitationCollector::linkLabel($title);
+
+				$unescaped = preg_replace('/\\\\(.)/s', '$1', $label);
+				$this->assertSame(preg_replace('/\s+/', ' ', $title), $unescaped);
+
+				$bare = preg_replace('/\\\\./s', '', $label);
+				$this->assertSame(0, preg_match('/[\\\\\[\]`\r\n]/', $bare), "unescaped special in: $label");
+			});
 	}
 
 	public function testCapsTheNumberOfCitations(): void {
