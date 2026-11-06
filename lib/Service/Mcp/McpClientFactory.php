@@ -6,6 +6,7 @@ namespace OCA\Astrolabe\Service\Mcp;
 
 use Mcp\Client;
 use Mcp\Client\Transport\HttpTransport;
+use Mcp\Schema\Enum\ProtocolVersion;
 use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\McpTokenMinter;
 use OCA\Astrolabe\Service\McpTokenMintException;
@@ -137,6 +138,10 @@ class McpClientFactory {
 			->setInitTimeout(self::INIT_TIMEOUT)
 			->setRequestTimeout(self::REQUEST_TIMEOUT)
 			->setLogger($this->logger)
+			// mcp/sdk 0.9 defaults to 2026-07-28 and probes `server/discover` before
+			// falling back. Pin the revision the server speaks today: one round trip,
+			// deterministic. Drop this once the server adopts the 2026-07-28 spec.
+			->setProtocolVersion(ProtocolVersion::V2025_11_25)
 			->build();
 
 		// The PSR-18 client here is Nextcloud's own (see Application::register),
