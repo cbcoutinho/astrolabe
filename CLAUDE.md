@@ -77,6 +77,37 @@ Three suites, all under `tests/`:
 - **E2E** — Playwright, `tests/e2e/` (`playwright.config.ts`), `npm run test:e2e`,
   runs against a real Nextcloud + MCP server via `tests/e2e/docker-compose.yml`.
 
+### Property-based tests (Eris)
+
+Pure functions — parsers, escapers, normalizers — are tested with
+[Eris](https://github.com/giorgiosironi/eris) properties inside the unit suite
+(`use Eris\TestTrait;`, then `$this->forAll(...)->then(...)`). Mocked
+controller/service tests stay example-based.
+
+- **Build strings with `PropertyGenerators::text()`**, not `Generators::string()`:
+  Eris's string generator only draws printable ASCII 33–126 — no whitespace,
+  newline or multibyte UTF-8, which are exactly the characters that break things.
+- **State a property, not a reimplementation**: round-trips, idempotence,
+  "never fails on arbitrary input", "output can't contain X", or equivalence
+  with a model the test can state independently.
+- **Pin every bug a property found as a plain example test.** Eris has no
+  `@example` and no failure database, so a fixed bug is otherwise only re-found
+  by chance.
+- **Cap the size of nested generators** with `->withMaxSize(n)`: Eris sizes
+  every nested `seq` independently (default 200), so `seq` of `seq` of `text`
+  exhausts memory.
+- **Check the property isn't vacuous**: bias generators (`frequency`) so that
+  inputs actually reach the branch being checked, and break the code once
+  on purpose to see that the property fails. For a validator, sample the
+  generator (`Eris\Sample`) and count accepted versus rejected inputs. Also
+  generate the near-misses an off-by-one or anchoring bug would let through,
+  such as a valid value plus one bad character or a valid alphabet at any
+  length. Uniformly random input almost never produces them.
+- **Reproduce a failure with the printed seed**:
+  `ERIS_SEED=<seed> vendor/bin/phpunit -c tests/unit/phpunit.xml --filter <test>`.
+- Logic buried in a service with injected dependencies should be extracted into
+  a pure static function so it can be property-tested directly.
+
 ### Testing requirements for new API surface (MANDATORY — review gate)
 
 Any PR that **adds or changes API surface** — an `/apps/astrolabe/api/v1/*`

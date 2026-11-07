@@ -26,6 +26,11 @@ class WebhookPresets {
 	// See: https://github.com/nextcloud/server/issues/56371
 	public const FILE_EVENT_DELETED = 'OCP\\Files\\Events\\Node\\BeforeNodeDeletedEvent';
 
+	// A node path is `/<uid>/files/<path>`. The uid segment is matched as
+	// `[^/]+`, not `.*`: a greedy wildcard also matched a folder named
+	// `files/Notes` nested anywhere in a user's tree.
+	public const NOTES_PATH_PATTERN = '/^\\/[^\\/]+\\/files\\/Notes\\//';
+
 	// System-tag assign/unassign (Nextcloud 32+). A single event class covers
 	// both directions; the payload's `eventType` distinguishes them. Lets
 	// adding/removing the `vector-index` tag trigger near-real-time (re)indexing
@@ -65,15 +70,15 @@ class WebhookPresets {
 				'events' => [
 					[
 						'event' => self::FILE_EVENT_CREATED,
-						'filter' => ['event.node.path' => '/^\\/.*\\/files\\/Notes\\//'],
+						'filter' => ['event.node.path' => self::NOTES_PATH_PATTERN],
 					],
 					[
 						'event' => self::FILE_EVENT_WRITTEN,
-						'filter' => ['event.node.path' => '/^\\/.*\\/files\\/Notes\\//'],
+						'filter' => ['event.node.path' => self::NOTES_PATH_PATTERN],
 					],
 					[
 						'event' => self::FILE_EVENT_DELETED,
-						'filter' => ['event.node.path' => '/^\\/.*\\/files\\/Notes\\//'],
+						'filter' => ['event.node.path' => self::NOTES_PATH_PATTERN],
 					],
 				],
 			],

@@ -112,13 +112,6 @@ final class CitationCollector {
 	}
 
 	/**
-	 * A markdown list of links to append to the answer.
-	 *
-	 * This goes in the message body because that is the only place Assistant
-	 * renders markdown — the sources popover interpolates plain text, so a link
-	 * there would show as its own source.
-	 */
-	/**
 	 * Tools whose results could not be cited for want of a `doc_type`.
 	 *
 	 * @return list<string>
@@ -127,6 +120,13 @@ final class CitationCollector {
 		return array_keys($this->uncitable);
 	}
 
+	/**
+	 * A markdown list of links to append to the answer.
+	 *
+	 * This goes in the message body because that is the only place Assistant
+	 * renders markdown — the sources popover interpolates plain text, so a link
+	 * there would show as its own source.
+	 */
 	public function markdown(): string {
 		if ($this->citations === []) {
 			return '';
@@ -134,7 +134,7 @@ final class CitationCollector {
 
 		$lines = [];
 		foreach ($this->citations as $citation) {
-			$lines[] = sprintf('- [%s](%s)', $this->escapeLabel($citation['title']), $citation['url']);
+			$lines[] = sprintf('- [%s](%s)', self::linkLabel($citation['title']), $citation['url']);
 		}
 
 		return "\n\n**Sources**\n" . implode("\n", $lines);
@@ -210,9 +210,19 @@ final class CitationCollector {
 	}
 
 	/**
-	 * Keep a title with brackets from breaking out of its own markdown link.
+	 * Render a document title as the text of a one-line markdown link.
+	 *
+	 * Titles are file and note names, so they can hold anything: a `]` would end
+	 * the link early, a trailing `\` would escape the link's own closing bracket,
+	 * a backtick pair would open a code span across it, and a newline would end
+	 * the list item mid-link. Whitespace runs collapse to one space, and the
+	 * backslash is escaped along with the others so an escape never pairs with a
+	 * character the title already had.
+	 *
+	 * This guards the link's structure only: `*`, `_` or `<` in a title can still
+	 * render as emphasis or inline HTML inside the label, which is cosmetic.
 	 */
-	private function escapeLabel(string $title): string {
-		return str_replace(['[', ']'], ['\[', '\]'], $title);
+	public static function linkLabel(string $title): string {
+		return addcslashes(preg_replace('/\s+/', ' ', $title) ?? $title, '\\[]`');
 	}
 }

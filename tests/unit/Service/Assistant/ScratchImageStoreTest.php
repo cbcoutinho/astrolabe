@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Service\Assistant;
 
+use Eris\Generators;
+use Eris\TestTrait;
 use OCA\Astrolabe\Service\Assistant\ScratchImageStore;
 use OCA\Astrolabe\Service\Assistant\SummaryException;
 use OCP\Files\File;
@@ -24,6 +26,8 @@ use Psr\Log\LoggerInterface;
  * mocks of this class.
  */
 final class ScratchImageStoreTest extends TestCase {
+	use TestTrait;
+
 	private IRootFolder&MockObject $rootFolder;
 	private Folder&MockObject $userFolder;
 	private ISecureRandom&MockObject $random;
@@ -121,12 +125,10 @@ final class ScratchImageStoreTest extends TestCase {
 	}
 
 	/**
-	 * The token names a path segment and comes from stored task data, so anything
-	 * outside the expected alphabet must be refused rather than normalised.
-	 *
-	 * @dataProvider malformedTokens
+	 * Wiring: discard() goes through the token guard before touching storage.
+	 * The guard itself is covered by the properties below.
 	 */
-	public function testDiscardRefusesMalformedTokens(string $token): void {
+	public function testDiscardRefusesAMalformedToken(): void {
 		$scratchRoot = $this->createMock(Folder::class);
 		// Reached only if the guard let the token through.
 		$scratchRoot->expects($this->never())->method('get');
@@ -135,23 +137,75 @@ final class ScratchImageStoreTest extends TestCase {
 
 		// discard() swallows failures by design; the assertion is that it never
 		// resolves a node for a token it should have rejected.
-		$this->store->discard('alice', $token);
+		$this->store->discard('alice', '../../../etc');
 	}
 
 	/**
-	 * @return array<string, array{string}>
+	 * For any string, a token the guard accepts is a single, plain path segment:
+	 * no separator, no dot, no NUL, nothing a filesystem treats specially.
 	 */
-	public static function malformedTokens(): array {
-		return [
-			'parent traversal' => ['../../../etc'],
-			'slash' => ['tok/123'],
-			'dot segment' => ['..'],
-			'uppercase' => ['TOK123ABC'],
-			'too short' => ['abc'],
-			'empty' => [''],
-			'null byte' => ["tok123abc\0"],
-			'leading dot' => ['.astrolabe'],
-		];
+	public function testAnAcceptedTokenIsAlwaysASafePathSegment(): void {
+		// Mostly valid characters, so a fair share of tokens is accepted and the
+		// property is not vacuous; the rest are the ones a traversal would use.
+		$valid = Generators::elements('a', 'z', '0', '9');
+		$junk = Generators::elements('A', '.', '/', '\\', "\0", "\n", ' ', '-', 'é');
+		$mixed = Generators::map(
+			static fn (array $c): string => implode('', $c),
+			Generators::seq(Generators::frequency([9, $valid], [1, $junk])),
+		);
+		// A valid token with one bad character at an edge or in the middle: the
+		// shape an anchoring bug lets through, and one random mixing rarely hits.
+		$nearMiss = Generators::map(
+			static function (array $t): string {
+				[$core, $bad, $where] = $t;
+				$core = str_repeat('a', 8) . implode('', $core);
+				return match ($where) {
+					'start' => $bad . $core,
+					'end' => $core . $bad,
+					'middle' => substr($core, 0, 4) . $bad . substr($core, 4),
+				};
+			},
+			Generators::tuple(Generators::seq($valid), $junk, Generators::elements('start', 'end', 'middle')),
+		);
+		// Valid characters only, any length: the only shape that probes the
+		// length bound, since everything else is rejected for its characters.
+		$anyLength = Generators::map(
+			static fn (array $c): string => implode('', $c),
+			Generators::seq($valid),
+		);
+		$this->forAll(Generators::oneOf($mixed, $nearMiss, $anyLength))
+			->then(function (string $token): void {
+				try {
+					ScratchImageStore::assertToken($token);
+				} catch (NotFoundException) {
+					$this->addToAssertionCount(1);
+					return;
+				}
+				$this->assertSame(0, preg_match('/[\/\\\\.\0\s]/', $token), $token);
+				// Redundant with today's regex, which is the point: it fails if
+				// the length bound is ever loosened.
+				$this->assertLessThanOrEqual(64, strlen($token));
+			});
+	}
+
+	/**
+	 * Found in review, then by the property above once `\n` joined its alphabet:
+	 * PCRE's `$` also matches before a final newline, so the guard let
+	 * "abcdefgh\n" through as a path segment.
+	 */
+	public function testATrailingNewlineIsNotAToken(): void {
+		$this->expectException(NotFoundException::class);
+		ScratchImageStore::assertToken("abcdefgh\n");
+	}
+
+	/** Every token newToken() can produce passes the guard that later reads it back. */
+	public function testEveryGeneratableTokenIsAccepted(): void {
+		$alphabet = str_split(ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS);
+		$this->forAll(Generators::vector(32, Generators::elements($alphabet)))
+			->then(function (array $chars): void {
+				$token = implode('', $chars);
+				$this->assertSame($token, ScratchImageStore::assertToken($token));
+			});
 	}
 
 	public function testDiscardDeletesTheBatchFolder(): void {
