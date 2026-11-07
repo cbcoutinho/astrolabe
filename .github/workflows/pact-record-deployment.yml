@@ -21,8 +21,9 @@ name: Pact record deployment
 # workflow_dispatch exists for a one-off bootstrap or repair: pass the main
 # commit that preceded the release's bump commit (the bump commit's parent).
 #
-# The broker is only reachable over Tailscale; the step no-ops when the broker
-# secrets are absent (e.g. forks).
+# The broker is only reachable over Tailscale. The job runs only in the
+# canonical repo, and fails there if the broker secrets are missing: a green
+# run that recorded nothing is the "unknown" state this workflow exists to end.
 #
 # Required repo/org secrets:
 #   TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET  Tailscale github-runner OAuth client
@@ -37,10 +38,10 @@ on:
         required: true
         type: string
 
-# Two releases landing close together could overlap; don't cancel an in-flight
-# recording — let it complete.
+# Serialize recordings. Not per ref: a called workflow sees the caller's tag
+# ref, so per-ref groups would never overlap. Never cancel one in flight.
 concurrency:
-  group: pact-record-deployment-${{ github.ref }}
+  group: pact-record-deployment
   cancel-in-progress: false
 
 env:
@@ -52,6 +53,7 @@ jobs:
   record-deployment:
     name: Record production deployment
     runs-on: ubuntu-latest
+    if: github.repository == 'cbcoutinho/astrolabe'
     # Least-privilege: scope the token at job level (GitHub Actions S8264).
     permissions:
       contents: read
@@ -62,7 +64,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Join tailnet
-        if: ${{ env.PACT_BROKER != '' }}
         uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -70,11 +71,9 @@ jobs:
           tags: tag:github-runner
 
       - name: Install Pact CLI
-        if: ${{ env.PACT_BROKER != '' }}
         run: .github/scripts/install-pact-cli.sh
 
       - name: Record deployment to production
-        if: ${{ env.PACT_BROKER != '' }}
         env:
           # Dispatch input when bootstrapping, otherwise the caller's SHA.
           VERSION: ${{ inputs.version || github.sha }}
