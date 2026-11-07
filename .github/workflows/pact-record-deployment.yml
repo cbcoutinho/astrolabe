@@ -38,10 +38,12 @@ on:
         required: true
         type: string
 
-# Serialize recordings. Not per ref: a called workflow sees the caller's tag
-# ref, so per-ref groups would never overlap. Never cancel one in flight.
+# One group per recorded version: a re-run of the same release dedupes, but
+# different releases never share a group. (GitHub keeps one pending run per
+# group and replaces it, so a shared group would silently drop a middle
+# release's recording.) Never cancel one in flight.
 concurrency:
-  group: pact-record-deployment
+  group: pact-record-deployment-${{ inputs.version || github.sha }}
   cancel-in-progress: false
 
 env:
