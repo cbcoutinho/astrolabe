@@ -78,13 +78,17 @@ jobs:
 
       - name: Publish pacts to broker
         if: ${{ env.PACT_BROKER != '' }}
+        env:
+          # Via env, not inline `${{ }}`: head_ref is the PR author's branch
+          # name, and interpolating it into the script is an injection vector.
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           pact broker publish tests/contract/pacts \
             --broker-base-url "$PACT_BROKER" \
             --broker-username "$PACT_USERNAME" \
             --broker-password "$PACT_PASSWORD" \
-            --consumer-app-version "${{ github.sha }}" \
-            --branch "${{ github.head_ref || github.ref_name }}"
+            --consumer-app-version "$GITHUB_SHA" \
+            --branch "$BRANCH"
 
   provider-verify:
     runs-on: ubuntu-latest
@@ -187,7 +191,10 @@ jobs:
           PACT_PROVIDER_REQUIRED: 'true'
           PACT_PROVIDER_VERSION: ${{ github.sha }}
           PACT_PROVIDER_BRANCH: ${{ github.head_ref || github.ref_name }}
-          PACT_PUBLISH_RESULTS: ${{ github.ref == 'refs/heads/main' }}
+          # Published from PRs too, tagged with the PR branch: can-i-deploy on a
+          # PR needs a matrix row for the PR's SHA, and branch-scoped results
+          # don't change what main's versions report. Forks never reach here.
+          PACT_PUBLISH_RESULTS: 'true'
         # Only the provider test here; the consumer pact is generated/published
         # by the consumer-publish job above.
         run: ./vendor/bin/phpunit -c tests/contract/phpunit.xml --filter CredentialsPactVerifyTest --colors=never
@@ -207,8 +214,8 @@ jobs:
       contents: read
     timeout-minutes: 10
     needs: [consumer-publish, provider-verify]
-    # Only meaningful on main (the branch we publish verification results from).
-    if: ${{ github.ref == 'refs/heads/main' }}
+    # Runs on main pushes and same-repo PRs (forks have no broker secrets).
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       # Needed for .github/scripts/install-pact-cli.sh; this job previously ran
       # without a working copy.
@@ -228,13 +235,13 @@ jobs:
         run: .github/scripts/install-pact-cli.sh
 
       # SHADOW MODE: run can-i-deploy for signal but never fail the workflow.
-      # The broker's `production` environment is populated by the
-      # pact-record-deployment workflow on each repo's next release; until both
-      # astrolabe AND nextcloud-mcp-server have recorded a prod deployment this
-      # check cannot pass, so gating now would block every merge on a bootstrap
-      # gap rather than a real incompatibility. Once it reports a pass in both
-      # repos, promote to a hard gate by removing the `set +e`/`exit 0` wrapper
-      # and relocating it ahead of the deploy step.
+      # It runs on PRs so that, once promoted, the gate blocks the merge rather
+      # than the release. Still non-blocking because astrolabe's pact against
+      # nextcloud-mcp-server has interactions on the authenticated /api/v1
+      # surface that the MCP provider cannot verify yet (Deck #1340). Promote
+      # by dropping the `set +e`/`exit 0` wrapper, adding
+      # `--retry-while-unknown`, and marking the check required in branch
+      # protection (Deck #1457).
       - name: Can I deploy astrolabe? (shadow — non-blocking)
         if: ${{ env.PACT_BROKER != '' }}
         run: |
@@ -248,7 +255,7 @@ jobs:
             --to-environment production
           rc=$?
           if [ "$rc" -ne 0 ]; then
-            echo "::warning title=can-i-deploy (shadow)::can-i-deploy exited $rc — NOT gating (shadow mode). Expected until both repos record a production deployment."
+            echo "::warning title=can-i-deploy (shadow)::can-i-deploy exited $rc — NOT gating (shadow mode). See Deck card #1457 for what blocks promotion."
           else
             echo "can-i-deploy passed (shadow mode — not yet gating)"
           fi
