@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.47.6 (2026-11-07)
+
+### Fix
+
+- **assistant**: anchor the scratch-token guard with \z, not $
+- **webhooks**: only match the top-level Notes folder in the Notes preset
+- **assistant**: keep citation titles from breaking their markdown link
+
+### Refactor
+
+- **assistant**: extract tool-call parsing into a pure ToolCallParser
+
 ## v0.47.5 (2026-11-06)
 
 ### Fix
