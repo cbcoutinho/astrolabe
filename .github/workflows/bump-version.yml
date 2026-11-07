@@ -109,3 +109,15 @@ jobs:
     secrets: inherit
     permissions:
       contents: write
+
+  # Called here rather than on `push: tags` because tags pushed with
+  # GITHUB_TOKEN do not trigger workflows (the same reason `release` is a
+  # workflow_call). Gated on `release` too: the record asserts "this version is
+  # in production", which is only true once the app store publish succeeded.
+  pact-record-deployment:
+    needs: [bump-version, release]
+    if: needs.bump-version.outputs.bumped == 'true'
+    uses: ./.github/workflows/pact-record-deployment.yml
+    secrets: inherit
+    permissions:
+      contents: read
