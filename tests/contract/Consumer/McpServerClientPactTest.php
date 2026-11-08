@@ -327,6 +327,77 @@ final class McpServerClientPactTest extends TestCase {
 	}
 
 	/**
+	 * Exact phrase search for a SAR case: every document containing the
+	 * phrase, unranked, one row per document. `total_found` is the true count,
+	 * which the page uses to fetch every page before "Add all".
+	 */
+	public function testExactSarCaseSearchHonoursTheContract(): void {
+		$matcher = new Matcher();
+		$config = $this->mockServerConfig();
+
+		$request = (new ConsumerRequest())
+			->setMethod('POST')
+			->setPath('/api/v1/sar/cases/101/search')
+			->addHeader('Authorization', $matcher->regex('Bearer mint-token', 'Bearer .+'))
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'query' => 'Jane Doe',
+				'algorithm' => 'exact',
+				'limit' => 100,
+				'include_pca' => false,
+				'doc_types' => ['file'],
+				'fusion' => 'rrf',
+				'offset' => 100,
+				'granularity' => 'document',
+			]);
+
+		$response = (new ProviderResponse())
+			->setStatus(200)
+			->addHeader('Content-Type', 'application/json')
+			->setBody([
+				'results' => $matcher->eachLike([
+					'id' => $matcher->integer(12),
+					'doc_type' => $matcher->like('file'),
+					'title' => $matcher->like('Letter.pdf'),
+					'relevance' => $matcher->number(1.0),
+					'relevance_source' => 'exact_match',
+				]),
+				'total_found' => $matcher->integer(250),
+				'algorithm_used' => 'exact',
+				'granularity' => 'document',
+				'truncated' => $matcher->boolean(false),
+			]);
+
+		$builder = new InteractionBuilder($config);
+		$builder
+			->given('an open SAR case 101 exists')
+			->uponReceiving('an exact phrase search for a SAR case, second page')
+			->with($request)
+			->willRespondWith($response);
+
+		$result = $this->clientFor($config)->search(
+			'Jane Doe',
+			'exact',
+			100,
+			false,
+			['file'],
+			'mint-token',
+			null,
+			null,
+			null,
+			101,
+			100,
+			false,
+			'rrf',
+			'document',
+		);
+
+		$this->assertTrue($builder->verify(), 'Pact consumer verification failed');
+		$this->assertSame(250, $result['total_documents'] ?? null);
+		$this->assertSame('exact_match', $result['results'][0]['relevance_source'] ?? null);
+	}
+
+	/**
 	 * SAR case list: what the SAR page lists (name, state, item count).
 	 */
 	public function testListSarCasesHonoursTheContract(): void {

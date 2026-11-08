@@ -387,7 +387,7 @@ class McpServerClient {
 	 *
 	 * @param string $query Search query string
 	 * @param string $algorithm Search algorithm: "semantic", "bm25", or "hybrid"
-	 * @param int $limit Number of results (max 50)
+	 * @param int $limit Number of results (max 100)
 	 * @param bool $includePca Whether to include PCA coordinates for 2D plot
 	 * @param array|null $docTypes Document types to filter (e.g., ['note', 'file'])
 	 * @param string|null $token OAuth bearer token for authentication
@@ -437,7 +437,7 @@ class McpServerClient {
 		$requestBody = [
 			'query' => $query,
 			'algorithm' => $algorithm,
-			'limit' => min($limit, 50), // Enforce max limit
+			'limit' => min($limit, 100), // The server's cap for /api/v1/search
 			'include_pca' => $includePca,
 			// Fusion, granularity and min_relevance were accepted by the server
 			// but never sent from this page, so the admin's fusion choice, the
