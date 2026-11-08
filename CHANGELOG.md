@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.48.0 (2026-11-08)
+
+### Feat
+
+- **viewer**: render CSV chunks as a table
+
+### Fix
+
+- **viewer**: address Sonar findings in CSV parser; run JS unit tests in CI
+- **viewer**: harden CSV table against unknown truncation flags
+
+### Refactor
+
+- **viewer**: drop a branch from parseCsv to satisfy Sonar complexity
+
 ## v0.47.7 (2026-11-07)
 
 ### Fix
