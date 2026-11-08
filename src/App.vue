@@ -296,10 +296,11 @@
 							v-if="sarCollecting"
 							variant="secondary"
 							class="mcp-add-all-to-sar"
-							:disabled="filteredResults.every((r) => inSar(r))"
+							:disabled="addingAllToSar || filteredResults.every((r) => inSar(r))"
 							@click="addAllToSar">
 							<template #icon>
-								<PlaylistPlus :size="18" />
+								<NcLoadingIcon v-if="addingAllToSar" :size="18" />
+								<PlaylistPlus v-else :size="18" />
 							</template>
 							{{ algorithmUsed === 'exact' && sarTotal > 0
 								? n('astrolabe', 'Add all %n match to SAR', 'Add all %n matches to SAR', sarTotal)
@@ -912,6 +913,7 @@ export default {
 			// Matches reported by the last case search (exact: every match).
 			sarTotal: 0,
 			loadingMore: false,
+			addingAllToSar: false,
 			sarNextOffset: 0,
 			sarLastQuery: '',
 			sarLastParams: {},
@@ -1460,8 +1462,22 @@ export default {
 
 		// Every result on the page that is not yet in the case, in one call.
 		async addAllToSar() {
+			if (this.addingAllToSar) {
+				return
+			}
+			this.addingAllToSar = true
+			try {
+				await this.addAllPagesToSar()
+			} finally {
+				this.addingAllToSar = false
+			}
+		},
+
+		async addAllPagesToSar() {
 			// An exact search means "every document", not "this page": fetch
 			// the remaining pages first. Stops if a page fails or adds nothing.
+			// Further pages reuse the stored query and parameters, so editing
+			// the form meanwhile changes nothing here.
 			if (this.algorithmUsed === 'exact') {
 				let offset = -1
 				while (this.sarHasMore && this.sarNextOffset !== offset) {
@@ -1469,7 +1485,7 @@ export default {
 					await this.performSearch(true)
 				}
 			}
-			const found = this.query.trim() || null
+			const found = this.sarLastQuery || null
 			// One entry per document: with chunk rows a document can appear twice.
 			const seen = new Set()
 			const add = this.filteredResults
@@ -1491,9 +1507,10 @@ export default {
 			if (add.length === 0) {
 				return
 			}
+			// The server takes at most SAR_ITEMS_PER_CALL items per request.
+			// Each call returns the whole case, so the last one shows it all.
+			let data = null
 			try {
-				// The server takes at most SAR_ITEMS_PER_CALL items per request.
-				let data
 				for (let i = 0; i < add.length; i += SAR_ITEMS_PER_CALL) {
 					({ data } = await axios.post(this.sarCaseUrl('/items'), {
 						add: add.slice(i, i + SAR_ITEMS_PER_CALL),
@@ -1501,7 +1518,14 @@ export default {
 				}
 				this.showSarCase(data)
 			} catch (err) {
-				this.onSarCaseError(err, this.t('astrolabe', 'Could not add the documents to the case.'))
+				if (data === null) {
+					this.onSarCaseError(err, this.t('astrolabe', 'Could not add the documents to the case.'))
+					return
+				}
+				// Earlier batches are in the case: show them, and say the rest
+				// are not.
+				this.showSarCase(data)
+				this.onSarCaseError(err, this.t('astrolabe', 'Only some of the documents were added to the case. Add all again to add the rest.'))
 			}
 		},
 

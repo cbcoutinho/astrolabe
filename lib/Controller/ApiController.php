@@ -126,11 +126,12 @@ class ApiController extends Controller {
 		if ($hasAlignedCoords) {
 			$result['coordinates_3d'] = $keptCoords;
 		}
-		// Keep the reported count consistent with what's actually returned after a
-		// drop (clamp, don't inflate): the unfiltered MCP total would otherwise
-		// exceed the rendered results.
-		if (count($keptResults) < count($results) && isset($result['total_documents']) && is_int($result['total_documents'])) {
-			$result['total_documents'] = min($result['total_documents'], count($keptResults));
+		// Take the dropped rows off the reported count. Subtract rather than
+		// clamp to this page: the total spans every page, and a client paging an
+		// exact search by it would otherwise stop after one short page.
+		$dropped = count($results) - count($keptResults);
+		if ($dropped > 0 && isset($result['total_documents']) && is_int($result['total_documents'])) {
+			$result['total_documents'] = max(count($keptResults), $result['total_documents'] - $dropped);
 		}
 		return $result;
 	}
@@ -292,7 +293,7 @@ class ApiController extends Controller {
 		}
 
 		// Enforce limit bounds: the MCP server's own cap for /api/v1/search.
-		$limit = max(1, min($limit, 100));
+		$limit = max(1, min($limit, McpServerClient::MAX_SEARCH_LIMIT));
 
 		// Restrict to admin-approved, installed sources. This is the
 		// authoritative consent gate for the in-app search path; the MCP server

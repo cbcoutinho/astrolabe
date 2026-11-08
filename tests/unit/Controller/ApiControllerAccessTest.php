@@ -139,7 +139,31 @@ final class ApiControllerAccessTest extends AbstractApiControllerTestCase {
 		// The dropped result's coordinate is removed too, keeping the plot aligned.
 		$this->assertCount(1, $data['coordinates_3d']);
 		$this->assertSame([0.1, 0.2, 0.3], $data['coordinates_3d'][0]);
-		// total_documents is clamped to the post-filter count (was 2 from MCP).
+		// total_documents loses the dropped row (was 2 from MCP).
 		$this->assertSame(1, $data['total_documents']);
+	}
+
+	public function testADroppedRowOnAPagedSearchKeepsTheTotalAcrossPages(): void {
+		// An exact search pages by total_documents: one stale row on a page of
+		// 2 out of 500 matches must leave 499, not 1, or paging stops here.
+		$this->filesInstalled();
+		$this->authenticateUserWithToken('alice', 'tok');
+		$this->userFolder->method('getById')->willReturnMap([
+			[1, [$this->createMock(Node::class)]],
+			[2, []],
+		]);
+		$this->client->method('search')->willReturn([
+			'results' => [
+				['doc_type' => 'file', 'id' => 1, 'metadata' => []],
+				['doc_type' => 'file', 'id' => 2, 'metadata' => []],
+			],
+			'algorithm_used' => 'exact',
+			'total_documents' => 500,
+		]);
+
+		$data = $this->controller->search('anything', 'exact', 2)->getData();
+
+		$this->assertCount(1, $data['results']);
+		$this->assertSame(499, $data['total_documents']);
 	}
 }
