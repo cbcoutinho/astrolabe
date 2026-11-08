@@ -30,3 +30,12 @@ test('truncated edges drop partial lines and the header', () => {
 	assert.equal(t.header, null)
 	assert.deepEqual(t.rows.map((r) => [r.cells[0], r.inChunk]), [['r1', false], ['r2', true], ['r3', false]])
 })
+
+test('delimiter sniffing ignores quoted spans', () => {
+	assert.deepEqual(parseCsv('"a;b;c",d\n1,2').map((r) => r.cells), [['a;b;c', 'd'], ['1', '2']])
+})
+
+test('window without a whole row yields an empty table', () => {
+	const t = parseCsvWindow({ chunk: 'partial,row', hasMoreBefore: true, hasMoreAfter: true })
+	assert.deepEqual(t, { header: null, rows: [] })
+})

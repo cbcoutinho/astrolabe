@@ -1,6 +1,8 @@
 <template>
 	<div class="csv-viewer">
-		<table>
+		<!-- Window too small to hold a whole row: show it raw -->
+		<pre v-if="!table.header && table.rows.length === 0">{{ before + chunk + after }}</pre>
+		<table v-else>
 			<thead v-if="table.header">
 				<tr>
 					<th v-for="(cell, i) in table.header" :key="i">
@@ -42,7 +44,9 @@ const table = computed(() => parseCsvWindow({
 
 <style scoped lang="scss">
 .csv-viewer {
-	overflow-x: auto;
+	// Own scroll box so the sticky header sticks while rows scroll.
+	overflow: auto;
+	max-height: 70vh;
 	font-size: 13px;
 
 	table {

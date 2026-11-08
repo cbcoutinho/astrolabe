@@ -2095,8 +2095,10 @@ export default {
 							chunk: response.data.chunk_text || '',
 							before: response.data.before_context || '',
 							after: response.data.after_context || '',
-							hasMoreBefore: !!response.data.has_more_before,
-							hasMoreAfter: !!response.data.has_more_after,
+							// Absent flag = unknown: assume truncated, so no
+							// partial line is shown and no bogus header guessed.
+							hasMoreBefore: response.data.has_more_before !== false,
+							hasMoreAfter: response.data.has_more_after !== false,
 						}
 					}
 				} else {

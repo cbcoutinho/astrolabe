@@ -59,7 +59,7 @@ export function parseCsv(text, from = 0, to = text.length) {
 	const firstLineEnd = text.indexOf('\n', from)
 	const firstLine = text.slice(from, firstLineEnd === -1 || firstLineEnd > to ? to : firstLineEnd)
 	const delim = [',', ';', '\t']
-		.map((d) => [d, firstLine.split(d).length])
+		.map((d) => [d, firstLine.replace(/"[^"]*"/g, '').split(d).length])
 		.reduce((a, b) => (b[1] > a[1] ? b : a))[0]
 
 	const records = []
