@@ -77,7 +77,7 @@ export function parseCsv(text, from = 0, to = text.length) {
 	let quoted = false
 	let recStart = from
 	const endRecord = (end) => {
-		cells.push(field.endsWith('\r') ? field.slice(0, -1) : field)
+		cells.push(field.replace(/\r$/, ''))
 		if (cells.length > 1 || cells[0] !== '') {
 			records.push({ cells, start: recStart, end })
 		}
