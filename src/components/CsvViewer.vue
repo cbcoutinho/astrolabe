@@ -62,6 +62,8 @@ const table = computed(() => parseCsvWindow({
 		vertical-align: top;
 		white-space: pre-wrap;
 		max-width: 40ch;
+		// Break unbroken tokens (URLs, IDs) too, or they spill over the next column.
+		overflow-wrap: anywhere;
 	}
 
 	th {
