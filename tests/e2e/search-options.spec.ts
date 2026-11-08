@@ -98,7 +98,7 @@ test.describe('Astrolabe search options', () => {
 		await openSearch(page)
 
 		await resultLimit(page).fill('2')
-		await page.getByLabel(/^Server relevance cut/).fill('5')
+		await page.getByLabel(/^Minimum relevance/).fill('5')
 		const res = await search(page)
 
 		expect(new URL(res.url()).searchParams.get('min_relevance')).toBe('0.05')
@@ -109,6 +109,40 @@ test.describe('Astrolabe search options', () => {
 			expect(typeof row.relevance).toBe('number')
 			expect(row.relevance).toBeGreaterThanOrEqual(0.05)
 		}
+	})
+
+	test('there is one relevance slider', async ({ authenticatedPage: page }) => {
+		await openSearch(page)
+		const sliders = page.getByRole('main').locator('input[type="range"]')
+		await expect(sliders).toHaveCount(1)
+		await expect(page.getByLabel(/^Minimum relevance/)).toBeEnabled()
+	})
+
+	test('exact phrase search lists every matching document, with relevance greyed out', async ({ authenticatedPage: page }) => {
+		test.setTimeout(360_000)
+		const status = await (await fetch('http://localhost:8000/api/v1/status')).json()
+		// Offered only by an MCP server that advertises it; this stack pins a
+		// released server image, so the test runs once that release has it.
+		test.skip(!(status.supported_search_types ?? []).includes('exact'), 'MCP server does not advertise the exact algorithm yet')
+
+		await completeAuthorization(page)
+		await waitForIndexing()
+		await openSearch(page)
+		await page.locator('.mcp-algorithm-select').click()
+		await page.getByRole('option', { name: 'Exact phrase (every document)' }).click()
+
+		await expect(page.getByLabel(/^Minimum relevance/)).toBeDisabled()
+		const res = await search(page, LONG_NOTE)
+
+		expect(new URL(res.url()).searchParams.get('algorithm')).toBe('exact')
+		expect(new URL(res.url()).searchParams.get('min_relevance')).toBeNull()
+		const body = await res.json()
+		expect(body.algorithm_used).toBe('exact')
+		const docs = body.results.map((r: { doc_type: string, id: unknown }) => `${r.doc_type}:${String(r.id)}`)
+		expect(new Set(docs).size).toBe(docs.length)
+		expect(body.total_documents).toBeGreaterThanOrEqual(docs.length)
+		// Every row is a match; there is no degree of relevance to draw.
+		await expect(page.getByRole('meter')).toHaveCount(0)
 	})
 
 	test('without a reranker, search is not reranked and still succeeds', async ({ authenticatedPage: page }) => {

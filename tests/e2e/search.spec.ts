@@ -57,14 +57,9 @@ test.describe('Astrolabe search', () => {
 		// so the per-document option is offered only for the other algorithms.
 		await expect(mainContent.getByLabel('Results per document')).toBeVisible()
 
-		// The two relevance controls, labelled so they cannot be confused: the
-		// server-side cut filters the search itself, the client-side slider
-		// hides rows already returned. The client-side label has two forms
-		// (absolute when the server reports `relevance`, ADR-034, else
-		// "relative to the best result"); this matches the prefix common to
-		// both.
-		await expect(mainContent.getByLabel(/^Server relevance cut/)).toBeVisible()
-		await expect(mainContent.getByLabel(/^Hide below relevance/)).toBeVisible()
+		// One relevance control: sent to the server as min_relevance and
+		// applied to the rows already shown.
+		await expect(mainContent.getByLabel(/^Minimum relevance/)).toBeVisible()
 	})
 
 	test('complete authorization and perform search with Plotly visualization', async ({ authenticatedPage: page }) => {

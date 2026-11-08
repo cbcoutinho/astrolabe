@@ -159,34 +159,21 @@
 							</div>
 
 							<div class="mcp-option-group">
-								<label for="mcp-server-relevance">{{ t('astrolabe', 'Server relevance cut') }}: {{ serverMinRelevance }}%</label>
+								<label for="mcp-minimum-relevance">{{ t('astrolabe', 'Minimum relevance') }}: {{ relevanceApplies ? minRelevance + '%' : t('astrolabe', 'n/a') }}</label>
 								<input
-									id="mcp-server-relevance"
-									v-model.number="serverMinRelevance"
+									id="mcp-minimum-relevance"
+									v-model.number="minRelevance"
 									type="range"
 									min="0"
 									max="100"
 									step="5"
 									class="mcp-score-slider"
-									aria-describedby="mcp-server-relevance-hint">
-								<p id="mcp-server-relevance-hint" class="mcp-option-hint">
-									{{ t('astrolabe', 'Applied by the server before the page is cut to the result limit, so a filtered search still returns a full page. Filters the search itself.') }}
-								</p>
-							</div>
-
-							<div class="mcp-option-group">
-								<label for="mcp-minimum-score">{{ hasRelevance ? t('astrolabe', 'Hide below relevance') : t('astrolabe', 'Hide below relevance, relative to the best result') }}: {{ scoreThreshold }}%</label>
-								<input
-									id="mcp-minimum-score"
-									v-model="scoreThreshold"
-									type="range"
-									min="0"
-									max="100"
-									step="5"
-									class="mcp-score-slider"
-									aria-describedby="mcp-minimum-score-hint">
-								<p id="mcp-minimum-score-hint" class="mcp-option-hint">
-									{{ t('astrolabe', 'Hides rows from the results already returned. Does not fetch more, so raising it shortens the list.') }}
+									:disabled="!relevanceApplies"
+									aria-describedby="mcp-minimum-relevance-hint">
+								<p id="mcp-minimum-relevance-hint" class="mcp-option-hint">
+									{{ relevanceApplies
+										? t('astrolabe', 'Hides results below this relevance. The server applies it before cutting the page, so a filtered search still returns a full page.')
+										: t('astrolabe', 'Exact phrase search finds every document containing the phrase, unranked, so relevance does not apply.') }}
 								</p>
 							</div>
 
@@ -314,7 +301,9 @@
 							<template #icon>
 								<PlaylistPlus :size="18" />
 							</template>
-							{{ t('astrolabe', 'Add all to SAR') }}
+							{{ algorithmUsed === 'exact' && sarTotal > 0
+								? n('astrolabe', 'Add all %n match to SAR', 'Add all %n matches to SAR', sarTotal)
+								: t('astrolabe', 'Add all to SAR') }}
 						</NcButton>
 						<span class="mcp-algorithm-badge">{{ algorithmUsed }}</span>
 					</div>
@@ -383,7 +372,7 @@
 								mistake as the old score badge, with a better
 								number behind it.
 							-->
-							<div v-if="typeof result.relevance === 'number'" class="mcp-relevance">
+							<div v-if="typeof result.relevance === 'number' && result.relevance_source !== 'exact_match'" class="mcp-relevance">
 								<div
 									class="mcp-relevance-bar"
 									role="meter"
@@ -720,6 +709,8 @@ const SUMMARY_TIMEOUT_MS = 3 * 60 * 1000
 const ACTIVE_SAR_CASE_KEY = `astrolabe.activeSarCase.${getCurrentUser()?.uid ?? ''}`
 // Case items per request: the MCP server's maximum page.
 const SAR_PAGE = 1000
+// MAX_ITEMS_PER_CALL on the MCP server's /sar/cases/{id}/items.
+const SAR_ITEMS_PER_CALL = 1000
 // After this long a search is probably waiting on the embedding service.
 const SLOW_SEARCH_MS = 8000
 
@@ -824,17 +815,17 @@ export default {
 			// always valid server paths.
 			pathPrefixes: [],
 			limit: 20,
-			scoreThreshold: 0,
 			// Result shape: 'chunk' (best-matching passages, a long document can
 			// occupy several rows) or 'document' (one row per document). The
 			// server supported this all along; this page never asked for it.
 			granularity: 'chunk',
-			// Server-side relevance cut, percent. NOT the same control as
-			// `scoreThreshold` below: this is sent to the server and applied
-			// before the trim to `limit`, so the page backfills with qualifying
-			// rows. `scoreThreshold` filters client-side over the rows already
-			// returned, so raising it shrinks the list.
-			serverMinRelevance: 0,
+			// The one relevance control, percent. Sent as `min_relevance`, which
+			// the server applies before the trim to `limit` so the page
+			// backfills with qualifying rows, and applied to the rows already
+			// shown (isRelevant) so moving it takes effect at once. It used to
+			// be two sliders, one per side; on a server that reports
+			// `relevance` both cut on the same value, so one is enough.
+			minRelevance: 0,
 			// Whether the LAST response was actually reranked. The server asks
 			// for it whenever it can, but reranking degrades to retrieval order
 			// instead of failing, so this reports what happened.
@@ -911,6 +902,8 @@ export default {
 			sarCaseState: null,
 			showSarSidebar: true,
 			sarHasMore: false,
+			// Matches reported by the last case search (exact: every match).
+			sarTotal: 0,
 			loadingMore: false,
 			sarNextOffset: 0,
 			sarLastQuery: '',
@@ -947,6 +940,9 @@ export default {
 				{ id: 'hybrid', label: this.t('astrolabe', 'Hybrid') },
 				{ id: 'semantic', label: this.t('astrolabe', 'Semantic') },
 				{ id: 'bm25', label: this.t('astrolabe', 'Keyword (BM25)') },
+				// Every document containing the phrase, unranked (server
+				// `algorithm: "exact"`). Offered only when advertised.
+				{ id: 'exact', label: this.t('astrolabe', 'Exact phrase (every document)') },
 			]
 			// Only offer query types the MCP server advertises: an explicit `[]`
 			// (vector sync off) hides all three; otherwise offer the advertised
@@ -954,7 +950,9 @@ export default {
 			// the set (older backend) ⇒ show all (the backend still rejects an
 			// unsupported algorithm 422-side).
 			const offered = this.supportedSearchTypes === null
-				? all
+				// An older server that does not advertise its set predates
+				// "exact", so it is never offered on a guess.
+				? all.filter((opt) => opt.id !== 'exact')
 				: all.filter((opt) => this.supportedSearchTypes.includes(opt.id))
 			// A case search lists one row per document, which the dense-only
 			// algorithm cannot do; offer it only when nothing else is available.
@@ -1094,7 +1092,13 @@ export default {
 		// filtering an empty list anyway.
 		scoreCut() {
 			const { min, max } = this.scoreRange
-			return min + (this.scoreThreshold / 100) * (max - min)
+			return min + (this.minRelevance / 100) * (max - min)
+		},
+
+		// Relevance means nothing for an exact phrase search: every result is
+		// a match, none is "more" relevant. The slider is greyed out for it.
+		relevanceApplies() {
+			return this.algorithm !== 'exact'
 		},
 
 		// Does this server report `relevance` (ADR-034)? Detected from the
@@ -1124,8 +1128,11 @@ export default {
 		// match -- which is exactly the drift the comment on
 		// filteredResultsAndCoords warns about.
 		isRelevant() {
+			if (!this.relevanceApplies) {
+				return () => true
+			}
 			if (this.hasRelevance) {
-				const cut = this.scoreThreshold / 100
+				const cut = this.minRelevance / 100
 				// A row with no `relevance` is UNKNOWN, not zero, so it is never
 				// dropped by the cut. hasRelevance is true when *some* row has
 				// the field, and treating a missing one as 0 would silently
@@ -1189,14 +1196,14 @@ export default {
 			}
 		},
 
-		scoreThreshold() {
+		minRelevance() {
 			// Debounce so rapid slider drags don't trigger many Plotly.newPlot
 			// calls (each tears down and rebuilds the WebGL scene).
-			if (this._scoreThresholdTimer) {
-				clearTimeout(this._scoreThresholdTimer)
+			if (this._minRelevanceTimer) {
+				clearTimeout(this._minRelevanceTimer)
 			}
-			this._scoreThresholdTimer = setTimeout(() => {
-				this._scoreThresholdTimer = null
+			this._minRelevanceTimer = setTimeout(() => {
+				this._minRelevanceTimer = null
 				if (this.coordinates.length > 0) {
 					this.renderPlot()
 				}
@@ -1208,7 +1215,7 @@ export default {
 		// Non-reactive instance state. Storing these in data() would make
 		// Vue deep-observe a timer ID and a results-snapshot array on every
 		// mutation, with no template benefit.
-		this._scoreThresholdTimer = null
+		this._minRelevanceTimer = null
 		this._renderedResults = []
 	},
 
@@ -1224,9 +1231,9 @@ export default {
 	beforeUnmount() {
 		clearTimeout(this.slowSearchTimer)
 		this.searchAbort?.abort()
-		if (this._scoreThresholdTimer) {
-			clearTimeout(this._scoreThresholdTimer)
-			this._scoreThresholdTimer = null
+		if (this._minRelevanceTimer) {
+			clearTimeout(this._minRelevanceTimer)
+			this._minRelevanceTimer = null
 		}
 		// Clean up Plotly event handlers to prevent memory leaks
 		const plotDiv = document.getElementById('viz-plot')
@@ -1393,6 +1400,7 @@ export default {
 			this.sarCaseKeys = []
 			this.sarCaseState = null
 			this.sarHasMore = false
+			this.sarTotal = 0
 			this.sarNextOffset = 0
 			this.sarLastParams = {}
 			writeActiveSarCase(null)
@@ -1445,6 +1453,15 @@ export default {
 
 		// Every result on the page that is not yet in the case, in one call.
 		async addAllToSar() {
+			// An exact search means "every document", not "this page": fetch
+			// the remaining pages first. Stops if a page fails or adds nothing.
+			if (this.algorithmUsed === 'exact') {
+				let offset = -1
+				while (this.sarHasMore && this.sarNextOffset !== offset) {
+					offset = this.sarNextOffset
+					await this.performSearch(true)
+				}
+			}
 			const found = this.query.trim() || null
 			// One entry per document: with chunk rows a document can appear twice.
 			const seen = new Set()
@@ -1468,7 +1485,13 @@ export default {
 				return
 			}
 			try {
-				const { data } = await axios.post(this.sarCaseUrl('/items'), { add })
+				// The server takes at most SAR_ITEMS_PER_CALL items per request.
+				let data
+				for (let i = 0; i < add.length; i += SAR_ITEMS_PER_CALL) {
+					({ data } = await axios.post(this.sarCaseUrl('/items'), {
+						add: add.slice(i, i + SAR_ITEMS_PER_CALL),
+					}))
+				}
 				this.showSarCase(data)
 			} catch (err) {
 				this.onSarCaseError(err, this.t('astrolabe', 'Could not add the documents to the case.'))
@@ -1594,8 +1617,8 @@ export default {
 				let params = {
 					query: queryText,
 					algorithm: this.algorithm,
-					// The server caps a page at 50.
-					limit: Math.min(parseInt(this.limit) || 20, 50),
+					// The server caps a page at 100.
+					limit: Math.min(parseInt(this.limit) || 20, 100),
 					// Skip the PCA computation entirely when the admin has
 					// disabled the visualization panel.
 					include_pca: this.showVisualization,
@@ -1605,13 +1628,12 @@ export default {
 				// than per passage -- the shape 'which files mention X' wants.
 				params.granularity = this.granularity
 
-				// Server-side relevance cut. Distinct from the slider below,
-				// which is a client-side filter over what already came back:
-				// this one is applied BEFORE the server trims to `limit`, so a
-				// filtered request still returns a full page of qualifying rows
-				// instead of a short one. Only sent when actually filtering.
-				if (this.serverMinRelevance > 0) {
-					params.min_relevance = this.serverMinRelevance / 100
+				// Applied by the server BEFORE it trims to `limit`, so a filtered
+				// request still returns a full page of qualifying rows. Only
+				// sent when actually filtering, and never for an exact search,
+				// which has no relevance to cut on.
+				if (this.relevanceApplies && this.minRelevance > 0) {
+					params.min_relevance = this.minRelevance / 100
 				}
 
 				if (this.selectedDocTypes.length > 0) {
@@ -1654,7 +1676,15 @@ export default {
 					this.algorithmUsed = response.data.algorithm_used || this.algorithm
 					if (this.sarCollecting) {
 						this.sarNextOffset += params.limit
-						this.sarHasMore = page.length === params.limit
+						// An exact search reports the true number of matches, and
+						// a page can come back short (a stale match dropped by
+						// the server's access check), so page by the count. A
+						// ranked search's total is only its candidate pool:
+						// there a full page is what says more may follow.
+						this.sarTotal = response.data.total_documents || 0
+						this.sarHasMore = this.algorithmUsed === 'exact'
+							? this.sarNextOffset < this.sarTotal
+							: page.length === params.limit
 						if (!loadMore) {
 							// The case logged this search: show it in the sidebar.
 							this.$refs.sarPanel?.load()
@@ -2341,7 +2371,7 @@ export default {
 
 			// Index into the rendered (filtered) subset, not this.results.
 			// pointIndex refers to the trace data Plotly painted, which may
-			// be a subset of this.results when scoreThreshold is non-zero.
+			// be a subset of this.results when minRelevance is non-zero.
 			const result = this._renderedResults[pointIndex]
 
 			if (!result) {

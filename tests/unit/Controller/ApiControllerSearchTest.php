@@ -287,6 +287,28 @@ final class ApiControllerSearchTest extends AbstractApiControllerTestCase {
 		$this->assertFalse($off->getData()['reranked']);
 	}
 
+	/**
+	 * An exact phrase search is unranked, and the server refuses rerank with
+	 * it, so it is never requested however the capability reads. search() arg 2
+	 * is $limit, arg 11 is $rerank.
+	 */
+	public function testExactSearchNeverRequestsRerankAndPagesUpToAHundred(): void {
+		$this->authenticateUserWithToken();
+		$this->searchCapabilities->method('isRerankAvailable')->willReturn(true);
+
+		$captured = [];
+		$this->client->expects($this->once())
+			->method('search')
+			->willReturnCallback(function (...$args) use (&$captured): array {
+				$captured = [$args[2], $args[11]];
+				return ['results' => [], 'algorithm_used' => 'exact', 'reranked' => false];
+			});
+
+		$this->controller->search(query: 'Jane Doe', algorithm: 'exact', limit: 500);
+
+		$this->assertSame([100, false], $captured);
+	}
+
 	/** @return array<string, array{string, string, string}> */
 	public static function invalidSearchParams(): array {
 		return [

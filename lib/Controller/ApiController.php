@@ -291,8 +291,8 @@ class ApiController extends Controller {
 			return $accessToken;
 		}
 
-		// Enforce limit bounds
-		$limit = max(1, min($limit, 50));
+		// Enforce limit bounds: the MCP server's own cap for /api/v1/search.
+		$limit = max(1, min($limit, 100));
 
 		// Restrict to admin-approved, installed sources. This is the
 		// authoritative consent gate for the in-app search path; the MCP server
@@ -359,7 +359,9 @@ class ApiController extends Controller {
 		// Cross-encoder rerank stage: on whenever the server can serve it, not a
 		// user choice. The server only reranks when a request asks, so without
 		// this a configured reranker never runs for this app.
-		$rerankBool = $this->searchCapabilities->isRerankAvailable();
+		// Never for an exact phrase search: it is unranked (every document
+		// containing the phrase), so the server refuses rerank with it.
+		$rerankBool = $algorithm !== 'exact' && $this->searchCapabilities->isRerankAvailable();
 
 		// Fusion. Empty ⇒ fall back to the admin setting, so the search page and
 		// the global search bar finally agree on which fusion the deployment
