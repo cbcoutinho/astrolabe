@@ -35,6 +35,17 @@ test('delimiter sniffing ignores quoted spans', () => {
 	assert.deepEqual(parseCsv('"a;b;c",d\n1,2').map((r) => r.cells), [['a;b;c', 'd'], ['1', '2']])
 })
 
+test('CRLF endings with a truncated tail strip \\r and drop the partial row', () => {
+	const t = parseCsvWindow({ before: 'h1,h2\r\n', chunk: 'a,1\r\nb,2\r\n', after: 'c,3\r\nd,', hasMoreAfter: true })
+	assert.deepEqual(t.header, ['h1', 'h2'])
+	assert.deepEqual(t.rows.map((r) => [r.cells, r.inChunk]), [[['a', '1'], true], [['b', '2'], true], [['c', '3'], false]])
+})
+
+test('empty chunk flags no rows', () => {
+	const t = parseCsvWindow({ before: 'h\nx\n', chunk: '', after: 'y\n' })
+	assert.ok(t.rows.every((r) => !r.inChunk))
+})
+
 test('window without a whole row yields an empty table', () => {
 	const t = parseCsvWindow({ chunk: 'partial,row', hasMoreBefore: true, hasMoreAfter: true })
 	assert.deepEqual(t, { header: null, rows: [] })

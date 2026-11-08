@@ -29,7 +29,7 @@ export function parseCsvWindow({ before = '', chunk = '', after = '', hasMoreBef
 	}
 	if (hasMoreAfter) {
 		const nl = text.lastIndexOf('\n')
-		to = nl < from ? from : nl
+		to = Math.max(nl, from)
 	}
 
 	const records = parseCsv(text, from, to)
@@ -47,6 +47,18 @@ export function parseCsvWindow({ before = '', chunk = '', after = '', hasMoreBef
 }
 
 /**
+ * The most frequent of `,` `;` tab in a line, ignoring quoted spans.
+ *
+ * @param {string} line first line of the window
+ * @return {string}
+ */
+function sniffDelimiter(line) {
+	const bare = line.replace(/"[^"]*"/g, '')
+	const count = (d) => bare.split(d).length
+	return [';', '\t'].reduce((best, d) => (count(d) > count(best) ? d : best), ',')
+}
+
+/**
  * RFC 4180 parse of text[from, to), keeping each record's offsets.
  * Delimiter is sniffed from the first line (`,`, `;` or tab).
  *
@@ -57,10 +69,7 @@ export function parseCsvWindow({ before = '', chunk = '', after = '', hasMoreBef
  */
 export function parseCsv(text, from = 0, to = text.length) {
 	const firstLineEnd = text.indexOf('\n', from)
-	const firstLine = text.slice(from, firstLineEnd === -1 || firstLineEnd > to ? to : firstLineEnd)
-	const delim = [',', ';', '\t']
-		.map((d) => [d, firstLine.replace(/"[^"]*"/g, '').split(d).length])
-		.reduce((a, b) => (b[1] > a[1] ? b : a))[0]
+	const delim = sniffDelimiter(text.slice(from, firstLineEnd === -1 ? to : Math.min(firstLineEnd, to)))
 
 	const records = []
 	let cells = []
