@@ -624,6 +624,11 @@
 						@loaded="handlePdfLoaded"
 						@error="handlePdfError" />
 
+					<!-- CSV files as a table, chunk rows highlighted -->
+					<CsvViewer
+						v-else-if="viewerType === 'csv'"
+						v-bind="viewerContext" />
+
 					<!-- Markdown Viewer (for non-PDFs) -->
 					<MarkdownViewer
 						v-else
@@ -694,6 +699,7 @@ import PlaylistCheck from 'vue-material-design-icons/PlaylistCheck.vue'
 import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import ShieldAccount from 'vue-material-design-icons/ShieldAccount.vue'
+import CsvViewer from './components/CsvViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
 // Imported statically, despite PDF.js being several MB. A dynamic import emits
 // a separate chunk whose URL Vite resolves against `base` (`/`), so it is
@@ -762,6 +768,7 @@ export default {
 		NcCheckboxRadioSwitch,
 		PDFViewer,
 		MarkdownViewer,
+		CsvViewer,
 		SarCasePanel,
 		SarCases,
 		NcCounterBubble,
@@ -2080,11 +2087,18 @@ export default {
 						this.currentBbox = response.data.chunk_bbox || []
 						this.currentBboxPage = response.data.page_number
 					} else {
-						this.viewerType = 'text'
+						const isCsv = result.doc_type === 'file'
+							&& (result.metadata?.mime_type === 'text/csv'
+								|| /\.csv$/i.test(result.metadata?.path || ''))
+						this.viewerType = isCsv ? 'csv' : 'text'
 						this.viewerContext = {
-							chunk: response.data.chunk_text,
-							before: response.data.before_context,
-							after: response.data.after_context,
+							chunk: response.data.chunk_text || '',
+							before: response.data.before_context || '',
+							after: response.data.after_context || '',
+							// Absent flag = unknown: assume truncated, so no
+							// partial line is shown and no bogus header guessed.
+							hasMoreBefore: response.data.has_more_before !== false,
+							hasMoreAfter: response.data.has_more_after !== false,
 						}
 					}
 				} else {

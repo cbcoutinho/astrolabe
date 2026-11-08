@@ -92,6 +92,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: JS unit tests
+        run: npm run test:unit
+
   # Stylelint
   stylelint:
     runs-on: ubuntu-latest
