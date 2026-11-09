@@ -34,6 +34,12 @@ class McpServerClient {
 	 */
 	public const MAX_CHUNK_CONTEXT = 10000;
 
+	/**
+	 * The server's cap on `limit` for /api/v1/search, i.e. one page. The page's
+	 * own clamp (App.vue) mirrors it.
+	 */
+	public const MAX_SEARCH_LIMIT = 100;
+
 	private ClientInterface $httpClient;
 	private RequestFactoryInterface $requestFactory;
 	private StreamFactoryInterface $streamFactory;
@@ -437,7 +443,7 @@ class McpServerClient {
 		$requestBody = [
 			'query' => $query,
 			'algorithm' => $algorithm,
-			'limit' => min($limit, 100), // The server's cap for /api/v1/search
+			'limit' => min($limit, self::MAX_SEARCH_LIMIT),
 			'include_pca' => $includePca,
 			// Fusion, granularity and min_relevance were accepted by the server
 			// but never sent from this page, so the admin's fusion choice, the
@@ -614,7 +620,7 @@ class McpServerClient {
 			'algorithm' => $algorithm,
 			'fusion' => $fusion,
 			'score_threshold' => $scoreThreshold,
-			'limit' => min($limit, 100),
+			'limit' => min($limit, self::MAX_SEARCH_LIMIT),
 			'offset' => $offset,
 			'include_pca' => false,
 			'include_chunks' => true,
