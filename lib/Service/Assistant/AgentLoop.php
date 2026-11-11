@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service\Assistant;
 
-use Mcp\Client;
+use Mcp\Client\Client;
 use Mcp\Schema\Content\TextContent;
 use OCA\Astrolabe\AppInfo\Application;
 use OCA\Astrolabe\Service\Mcp\McpClientFactory;

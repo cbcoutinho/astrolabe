@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Service\Assistant;
 
-use Mcp\Client;
+use Mcp\Client\Client;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
 use Mcp\Schema\Result\ListToolsResult;

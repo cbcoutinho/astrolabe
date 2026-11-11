@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Service\Mcp;
 
-use Mcp\Client;
+use Mcp\Client\Client;
 use Mcp\Client\Transport\HttpTransport;
 use Mcp\Schema\Enum\ProtocolVersion;
 use OCA\Astrolabe\AppInfo\Application;

@@ -141,7 +141,7 @@ if ($missing !== []) {
  * is only the "present but hollow" case.
  */
 const REQUIRED_CLASSES = [
-	'Mcp\Client',
+	'Mcp\Client\Client',
 	'Symfony\Component\Uid\Uuid',
 	// A transitive dependency rather than a direct one — `mcp/sdk` requires it
 	// for schema validation — and so exactly the kind of tree that can go
