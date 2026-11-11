@@ -34,6 +34,8 @@ use Psr\Log\LoggerInterface;
  * Authenticates to the MCP server by minting a short-lived JWT for the
  * current Nextcloud session user via McpTokenMinter — no per-user
  * OAuth tokens are persisted by this controller or the app at large.
+ *
+ * @psalm-api Instantiated by the Nextcloud framework.
  */
 class ApiController extends Controller {
 	public function __construct(

@@ -12,6 +12,8 @@ use OCP\Settings\IIconSection;
  * Admin settings section for Astrolabe.
  *
  * Creates a dedicated section in admin settings for semantic search administration.
+ *
+ * @psalm-api Instantiated by the Nextcloud framework.
  */
 class AdminSection implements IIconSection {
 	private $l;

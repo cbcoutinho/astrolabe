@@ -21,7 +21,7 @@ final class DocumentAccessService {
 	/** @var array<string, AccessVerifierInterface> */
 	private array $byDocType = [];
 
-	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
+	/** @psalm-api Constructed via DI. */
 	public function __construct(
 		FileAccessVerifier $fileVerifier,
 		DeckAccessVerifier $deckVerifier,

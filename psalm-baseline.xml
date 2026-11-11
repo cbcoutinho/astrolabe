@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="6.16.1@f1f5de594dc76faf8784e02d3dc4716c91c6f6ac">
+<files psalm-version="7.2.1@127f608db981d5e1d023603514f7bbfcaae8f570">
   <file src="lib/AppInfo/Application.php">
     <ClassMustBeFinal>
       <code><![CDATA[Application]]></code>
@@ -10,9 +10,6 @@
     </MissingOverrideAttribute>
   </file>
   <file src="lib/Controller/ApiController.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[ApiController]]></code>
-    </ClassMustBeFinal>
     <DeprecatedMethod>
       <code><![CDATA[setAppValue]]></code>
       <code><![CDATA[setAppValue]]></code>
@@ -28,22 +25,6 @@
       <code><![CDATA[is_array($status)]]></code>
       <code><![CDATA[is_array($status)]]></code>
     </TypeDoesNotContainType>
-    <UnusedClass>
-      <code><![CDATA[ApiController]]></code>
-    </UnusedClass>
-  </file>
-  <file src="lib/Controller/CredentialsController.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[CredentialsController]]></code>
-    </ClassMustBeFinal>
-    <UnusedClass>
-      <code><![CDATA[CredentialsController]]></code>
-    </UnusedClass>
-  </file>
-  <file src="lib/Controller/PageController.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[PageController]]></code>
-    </ClassMustBeFinal>
   </file>
   <file src="lib/Http/NextcloudPsr18Client.php">
     <ClassMustBeFinal>
@@ -207,44 +188,26 @@
     </PossiblyUnusedMethod>
   </file>
   <file src="lib/Settings/AdminSection.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[AdminSection]]></code>
-    </ClassMustBeFinal>
     <MissingOverrideAttribute>
       <code><![CDATA[public function getID(): string {]]></code>
       <code><![CDATA[public function getIcon(): string {]]></code>
       <code><![CDATA[public function getName(): string {]]></code>
       <code><![CDATA[public function getPriority(): int {]]></code>
     </MissingOverrideAttribute>
-    <UnusedClass>
-      <code><![CDATA[AdminSection]]></code>
-    </UnusedClass>
   </file>
   <file src="lib/Settings/Personal.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[Personal]]></code>
-    </ClassMustBeFinal>
     <MissingOverrideAttribute>
       <code><![CDATA[public function getForm(): TemplateResponse {]]></code>
       <code><![CDATA[public function getPriority(): int {]]></code>
       <code><![CDATA[public function getSection(): string {]]></code>
     </MissingOverrideAttribute>
-    <UnusedClass>
-      <code><![CDATA[Personal]]></code>
-    </UnusedClass>
   </file>
   <file src="lib/Settings/PersonalSection.php">
-    <ClassMustBeFinal>
-      <code><![CDATA[PersonalSection]]></code>
-    </ClassMustBeFinal>
     <MissingOverrideAttribute>
       <code><![CDATA[public function getID(): string {]]></code>
       <code><![CDATA[public function getIcon(): string {]]></code>
       <code><![CDATA[public function getName(): string {]]></code>
       <code><![CDATA[public function getPriority(): int {]]></code>
     </MissingOverrideAttribute>
-    <UnusedClass>
-      <code><![CDATA[PersonalSection]]></code>
-    </UnusedClass>
   </file>
 </files>

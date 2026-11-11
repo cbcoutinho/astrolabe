@@ -12,6 +12,8 @@ use OCP\Settings\IIconSection;
  * Personal settings section for Astrolabe.
  *
  * Creates a dedicated section in personal settings for semantic search configuration.
+ *
+ * @psalm-api Instantiated by the Nextcloud framework.
  */
 class PersonalSection implements IIconSection {
 	private $l;
