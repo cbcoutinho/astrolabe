@@ -28,6 +28,11 @@ jobs:
     env:
       # Read by tests/e2e/docker-compose.yml for the Nextcloud image tag.
       NEXTCLOUD_VERSION: ${{ matrix.nextcloud }}
+      # A cbcoutinho/oidc ref to test the internal-IdP lane against instead of
+      # the app-store release (tests/e2e/docker-compose.oidc-src.yml). Empty =
+      # app store.
+      # TEMPORARY: group scope limits are unreleased; clear before merging.
+      OIDC_REF: feat/group-scope-ceiling
 
     strategy:
       fail-fast: false
@@ -93,6 +98,25 @@ jobs:
           composer install --no-dev --optimize-autoloader
           npm ci --ignore-scripts
           npm run build
+
+      - name: Check out oidc ${{ env.OIDC_REF }}
+        if: matrix.lane == 'internal-idp' && env.OIDC_REF != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cbcoutinho/oidc
+          ref: ${{ env.OIDC_REF }}
+          path: oidc-src
+          persist-credentials: false
+
+      - name: Build oidc and mount it into the stack
+        if: matrix.lane == 'internal-idp' && env.OIDC_REF != ''
+        working-directory: oidc-src
+        run: |
+          composer install --no-dev --optimize-autoloader
+          npm ci --ignore-scripts
+          npm run build
+          # start-server.js reads this; the overlay mounts ./oidc-src.
+          echo "E2E_COMPOSE_OVERLAY=docker-compose.oidc-src.yml" >> "$GITHUB_ENV"
 
       - name: Get installed Playwright version
         id: playwright

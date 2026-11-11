@@ -6,6 +6,49 @@
   "loginWithEmailAllowed": true,
   "accessTokenLifespan": 1800,
   "ssoSessionIdleTimeout": 3600,
+  "attributes": {
+    "CreateDefaultClientScopes": "true"
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "notes-reader",
+        "description": "Grants the notes.read client scope (per-group scope limit)"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "notes-readers",
+      "path": "/notes-readers",
+      "realmRoles": ["notes-reader"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "notes.read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "files.read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    }
+  ],
+  "defaultOptionalClientScopes": ["notes.read", "files.read"],
+  "scopeMappings": [
+    {
+      "clientScope": "notes.read",
+      "roles": ["notes-reader"]
+    }
+  ],
   "clients": [
     {
       "clientId": "nextcloud",
