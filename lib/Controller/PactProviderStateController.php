@@ -31,7 +31,7 @@ use OCP\IRequest;
  * without credentials. Never set the flag outside a throwaway CI stack:
  * anyone who can reach the instance could then rewrite this app's settings.
  *
- * @psalm-suppress UnusedClass — routed via appinfo/routes.php.
+ * @psalm-api — routed via appinfo/routes.php.
  */
 final class PactProviderStateController extends Controller {
 	public const SYSTEM_FLAG = 'astrolabe.pact_state_endpoint_enabled';

@@ -18,7 +18,7 @@ use Psr\Log\LoggerInterface;
  * grows — and it holds the text of what users asked and what the model answered,
  * which is not something to keep indefinitely by accident.
  *
- * @psalm-suppress UnusedClass — scheduled from appinfo/info.xml.
+ * @psalm-api — scheduled from appinfo/info.xml.
  */
 final class ExpireAgentConversationsJob extends TimedJob {
 	/**

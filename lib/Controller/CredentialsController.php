@@ -30,6 +30,8 @@ use Psr\Log\LoggerInterface;
  *   - admin ({@see adminProvisionUser}): an admin mints a token on a user's
  *     behalf. Admin-only methods carry no #[NoAdminRequired] attribute, so
  *     Nextcloud's SecurityMiddleware restricts them to admins.
+ *
+ * @psalm-api Instantiated by the Nextcloud framework.
  */
 class CredentialsController extends Controller {
 	/**

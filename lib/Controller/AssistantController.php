@@ -22,7 +22,7 @@ use OCP\IUserSession;
  * result. Nothing here proxies model output, so there is no polling route of ours
  * to secure or rate-limit.
  *
- * @psalm-suppress UnusedClass — resolved by route name through the DI container.
+ * @psalm-api — resolved by route name through the DI container.
  */
 final class AssistantController extends Controller {
 	/** PNG file signature (RFC 2083 §3.1). */

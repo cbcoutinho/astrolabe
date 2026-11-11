@@ -22,6 +22,8 @@ use OCP\Settings\ISettings;
  * are minted on demand from the active Nextcloud session. The only
  * per-user credential here is the optional app password the MCP server
  * uses to read the user's files for background indexing.
+ *
+ * @psalm-api Instantiated by the Nextcloud framework.
  */
 class Personal implements ISettings {
 	public function __construct(

@@ -21,7 +21,7 @@ use OCP\IAppConfig;
 use OCP\IRequest;
 
 /**
- * @psalm-suppress UnusedClass
+ * @psalm-api
  */
 class PageController extends Controller {
 	public function __construct(

@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface;
  * lost to a crash — whose pages would otherwise sit in the user's own files
  * indefinitely.
  *
- * @psalm-suppress UnusedClass — scheduled from appinfo/info.xml.
+ * @psalm-api — scheduled from appinfo/info.xml.
  */
 final class SweepSummaryScratchJob extends TimedJob {
 	/**

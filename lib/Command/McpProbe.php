@@ -22,7 +22,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * a whole document by fetching it through a tool depends on the shape of what
  * that tool returns, which is equally unanswerable from here.
  *
- * @psalm-suppress UnusedClass — registered as an occ command.
+ * @psalm-api — registered as an occ command.
  */
 final class McpProbe extends Command {
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
