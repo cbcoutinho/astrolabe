@@ -31,11 +31,10 @@ class WebhookPresets {
 	// `files/Notes` nested anywhere in a user's tree.
 	public const NOTES_PATH_PATTERN = '/^\\/[^\\/]+\\/files\\/Notes\\//';
 
-	// System-tag assign/unassign (Nextcloud 32+). A single event class covers
+	// System-tag assign/unassign. A single event class covers
 	// both directions; the payload's `eventType` distinguishes them. Lets
 	// adding/removing the `vector-index` tag trigger near-real-time (re)indexing
-	// instead of waiting for the hourly scan. Requires NC >= 32 — MapperEvent
-	// gained getWebhookSerializable() in 32.0.0; older servers never deliver it.
+	// instead of waiting for the hourly scan.
 	public const SYSTEMTAG_EVENT_MAPPER = 'OCP\\SystemTag\\MapperEvent';
 
 	// Deck webhook events (require nextcloud/deck PR #7910, which adds
@@ -84,7 +83,7 @@ class WebhookPresets {
 			],
 			'files_sync' => [
 				'name' => 'Files Sync',
-				'description' => 'Real-time synchronization for indexed files: content changes to tagged documents, deletions, and index-tag changes (Nextcloud 32+)',
+				'description' => 'Real-time synchronization for indexed files: content changes to tagged documents, deletions, and index-tag changes',
 				'app' => 'files',
 				'events' => [
 					[
@@ -100,8 +99,7 @@ class WebhookPresets {
 						'filter' => [],
 					],
 					// Tag assign/unassign. Drives vector-index (re)indexing when a
-					// file or folder is tagged/untagged. Delivered only on NC >= 32;
-					// harmless to register on older servers (it simply never fires).
+					// file or folder is tagged/untagged.
 					[
 						'event' => self::SYSTEMTAG_EVENT_MAPPER,
 						'filter' => [],

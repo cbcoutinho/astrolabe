@@ -175,10 +175,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # PHP 8.1 dropped: Nextcloud 32+ (astrolabe's min-version) requires PHP
+      # PHP 8.1 dropped: Nextcloud 33+ (astrolabe's min-version) requires PHP
       # 8.2+, and Psalm 6 pulls webmozart/assert ^2 which uses PHP 8.2-only
-      # syntax. Run static analysis on the 8.2 floor rather than the version
-      # matrix's php-min (which still reports 8.1 for Nextcloud 32).
+      # syntax. Static analysis is pinned to the 8.2 floor explicitly.
       - name: Set up PHP 8.2
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
@@ -216,11 +215,16 @@ jobs:
 
     strategy:
       matrix:
-        # PHP 8.1 dropped: Nextcloud 32+ (astrolabe's min-version) requires PHP
+        # PHP 8.1 dropped: Nextcloud 33+ (astrolabe's min-version) requires PHP
         # 8.2+, and pact-php (contract tests, ADR-029) needs ^8.2.
         php-versions: ['8.2', '8.3']
         # Oldest and newest Nextcloud OCP declared in appinfo/info.xml.
         ocp: [min, max]
+        # OCP max (Nextcloud 35) requires PHP 8.3+, so skip the unsupported
+        # 8.2 pairing. Revisit when max-version or the PHP list changes.
+        exclude:
+          - php-versions: '8.2'
+            ocp: max
 
     name: PHPUnit (PHP ${{ matrix.php-versions }}, OCP ${{ matrix.ocp }})
 

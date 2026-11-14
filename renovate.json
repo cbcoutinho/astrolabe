@@ -9,12 +9,17 @@
     "**/node_modules/**",
     "**/bower_components/**",
     "**/vendor/**",
-    "**/examples/**",
     "**/__tests__/**",
     "**/test/**",
     "**/__fixtures__/**"
   ],
   "packageRules": [
+    {
+      "description": "Pin the example compose files' Nextcloud image to 33.x (astrolabe's min-version); bump this when min-version moves",
+      "matchPackageNames": ["docker.io/library/nextcloud"],
+      "matchFileNames": ["examples/**/compose.yml"],
+      "allowedVersions": "/^33\\./"
+    },
     {
       "description": "@playwright/test is pinned to match the Chromium browser revision installed in CI and local dev. Updating requires verifying that the new version's expected browser revision is available. See: ~/.cache/ms-playwright/ for installed revisions.",
       "matchPackageNames": ["@playwright/test"],
