@@ -206,7 +206,7 @@ jobs:
           composer require --dev "nextcloud/ocp:$OCP_VERSION" --ignore-platform-reqs --with-dependencies
 
       - name: Run Psalm
-        run: composer run psalm -- --threads=1 --monochrome --no-progress --output-format=github
+        run: composer run psalm -- --monochrome --no-progress --output-format=github
 
   # PHPUnit Tests
   phpunit:
