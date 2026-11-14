@@ -33,9 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         # Every server major appinfo/info.xml supports (min-version..max-version).
-        # 35 is pinned to 35.0.0: the floating major tag is brand new and moved
-        # under us once already (it briefly served an empty image index).
-        nextcloud: ['33', '34', '35.0.0']
+        nextcloud: ['33', '34', '35']
         lane: [internal-idp, external-idp]
         include:
           # Nextcloud is the IdP (`oidc` app).
