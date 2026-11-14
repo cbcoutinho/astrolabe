@@ -17,7 +17,7 @@ nextcloud-mcp-server repo.
 
 - They need **`ext-ffi`** — pact-php bundles a Rust core.
 - They need **PHP 8.2+** (pact-php `^10`). This is why PHP 8.1 was dropped from
-  the app (NC 32+, astrolabe's `min-version`, is 8.2+ anyway).
+  the app (NC 33+, astrolabe's `min-version`, is 8.2+ anyway).
 - Provider verification needs a **running Nextcloud** with astrolabe installed.
 - Consumer pacts need a **real HTTP client** hitting the Pact mock server (not
   the mocked `IClient` the unit tests use).

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "849e5bd9d35bfca8960d60514564ad90",
+    "content-hash": "7d310eef5bce74f573d231ae992d82ca",
     "packages": [
         {
             "name": "bamarni/composer-bin-plugin",
@@ -2171,20 +2171,20 @@
         },
         {
             "name": "nextcloud/ocp",
-            "version": "dev-stable32",
+            "version": "dev-stable33",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nextcloud-deps/ocp.git",
-                "reference": "0f3bbf18846c7bf9e8dea4da2bf045be24be61eb"
+                "reference": "79aef9310ceb35c8f5afd09aa028ec158df9ce14"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nextcloud-deps/ocp/zipball/0f3bbf18846c7bf9e8dea4da2bf045be24be61eb",
-                "reference": "0f3bbf18846c7bf9e8dea4da2bf045be24be61eb",
+                "url": "https://api.github.com/repos/nextcloud-deps/ocp/zipball/79aef9310ceb35c8f5afd09aa028ec158df9ce14",
+                "reference": "79aef9310ceb35c8f5afd09aa028ec158df9ce14",
                 "shasum": ""
             },
             "require": {
-                "php": "~8.1 || ~8.2 || ~8.3 || ~8.4",
+                "php": "~8.2 || ~8.3 || ~8.4 || ~8.5",
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0.2",
                 "psr/event-dispatcher": "^1.0",
@@ -2193,7 +2193,7 @@
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-stable32": "32.0.0-dev"
+                    "dev-stable33": "33.0.0-dev"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -2213,9 +2213,10 @@
             "description": "Composer package containing Nextcloud's public OCP API and the unstable NCU API",
             "support": {
                 "issues": "https://github.com/nextcloud-deps/ocp/issues",
-                "source": "https://github.com/nextcloud-deps/ocp/tree/stable32"
+                "source": "https://github.com/nextcloud-deps/ocp/tree/stable33"
             },
-            "time": "2026-07-16T01:28:14+00:00"
+            "time": "2026-11-14T03:57:12+00:00",
+            "published-time": "2026-11-14T03:57:17+00:00"
         },
         {
             "name": "nikic/php-parser",

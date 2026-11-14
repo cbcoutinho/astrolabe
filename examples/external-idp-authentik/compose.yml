@@ -126,7 +126,7 @@ services:
 
   # ── Nextcloud + Astrolabe ────────────────────────────────────────────────
   app:
-    image: docker.io/library/nextcloud:32
+    image: docker.io/library/nextcloud:33
     restart: unless-stopped
     depends_on:
       db:

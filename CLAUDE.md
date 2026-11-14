@@ -19,7 +19,7 @@ branding-scoutai.json, scoutai.css "ScoutAI" white-label build of the Nextcloud 
 integration for the `nextcloud-mcp-server` backend. PHP lives under `lib/`
 (namespace `OCA\Astrolabe\`), the Vue/JS frontend under `src/` (`App.vue`,
 `adminSettings.js`, `personalSettings.js`, `components/`), built with Vite. App
-manifest: `appinfo/info.xml` + `appinfo/routes.php`. Requires **Nextcloud 32+**
+manifest: `appinfo/info.xml` + `appinfo/routes.php`. Requires **Nextcloud 33+**
 and **PHP 8.2+**; published to the Nextcloud App Store via the release workflows.
 
 ### API surface
@@ -186,7 +186,7 @@ remove it a version later — not a merge-order note.
 
 ## Conventions
 
-- PHP 8.2+, Nextcloud 32+; commits follow **Commitizen** (`.cz.toml`).
+- PHP 8.2+, Nextcloud 33+; commits follow **Commitizen** (`.cz.toml`).
 - Psalm baseline (`psalm-baseline.xml`) must not regress; run `composer run psalm`.
 - The Pact broker is homelab Tailscale-only — contract tests are env-gated and
   skip cleanly off the tailnet.
