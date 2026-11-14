@@ -28,13 +28,6 @@ Astrolabe only indexes content you mark with a Nextcloud system tag named
 Adding or removing the tag triggers a webhook that tells the Cloud backend to
 (re)index that content, so the index tracks your tags as they change.
 
-<Callout title="Requires Nextcloud 32+ for live retagging">
-
-Tag-change webhooks rely on Nextcloud 32+. On older versions you can still
-tag content, but reindexing won't be triggered automatically by tag changes.
-
-</Callout>
-
 <Screenshot
   label="Nextcloud Files app 'Manage tags' dialog with the 'vector-index' tag being applied to a folder."
   src="/vector-index-tag.png"

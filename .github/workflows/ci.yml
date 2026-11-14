@@ -177,8 +177,7 @@ jobs:
 
       # PHP 8.1 dropped: Nextcloud 33+ (astrolabe's min-version) requires PHP
       # 8.2+, and Psalm 6 pulls webmozart/assert ^2 which uses PHP 8.2-only
-      # syntax. Run static analysis on the 8.2 floor rather than the version
-      # matrix's php-min (which reported 8.1 for Nextcloud 32).
+      # syntax. Static analysis is pinned to the 8.2 floor explicitly.
       - name: Set up PHP 8.2
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
