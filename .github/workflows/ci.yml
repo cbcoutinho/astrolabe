@@ -220,6 +220,11 @@ jobs:
         php-versions: ['8.2', '8.3']
         # Oldest and newest Nextcloud OCP declared in appinfo/info.xml.
         ocp: [min, max]
+        # OCP max (Nextcloud 35) requires PHP 8.3+, so skip the unsupported
+        # 8.2 pairing. Revisit when max-version or the PHP list changes.
+        exclude:
+          - php-versions: '8.2'
+            ocp: max
 
     name: PHPUnit (PHP ${{ matrix.php-versions }}, OCP ${{ matrix.ocp }})
 
