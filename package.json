@@ -45,6 +45,6 @@
     "sass-embedded": "1.108.1",
     "stylelint": "17.16.0",
     "terser": "5.51.2",
-    "vite": "8.3.6"
+    "vite": "8.3.8"
   }
 }
