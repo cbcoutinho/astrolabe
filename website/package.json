@@ -19,14 +19,14 @@
     "@mdx-js/react": "3.1.1",
     "@next/mdx": "16.4.6",
     "@nextcloud/browserslist-config": "3.1.2",
-    "@tailwindcss/postcss": "4.3.3",
+    "@tailwindcss/postcss": "4.3.5",
     "@tailwindcss/typography": "0.5.20",
     "@types/mdx": "2.0.14",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "postcss": "8.5.32",
-    "tailwindcss": "4.3.3",
+    "tailwindcss": "4.3.5",
     "typescript": "6.0.3"
   },
   "overrides": {
