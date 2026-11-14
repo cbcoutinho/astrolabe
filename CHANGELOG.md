@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.50.0 (2026-11-14)
+
+### BREAKING CHANGE
+
+- astrolabe now requires Nextcloud 33 or newer; it can no
+longer be installed on Nextcloud 32.
+
+
+- require Nextcloud 33+, drop 32 (EOL) from CI
+
 ## v0.49.4 (2026-11-14)
 
 ### Fix
