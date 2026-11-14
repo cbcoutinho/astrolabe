@@ -15,6 +15,7 @@
       <code><![CDATA[setAppValue]]></code>
       <code><![CDATA[setAppValue]]></code>
       <code><![CDATA[setAppValue]]></code>
+      <code><![CDATA[setUserValue]]></code>
     </DeprecatedMethod>
     <MixedAssignment>
       <code><![CDATA[$response['coordinates_3d']]]></code>
@@ -25,6 +26,13 @@
       <code><![CDATA[is_array($status)]]></code>
       <code><![CDATA[is_array($status)]]></code>
     </TypeDoesNotContainType>
+  </file>
+  <file src="lib/Controller/PactProviderStateController.php">
+    <DeprecatedMethod>
+      <code><![CDATA[deleteUserValue]]></code>
+      <code><![CDATA[deleteUserValue]]></code>
+      <code><![CDATA[setUserValue]]></code>
+    </DeprecatedMethod>
   </file>
   <file src="lib/Http/NextcloudPsr18Client.php">
     <ClassMustBeFinal>
@@ -122,6 +130,16 @@
     <ClassMustBeFinal>
       <code><![CDATA[BackgroundSyncCredentialStorage]]></code>
     </ClassMustBeFinal>
+    <DeprecatedMethod>
+      <code><![CDATA[deleteUserValue]]></code>
+      <code><![CDATA[deleteUserValue]]></code>
+      <code><![CDATA[deleteUserValue]]></code>
+      <code><![CDATA[getUserValue]]></code>
+      <code><![CDATA[getUserValue]]></code>
+      <code><![CDATA[setUserValue]]></code>
+      <code><![CDATA[setUserValue]]></code>
+      <code><![CDATA[setUserValue]]></code>
+    </DeprecatedMethod>
   </file>
   <file src="lib/Service/McpServerClient.php">
     <ClassMustBeFinal>
@@ -149,6 +167,9 @@
     <ClassMustBeFinal>
       <code><![CDATA[SearchSources]]></code>
     </ClassMustBeFinal>
+    <DeprecatedMethod>
+      <code><![CDATA[getUserValue]]></code>
+    </DeprecatedMethod>
   </file>
   <file src="lib/Service/WebhookPresets.php">
     <ClassMustBeFinal>
