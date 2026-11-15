@@ -60,7 +60,7 @@ services:
 
   # ── The identity provider ────────────────────────────────────────────────
   authentik:
-    image: ghcr.io/goauthentik/server:2025.10
+    image: ghcr.io/goauthentik/server:2026.8@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
     restart: unless-stopped
     command: server
     depends_on:
@@ -111,7 +111,7 @@ services:
   # container nothing is configured, and because it has no healthcheck, the
   # Nextcloud hook polls the discovery URL rather than trusting startup order.
   authentik-worker:
-    image: ghcr.io/goauthentik/server:2025.10
+    image: ghcr.io/goauthentik/server:2026.8@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
     restart: unless-stopped
     command: worker
     depends_on:
