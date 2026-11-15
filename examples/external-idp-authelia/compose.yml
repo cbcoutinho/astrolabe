@@ -36,7 +36,7 @@
 
 services:
   db:
-    image: docker.io/library/mariadb:lts
+    image: docker.io/library/mariadb:lts@sha256:4ebbcf100a3ba320766dfa0e1af008df12261301db6ef72798c7650f70794aed
     restart: unless-stopped
     command: --transaction-isolation=READ-COMMITTED
     environment:
@@ -48,12 +48,12 @@ services:
       - db:/var/lib/mysql
 
   redis:
-    image: docker.io/library/redis:alpine
+    image: docker.io/library/redis:alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     restart: unless-stopped
 
   # ── The identity provider ────────────────────────────────────────────────
   authelia:
-    image: docker.io/authelia/authelia:4.39
+    image: docker.io/authelia/authelia:4.39@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
     restart: unless-stopped
     environment:
       X_AUTHELIA_CONFIG: /config/configuration.yml
@@ -196,7 +196,7 @@ services:
       VECTOR_SYNC_USER_POLL_INTERVAL: "10"
 
   qdrant:
-    image: docker.io/qdrant/qdrant:v1.19.0
+    image: docker.io/qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
     restart: unless-stopped
     volumes:
       - qdrant:/qdrant/storage
