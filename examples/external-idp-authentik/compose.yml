@@ -172,7 +172,7 @@ services:
 
   # ── The MCP server ───────────────────────────────────────────────────────
   mcp:
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.176.5
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.211.1@sha256:036a499f92575a0ef092cace69515749bd8a93df6859300e4ce220307df8f69e
     restart: unless-stopped
     command: ["--transport", "streamable-http", "--oauth"]
     depends_on:
