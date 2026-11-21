@@ -41,7 +41,7 @@
     "@nextcloud/stylelint-config": "3.2.2",
     "@playwright/test": "1.56.1",
     "@vitejs/plugin-vue": "6.0.11",
-    "eslint": "10.13.0",
+    "eslint": "10.15.0",
     "sass-embedded": "1.108.2",
     "stylelint": "17.16.0",
     "terser": "5.51.2",
