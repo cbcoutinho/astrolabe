@@ -29,7 +29,8 @@ export function scoreRange(rows) {
 // anchor would drop every negative row at 0%). Both ends are pinned because
 // `min + 1 * (max - min)` can land a float ULP above `max` and drop the top row.
 export function relativeCut({ min, max }, minRelevance) {
-	if (minRelevance <= 0) {
+	// Empty page: the range is +/-Infinity and the cut would be NaN; nothing to keep anyway.
+	if (minRelevance <= 0 || !Number.isFinite(max)) {
 		return -Infinity
 	}
 	if (minRelevance >= 100) {

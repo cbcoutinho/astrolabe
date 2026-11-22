@@ -699,7 +699,7 @@ import MarkdownViewer from './components/MarkdownViewer.vue'
 import PDFViewer from './components/PDFViewer.vue'
 import SarCasePanel from './components/SarCasePanel.vue'
 import SarCases from './components/SarCases.vue'
-import { displayRelevance, hasUncalibrated, rankScore, relevancePredicate, scoreRange, UNCALIBRATED } from './utils/relevance.js'
+import { displayRelevance, hasUncalibrated as anyUncalibrated, rankScore as rankScoreOf, relevancePredicate, scoreRange as computeScoreRange, UNCALIBRATED } from './utils/relevance.js'
 
 // How many PDF pages to render for a multimodal summary. Kept under the
 // backend's own cap; vision tokens dominate the cost of these calls, so sending
@@ -1059,14 +1059,14 @@ export default {
 		// retrieval order on failure, so `rerank_score` may be absent from some
 		// or all rows -- this must stay a fallback, never a requirement.
 		rankScore() {
-			return rankScore
+			return rankScoreOf
 		},
 
 		// Score RANGE (both ends) over this page -- see utils/relevance.js for
 		// why the slider is relative-to-top wherever the value is not
 		// comparable across queries (RRF ~0.033 max, DBSF can go negative).
 		scoreRange() {
-			return scoreRange(this.results)
+			return computeScoreRange(this.results)
 		},
 
 		// Range over the rows whose `relevance` is a model's raw scale with no
@@ -1075,7 +1075,7 @@ export default {
 		// reranker (amazon.rerank-v1 puts good hits near 0.2) does not draw
 		// every bar near-empty.
 		uncalibratedRange() {
-			return scoreRange(this.results.filter((r) => r.relevance_source === UNCALIBRATED))
+			return computeScoreRange(this.results.filter((r) => r.relevance_source === UNCALIBRATED))
 		},
 
 		// Relevance means nothing for an exact phrase search: every result is
@@ -1089,7 +1089,7 @@ export default {
 		// drops good results), and min_relevance is not sent: the server would
 		// apply it absolutely to the same raw value.
 		hasUncalibrated() {
-			return hasUncalibrated(this.results)
+			return anyUncalibrated(this.results)
 		},
 
 		// Only the calibrated source is a probability. `fusion_ordinal` orders
@@ -1808,7 +1808,9 @@ export default {
 			return this.t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. A reranker configured on the server would make it a calibrated score.', { pct })
 		},
 
-		// Clamped rather than trusting the [0,1] contract: an out-of-range value
+		// Uncalibrated rows are normalised across this page's range (see
+		// displayRelevance); others show their own value, clamped rather than
+		// trusting the [0,1] contract: an out-of-range value
 		// from a future server would otherwise render a negative-width or
 		// >100% bar, which looks like a UI bug rather than a data problem.
 		relevancePercent(result) {
