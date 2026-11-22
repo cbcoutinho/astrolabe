@@ -699,7 +699,7 @@ import MarkdownViewer from './components/MarkdownViewer.vue'
 import PDFViewer from './components/PDFViewer.vue'
 import SarCasePanel from './components/SarCasePanel.vue'
 import SarCases from './components/SarCases.vue'
-import { displayRelevance, hasUncalibrated as anyUncalibrated, rankScore as rankScoreOf, relevancePredicate, scoreRange as computeScoreRange, UNCALIBRATED } from './utils/relevance.js'
+import { hasUncalibrated as anyUncalibrated, scoreRange as computeScoreRange, displayRelevance, rankScore as rankScoreOf, relevancePredicate, UNCALIBRATED } from './utils/relevance.js'
 
 // How many PDF pages to render for a multimodal summary. Kept under the
 // backend's own cap; vision tokens dominate the cost of these calls, so sending
