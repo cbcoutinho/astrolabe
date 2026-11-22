@@ -1625,7 +1625,7 @@ export default {
 				// request still returns a full page of qualifying rows. Only
 				// sent when actually filtering, and never for an exact search,
 				// which has no relevance to cut on.
-				// ponytail: keyed on the PREVIOUS response's sources, so the first
+				// Known limit: keyed on the PREVIOUS response's sources, so the first
 				// search after switching to an uncalibrated reranker still sends it;
 				// the client cut corrects from the next search on.
 				if (this.relevanceApplies && this.minRelevance > 0 && !this.hasUncalibrated) {

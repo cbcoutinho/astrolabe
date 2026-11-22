@@ -7,6 +7,8 @@
 // cut on it is meaningless -- amazon.rerank-v1 puts good hits around 0.2.
 export const UNCALIBRATED = 'uncalibrated'
 
+// For uncalibrated rows the cut and bars follow this, not `relevance`; the
+// server derives that from the same signal (a clamp), so the two agree in order.
 export const rankScore = (r) => r.rerank_score ?? r.score ?? 0
 
 const isUncalibrated = (r) => r.relevance_source === UNCALIBRATED

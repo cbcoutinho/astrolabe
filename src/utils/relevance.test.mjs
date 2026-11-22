@@ -53,3 +53,23 @@ test('displayRelevance normalises uncalibrated rows across the page', () => {
 	const one = scoreRange([uncal[0]])
 	assert.equal(displayRelevance(uncal[0], one), 1)
 })
+
+test('empty page admits nothing and does not throw', () => {
+	assert.deepEqual([].filter(relevancePredicate([], 50)), [])
+})
+
+test('uncalibrated DBSF with negative scores: 0% keeps all, cut is offset-invariant', () => {
+	const rows = [0.4, -0.2, -0.8].map((s) => ({ score: s, relevance: Math.max(0, s), relevance_source: 'uncalibrated' }))
+	const keep = (pct) => rows.filter(relevancePredicate(rows, pct)).map((r) => r.score)
+	assert.deepEqual(keep(0), [0.4, -0.2, -0.8])
+	assert.deepEqual(keep(40), [0.4, -0.2])
+	assert.deepEqual(keep(100), [0.4])
+})
+
+test('mixed calibrated + uncalibrated page: only uncalibrated rows are cut', () => {
+	const cal = { rerank_score: 0.01, relevance: 0.05, relevance_source: 'cross_encoder_calibrated' }
+	const rows = [...uncal, cal]
+	const keptRows = rows.filter(relevancePredicate(rows, 100))
+	assert.ok(keptRows.includes(cal))
+	assert.deepEqual(keptRows.filter((r) => r !== cal).map((r) => r.rerank_score), [0.21])
+})
