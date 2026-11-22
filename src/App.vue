@@ -699,6 +699,7 @@ import MarkdownViewer from './components/MarkdownViewer.vue'
 import PDFViewer from './components/PDFViewer.vue'
 import SarCasePanel from './components/SarCasePanel.vue'
 import SarCases from './components/SarCases.vue'
+import { displayRelevance, hasUncalibrated, rankScore, relevancePredicate, scoreRange, UNCALIBRATED } from './utils/relevance.js'
 
 // How many PDF pages to render for a multimodal summary. Kept under the
 // backend's own cap; vision tokens dominate the cost of these calls, so sending
@@ -1058,50 +1059,23 @@ export default {
 		// retrieval order on failure, so `rerank_score` may be absent from some
 		// or all rows -- this must stay a fallback, never a requirement.
 		rankScore() {
-			return (r) => r.rerank_score ?? r.score ?? 0
+			return rankScore
 		},
 
-		// Score RANGE over this page of results -- both ends, not just the
-		// ceiling. Anchoring the cut at 0 would be wrong wherever a score can go
-		// negative, and one of the offered fusions does: DBSF is
-		// admin-selectable and normalises against mean +/- 3 standard
-		// deviations, so points in the lower tail come back below zero. With a 0
-		// anchor the LOOSEST setting (0%) computes a cut of exactly 0 and
-		// silently drops every negative-scored row -- the precise opposite of
-		// "0% shows everything" -- and raising the slider against a negative top
-		// score moves the cut toward zero rather than away from it, inverting
-		// the ordering this control exists to respect.
+		// Score RANGE (both ends) over this page -- see utils/relevance.js for
+		// why the slider is relative-to-top wherever the value is not
+		// comparable across queries (RRF ~0.033 max, DBSF can go negative).
 		scoreRange() {
-			return this.results.reduce(
-				(acc, r) => {
-					const s = this.rankScore(r)
-					return { min: Math.min(acc.min, s), max: Math.max(acc.max, s) }
-				},
-				{ min: Infinity, max: -Infinity },
-			)
+			return scoreRange(this.results)
 		},
 
-		// The slider is RELATIVE, not absolute. An absolute cut cannot work:
-		// the three things a row's `score` might be are on incomparable scales
-		// -- cosine similarity in [0,1] for semantic search, an RRF fused score
-		// bounded by 2/VECTOR_SEARCH_RRF_K (~0.033 at the server's default
-		// k=60) for bm25/hybrid, or an unbounded DBSF score. A [0,100]%
-		// control against the RRF range is inert above ~3%, and a near-perfect
-		// hit legitimately scores 0.033.
-		//
-		// Relative-to-top is scale-invariant, so this control keeps working
-		// across all three, and survives the server retuning k or switching
-		// fusion without going inert again.
-		// Interpolate across the observed range: 0% keeps everything, 100% keeps
-		// only rows tied with the best. Both scale- AND offset-invariant, so it
-		// behaves identically for a cosine similarity, an RRF fused score and a
-		// DBSF score that may be negative.
-		//
-		// -Infinity when there are no results, which admits nothing and is
-		// filtering an empty list anyway.
-		scoreCut() {
-			const { min, max } = this.scoreRange
-			return min + (this.minRelevance / 100) * (max - min)
+		// Range over the rows whose `relevance` is a model's raw scale with no
+		// fitted curve (a non-bge reranker, dense cosine, DBSF). Bars and plot
+		// markers for those rows are normalised across it, so a low-scale
+		// reranker (amazon.rerank-v1 puts good hits near 0.2) does not draw
+		// every bar near-empty.
+		uncalibratedRange() {
+			return scoreRange(this.results.filter((r) => r.relevance_source === UNCALIBRATED))
 		},
 
 		// Relevance means nothing for an exact phrase search: every result is
@@ -1110,13 +1084,12 @@ export default {
 			return this.algorithm !== 'exact'
 		},
 
-		// Does this server report `relevance` (ADR-034)? Detected from the
-		// response rather than negotiated: the field is self-describing, so a
-		// server that has it says so by sending it. No capability call, no
-		// version check, and no deploy-order dependency in either direction --
-		// an older server simply keeps the relative-to-top behaviour below.
-		hasRelevance() {
-			return this.results.some((r) => typeof r.relevance === 'number')
+		// Any row whose relevance has no fitted curve. The slider then cuts
+		// relative-to-top on those rows (an absolute cut on a raw model scale
+		// drops good results), and min_relevance is not sent: the server would
+		// apply it absolutely to the same raw value.
+		hasUncalibrated() {
+			return hasUncalibrated(this.results)
 		},
 
 		// Only the calibrated source is a probability. `fusion_ordinal` orders
@@ -1140,18 +1113,7 @@ export default {
 			if (!this.relevanceApplies) {
 				return () => true
 			}
-			if (this.hasRelevance) {
-				const cut = this.minRelevance / 100
-				// A row with no `relevance` is UNKNOWN, not zero, so it is never
-				// dropped by the cut. hasRelevance is true when *some* row has
-				// the field, and treating a missing one as 0 would silently
-				// hide it the moment the slider left 0 -- the same "never hide
-				// what you could not score" rule the server applies to rows the
-				// reranker did not reach.
-				return (r) => typeof r.relevance !== 'number' || r.relevance >= cut
-			}
-			const cut = this.scoreCut
-			return (r) => this.rankScore(r) >= cut
+			return relevancePredicate(this.results, this.minRelevance)
 		},
 
 		filteredResults() {
@@ -1663,7 +1625,10 @@ export default {
 				// request still returns a full page of qualifying rows. Only
 				// sent when actually filtering, and never for an exact search,
 				// which has no relevance to cut on.
-				if (this.relevanceApplies && this.minRelevance > 0) {
+				// ponytail: keyed on the PREVIOUS response's sources, so the first
+				// search after switching to an uncalibrated reranker still sends it;
+				// the client cut corrects from the next search on.
+				if (this.relevanceApplies && this.minRelevance > 0 && !this.hasUncalibrated) {
 					params.min_relevance = this.minRelevance / 100
 				}
 
@@ -1847,7 +1812,7 @@ export default {
 		// from a future server would otherwise render a negative-width or
 		// >100% bar, which looks like a UI bug rather than a data problem.
 		relevancePercent(result) {
-			return Math.round(Math.min(1, Math.max(0, result.relevance ?? 0)) * 100)
+			return Math.round(displayRelevance(result, this.uncalibratedRange) * 100)
 		},
 
 		getDocumentUrl(result) {
@@ -1933,7 +1898,7 @@ export default {
 			const hasOwnRelevance = (r) => Number.isFinite(r.relevance)
 			const plotScore = (r) => {
 				const s = hasOwnRelevance(r)
-					? r.relevance
+					? displayRelevance(r, this.uncalibratedRange)
 					: (max > min ? (this.rankScore(r) - min) / (max - min) : 1)
 				return Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0
 			}
