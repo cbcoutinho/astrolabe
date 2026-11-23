@@ -128,7 +128,7 @@ services:
 
   # ── The MCP server ───────────────────────────────────────────────────────
   mcp:
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.212.0@sha256:8fbf449a68e92b416e475804dd4adaf4f9c43a5b3d83e8dc0da0b112b359700e
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.218.0@sha256:e9650d14dbdcf796ce1ef4de48f4505de89c84670bbf4722b3eeace00f57656c
     restart: unless-stopped
     # The default entrypoint is wrapped so the example CA is APPENDED to the
     # system trust store rather than replacing it. Pointing SSL_CERT_FILE
