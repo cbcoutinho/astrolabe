@@ -44,7 +44,7 @@
     "eslint": "10.13.0",
     "sass-embedded": "1.108.2",
     "stylelint": "17.16.0",
-    "terser": "5.51.3",
+    "terser": "5.51.4",
     "vite": "8.3.8"
   }
 }
