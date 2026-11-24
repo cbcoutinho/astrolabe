@@ -1566,7 +1566,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-08-20T19:15:30+00:00"
+            "time": "2025-08-20T19:15:30+00:00",
+            "published-time": "2025-08-20T19:16:27+00:00"
         },
         {
             "name": "doctrine/dbal",
@@ -2109,7 +2110,8 @@
                 "issues": "https://github.com/leongrdic/php-smplang/issues",
                 "source": "https://github.com/leongrdic/php-smplang/tree/1.0.2"
             },
-            "time": "2022-07-12T13:21:45+00:00"
+            "time": "2022-07-12T13:21:45+00:00",
+            "published-time": "2022-07-12T13:25:32+00:00"
         },
         {
             "name": "myclabs/deep-copy",
@@ -2339,20 +2341,21 @@
                 "issues": "https://github.com/pact-foundation/composer-downloads-plugin/issues",
                 "source": "https://github.com/pact-foundation/composer-downloads-plugin/tree/v2.2.0"
             },
-            "time": "2026-01-17T14:31:04+00:00"
+            "time": "2026-01-17T14:31:04+00:00",
+            "published-time": "2026-01-17T14:37:23+00:00"
         },
         {
             "name": "pact-foundation/pact-php",
-            "version": "10.2.1",
+            "version": "10.3.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pact-foundation/pact-php.git",
-                "reference": "1f34cb6d9dcb20a5cb5fbbdd3361c1f441132f7f"
+                "reference": "31d0c6b57331a6bcc043830a0acda1916f69fe95"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pact-foundation/pact-php/zipball/1f34cb6d9dcb20a5cb5fbbdd3361c1f441132f7f",
-                "reference": "1f34cb6d9dcb20a5cb5fbbdd3361c1f441132f7f",
+                "url": "https://api.github.com/repos/pact-foundation/pact-php/zipball/31d0c6b57331a6bcc043830a0acda1916f69fe95",
+                "reference": "31d0c6b57331a6bcc043830a0acda1916f69fe95",
                 "shasum": ""
             },
             "require": {
@@ -2360,7 +2363,7 @@
                 "ext-ffi": "*",
                 "ext-json": "*",
                 "ext-openssl": "*",
-                "guzzlehttp/psr7": "^2.4.5",
+                "guzzlehttp/psr7": "^2.4.5 || ^3.0",
                 "pact-foundation/composer-downloads-plugin": "^2.1",
                 "php": "^8.1",
                 "symfony/process": "^5.4|^6.0|^7.0|^8.0"
@@ -2373,7 +2376,7 @@
                 "galbar/jsonpath": "^3.0",
                 "google/protobuf": "^4.31",
                 "grpc/grpc": "^1.57",
-                "guzzlehttp/guzzle": "^7.8",
+                "guzzlehttp/guzzle": "^7.8 || ^8.0",
                 "phpstan/phpstan": "^2.0.4",
                 "phpunit/phpunit": "^10.1.0|^11.0",
                 "ramsey/uuid": "^4.7",
@@ -2444,9 +2447,10 @@
             ],
             "support": {
                 "issues": "https://github.com/pact-foundation/pact-php/issues",
-                "source": "https://github.com/pact-foundation/pact-php/tree/10.2.1"
+                "source": "https://github.com/pact-foundation/pact-php/tree/10.3.0"
             },
-            "time": "2026-01-17T15:39:41+00:00"
+            "time": "2026-11-24T04:10:53+00:00",
+            "published-time": "2026-11-24T04:13:10+00:00"
         },
         {
             "name": "phar-io/manifest",
@@ -5174,16 +5178,16 @@
         },
         {
             "name": "symfony/filesystem",
-            "version": "v7.4.11",
+            "version": "v7.4.23",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/filesystem.git",
-                "reference": "d721ea61b4a5fba8c5b6e7c1feda19efea144b50"
+                "reference": "53d609da66578dad5a39fe290e8f924ec8f05e93"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/filesystem/zipball/d721ea61b4a5fba8c5b6e7c1feda19efea144b50",
-                "reference": "d721ea61b4a5fba8c5b6e7c1feda19efea144b50",
+                "url": "https://api.github.com/repos/symfony/filesystem/zipball/53d609da66578dad5a39fe290e8f924ec8f05e93",
+                "reference": "53d609da66578dad5a39fe290e8f924ec8f05e93",
                 "shasum": ""
             },
             "require": {
@@ -5220,7 +5224,7 @@
             "description": "Provides basic utilities for the filesystem",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/filesystem/tree/v7.4.11"
+                "source": "https://github.com/symfony/filesystem/tree/v7.4.23"
             },
             "funding": [
                 {
@@ -5240,7 +5244,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-11T16:38:44+00:00"
+            "time": "2026-11-04T08:27:22+00:00",
+            "published-time": "2026-11-04T11:28:00+00:00"
         },
         {
             "name": "symfony/finder",
@@ -5308,7 +5313,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-06-27T08:31:18+00:00"
+            "time": "2026-06-27T08:31:18+00:00",
+            "published-time": "2026-06-27T09:16:49+00:00"
         },
         {
             "name": "symfony/polyfill-ctype",
@@ -5477,7 +5483,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-27T06:59:30+00:00"
+            "time": "2026-05-27T06:59:30+00:00",
+            "published-time": "2026-06-09T06:07:20+00:00"
         },
         {
             "name": "symfony/polyfill-php80",
@@ -5627,7 +5634,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-23T16:05:06+00:00"
+            "time": "2026-05-23T16:05:06+00:00",
+            "published-time": "2026-05-27T08:45:03+00:00"
         },
         {
             "name": "theseer/tokenizer",
