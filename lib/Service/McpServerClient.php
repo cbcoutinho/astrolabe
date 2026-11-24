@@ -421,7 +421,7 @@ class McpServerClient {
 	 *   message?: string
 	 * }
 	 *
-	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement, InvalidReturnType - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
+	 * @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement, InvalidReturnType, MixedReturnTypeCoercion - sendAndDecode returns array<string, mixed>; runtime shape comes from MCP server JSON.
 	 */
 	public function search(
 		string $query,

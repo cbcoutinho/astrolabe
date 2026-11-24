@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.2.1@127f608db981d5e1d023603514f7bbfcaae8f570">
+<files psalm-version="7.17.0@b5ea40db593f3acc7a4a20cc1a9bd338ce3bd405">
   <file src="lib/AppInfo/Application.php">
     <ClassMustBeFinal>
       <code><![CDATA[Application]]></code>
@@ -46,6 +46,9 @@
     <ClassMustBeFinal>
       <code><![CDATA[AstrolabeAdminSettingsListener]]></code>
     </ClassMustBeFinal>
+    <DocblockTypeContradiction>
+      <code><![CDATA[!$event instanceof DeclarativeSettingsGetValueEvent && !$event instanceof DeclarativeSettingsSetValueEvent]]></code>
+    </DocblockTypeContradiction>
     <MissingOverrideAttribute>
       <code><![CDATA[public function handle(Event $event): void {]]></code>
     </MissingOverrideAttribute>
