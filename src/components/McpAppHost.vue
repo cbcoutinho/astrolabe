@@ -6,14 +6,31 @@
 				{{ t('astrolabe', 'Show') }}
 			</NcButton>
 		</div>
-		<div v-show="!collapsed" class="mcp-app-shell" :class="{ fullscreen: displayMode === 'fullscreen', inline }">
+		<div v-show="!collapsed"
+			ref="shell"
+			class="mcp-app-shell"
+			:class="{ fullscreen: displayMode === 'fullscreen', inline }">
 			<div class="mcp-app-bar">
 				<strong>{{ title }}</strong>
-				<NcButton v-if="!inline || displayMode === 'fullscreen'" variant="tertiary" @click="close">
+				<NcButton v-if="compact"
+					class="mcp-app-bar-action"
+					variant="primary"
+					@click="displayMode = 'fullscreen'">
+					{{ t('astrolabe', 'Open viewer') }}
+				</NcButton>
+				<NcButton v-if="!inline || displayMode === 'fullscreen'"
+					class="mcp-app-bar-action"
+					variant="tertiary"
+					@click="close">
 					{{ t('astrolabe', 'Close') }}
 				</NcButton>
 			</div>
-			<div class="mcp-app-body">
+			<!-- The card has no answers panel, so an error shows here. -->
+			<NcNoteCard v-if="compact && error" type="error" class="mcp-app-card-error">
+				{{ error }}
+			</NcNoteCard>
+			<!-- Hidden, not removed, while compact: removing the iframe would reload the view. -->
+			<div class="mcp-app-body" :class="{ compact }">
 				<iframe
 					ref="frame"
 					:src="viewUrl"
@@ -21,6 +38,12 @@
 					sandbox="allow-scripts"
 					:style="{ height: frameHeight + 'px' }" />
 				<aside v-if="answers.length || error" class="mcp-app-side">
+					<div class="mcp-app-side-bar">
+						<strong>{{ t('astrolabe', 'Assistant') }}</strong>
+						<NcButton variant="tertiary" :aria-label="t('astrolabe', 'Hide the answers panel')" @click="closeSide">
+							{{ t('astrolabe', 'Hide') }}
+						</NcButton>
+					</div>
 					<NcNoteCard v-if="error" type="error">
 						{{ error }}
 					</NcNoteCard>
@@ -61,6 +84,12 @@ import NcRichText from '@nextcloud/vue/components/NcRichText'
 
 const VIEW_URI = 'ui://nextcloud-mcp/document-viewer.html'
 
+// Below this width (px) an inline viewer is too cramped to use (the Assistant
+// modal's chat column is ~270px), so the widget shows a card that opens it
+// fullscreen instead. Deliberately just under the ~565px that column gets
+// with the conversation list collapsed, where the viewer is still usable.
+const NARROW = 560
+
 export default {
 	name: 'McpAppHost',
 	components: { NcButton, NcLoadingIcon, NcNoteCard, NcRichText },
@@ -81,6 +110,7 @@ export default {
 			viewUrl: generateUrl('/apps/astrolabe/mcp-app/view?uri={uri}', { uri: VIEW_URI }),
 			title: t('astrolabe', 'Document'),
 			displayMode: 'inline',
+			narrow: false,
 			frameHeight: 600,
 			answers: [],
 			error: '',
@@ -95,15 +125,28 @@ export default {
 		collapsed() {
 			return Boolean(this.state?.superseded) && !this.showSuperseded
 		},
+
+		// Inline in a column too narrow for the viewer: show a card that opens it fullscreen.
+		compact() {
+			return this.inline && this.narrow && this.displayMode !== 'fullscreen'
+		},
 	},
 
 	watch: {
-		// The shell sits inside the host app's stacking context, so no z-index
-		// lifts it over NC's header/navigation. Teleporting would move the
-		// iframe and reload the view (losing staged regions), so hide those
-		// instead while fullscreen.
+		// Superseded while fullscreen: leave fullscreen too, so no hidden popover stays open.
+		collapsed(isCollapsed) {
+			if (isCollapsed && this.displayMode === 'fullscreen') {
+				this.displayMode = 'inline'
+			}
+		},
+
+		// Teleporting the shell would move the iframe and reload the view
+		// (losing staged regions). Fullscreen instead lifts it into the popover
+		// top layer, which does not move it, and hides NC's header/navigation
+		// for browsers without popover support.
 		displayMode(mode) {
 			document.body.classList.toggle('mcp-app-fullscreen', mode === 'fullscreen')
+			this.topLayer(mode === 'fullscreen')
 			this.bridge?.sendHostContextChange({ displayMode: mode })
 		},
 	},
@@ -112,6 +155,15 @@ export default {
 		if (!Number.isInteger(this.fileId)) {
 			this.error = t('astrolabe', 'This result has no file id to open.')
 			return
+		}
+		if (this.inline) {
+			// Not in data(): it needs no reactivity.
+			this.widthObserver = new ResizeObserver(([entry]) => {
+				this.narrow = entry.contentRect.width < NARROW
+			})
+			this.widthObserver.observe(this.$el)
+			// Set now, not on the observer's first callback, so a narrow widget never flashes the viewer.
+			this.narrow = this.$el.clientWidth < NARROW
 		}
 		// Not in data(): a Vue proxy would break the bridge's private fields.
 		this.bridge = this.createBridge()
@@ -128,7 +180,9 @@ export default {
 	},
 
 	beforeUnmount() {
+		this.widthObserver?.disconnect()
 		document.body.classList.remove('mcp-app-fullscreen')
+		this.topLayer(false)
 		const bridge = this.bridge
 		bridge?.teardownResource({ reason: 'closed' })
 			.catch(() => {})
@@ -156,14 +210,26 @@ export default {
 				this.pushResult()
 			}
 			bridge.oncalltool = async ({ name, arguments: args }) => {
-				// The view is third-party HTML: a write needs the user's say-so here,
-				// in the host, where the view cannot click for them.
-				// ponytail: native confirm(); swap for a Nextcloud dialog if it jars.
-				if (name === 'save_redaction' && !window.confirm(t('astrolabe', 'Save a redacted copy of this file?'))) {
-					return { content: [{ type: 'text', text: 'The user cancelled the save.' }], isError: true }
-				}
+				let title
 				try {
 					return await this.callTool(name, args || {})
+				} catch (err) {
+					// The server says which calls write (409 + confirm). The view is
+					// third-party HTML, so the user's say-so is asked here, in the host,
+					// where the view cannot click for them. (A session could POST
+					// confirmed itself; the guard is against the view, which has no
+					// access to this API.)
+					if (err.response?.status !== 409 || !err.response.data?.confirm) {
+						throw new Error(err.response?.data?.error || err.message, { cause: err })
+					}
+					title = err.response.data.title || name
+				}
+				// ponytail: native confirm(); swap for a Nextcloud dialog if it jars.
+				if (!window.confirm(t('astrolabe', 'The document viewer wants to: {title}. This changes your files. Continue?', { title }))) {
+					return { content: [{ type: 'text', text: 'The user cancelled the change.' }], isError: true }
+				}
+				try {
+					return await this.callTool(name, args || {}, true)
 				} catch (err) {
 					throw new Error(err.response?.data?.error || err.message, { cause: err })
 				}
@@ -225,9 +291,33 @@ export default {
 			this.bridge.sendToolResult(JSON.parse(JSON.stringify(this.openResult)))
 		},
 
-		async callTool(name, args) {
-			const { data } = await axios.post(generateUrl('/apps/astrolabe/api/v1/mcp-app/tools/call'), { name, arguments: args })
+		async callTool(name, args, confirmed = false) {
+			const { data } = await axios.post(generateUrl('/apps/astrolabe/api/v1/mcp-app/tools/call'), { name, arguments: args, uri: VIEW_URI, confirmed })
 			return data
+		},
+
+		/**
+		 * Show the shell in (or take it out of) the top layer. In the Assistant
+		 * modal, a transformed ancestor makes `position: fixed` relative to the
+		 * modal, so a fullscreen shell overflowed the screen and its tray was
+		 * unreachable. The top layer ignores every ancestor.
+		 *
+		 * @param {boolean} on whether the shell should cover the viewport
+		 */
+		topLayer(on) {
+			const el = this.$refs.shell
+			if (!el?.showPopover) {
+				return
+			}
+			if (on && !el.matches(':popover-open')) {
+				el.setAttribute('popover', 'manual')
+				el.showPopover()
+			} else if (!on && el.hasAttribute('popover')) {
+				if (el.matches(':popover-open')) {
+					el.hidePopover()
+				}
+				el.removeAttribute('popover')
+			}
 		},
 
 		close() {
@@ -237,6 +327,13 @@ export default {
 				return
 			}
 			this.$emit('close')
+		},
+
+		// Closing drops the answers (a pending one is discarded when it lands:
+		// ask() mutates an entry no longer in the list) and the error.
+		closeSide() {
+			this.answers = []
+			this.error = ''
 		},
 
 		// ui/message: answered by the agent in the side panel, not the chat.
@@ -279,17 +376,30 @@ body.mcp-app-fullscreen #app-navigation-vue {
 
 .mcp-app-shell.fullscreen { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
 
+/* Undo the UA popover box (centred, bordered, fit-content). */
+.mcp-app-shell.fullscreen:popover-open { inset: 0; margin: 0; padding: 0; border: 0; max-width: none; color: inherit; }
+
 .mcp-app-superseded { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; border: 1px dashed var(--color-border); border-radius: var(--border-radius-large); color: var(--color-text-maxcontrast); }
 
-.mcp-app-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+.mcp-app-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+
+.mcp-app-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mcp-app-bar-action { flex-shrink: 0; }
+
+.mcp-app-card-error { margin: 8px 12px; }
 
 .mcp-app-body { display: flex; min-height: 0; flex: 1; }
+
+.mcp-app-body.compact { display: none; }
 
 .mcp-app-body iframe { flex: 1; border: 0; min-width: 0; }
 
 .fullscreen .mcp-app-body iframe { height: auto !important; }
 
 .mcp-app-side { width: 340px; overflow: auto; padding: 12px; border-inline-start: 1px solid var(--color-border); }
+
+.mcp-app-side-bar { display: flex; justify-content: space-between; align-items: center; margin: -4px 0 8px; }
 
 .mcp-app-answer { margin-bottom: 16px; }
 

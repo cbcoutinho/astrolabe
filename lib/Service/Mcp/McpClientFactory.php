@@ -47,6 +47,20 @@ class McpClientFactory {
 
 	private const INIT_TIMEOUT = 20;
 
+	/**
+	 * The largest single MCP message an MCP App connection accepts. The
+	 * document viewer's tools return a whole PDF, base64-encoded, in one tool
+	 * result, and the MCP server serves PDFs up to 25 MiB: about 33.4 MiB
+	 * encoded. The SDK's 8 MiB default refused a 6.6 MB PDF ("SSE stream
+	 * aborted: buffered … bytes without a complete event"). Other connections
+	 * keep the SDK's defaults.
+	 *
+	 * Decoding such a message holds a few copies of it (buffer, JSON, bytes),
+	 * so opening the largest PDF needs roughly 100–130 MiB of PHP memory_limit;
+	 * Nextcloud recommends 512 MiB.
+	 */
+	public const MCP_APP_MAX_MESSAGE_BYTES = 40 * 1024 * 1024;
+
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
 		private McpTokenMinter $tokenMinter,
@@ -104,6 +118,18 @@ class McpClientFactory {
 	}
 
 	/**
+	 * The transport's message size caps for a connection: MCP_APP_MAX_MESSAGE_BYTES
+	 * for both on an MCP App connection, the SDK's own defaults otherwise.
+	 *
+	 * @return array{maxSseBufferBytes: int, maxResponseBodyBytes: int}
+	 */
+	public static function messageLimits(bool $apps): array {
+		return $apps
+			? ['maxSseBufferBytes' => self::MCP_APP_MAX_MESSAGE_BYTES, 'maxResponseBodyBytes' => self::MCP_APP_MAX_MESSAGE_BYTES]
+			: ['maxSseBufferBytes' => HttpTransport::DEFAULT_MAX_SSE_BUFFER_BYTES, 'maxResponseBodyBytes' => HttpTransport::DEFAULT_MAX_RESPONSE_BODY_BYTES];
+	}
+
+	/**
 	 * Connect as the given user. The caller owns the client and must disconnect.
 	 *
 	 * @param string $scopes Space-separated OAuth scopes beyond the defaults. The
@@ -151,12 +177,15 @@ class McpClientFactory {
 		// The PSR-18 client here is Nextcloud's own (see Application::register),
 		// so MCP traffic inherits its proxy, CA and SSRF handling rather than
 		// opening sockets of its own.
+		$limits = self::messageLimits($apps);
 		$transport = new HttpTransport(
 			$this->endpoint(),
 			['Authorization' => 'Bearer ' . $token],
 			$this->httpClient,
 			$this->requestFactory,
 			$this->streamFactory,
+			maxSseBufferBytes: $limits['maxSseBufferBytes'],
+			maxResponseBodyBytes: $limits['maxResponseBodyBytes'],
 		);
 
 		try {
