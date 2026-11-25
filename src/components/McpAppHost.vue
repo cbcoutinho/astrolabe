@@ -12,13 +12,23 @@
 			:class="{ fullscreen: displayMode === 'fullscreen', inline }">
 			<div class="mcp-app-bar">
 				<strong>{{ title }}</strong>
-				<NcButton v-if="compact" variant="primary" @click="displayMode = 'fullscreen'">
+				<NcButton v-if="compact"
+					class="mcp-app-bar-action"
+					variant="primary"
+					@click="displayMode = 'fullscreen'">
 					{{ t('astrolabe', 'Open viewer') }}
 				</NcButton>
-				<NcButton v-if="!inline || displayMode === 'fullscreen'" variant="tertiary" @click="close">
+				<NcButton v-if="!inline || displayMode === 'fullscreen'"
+					class="mcp-app-bar-action"
+					variant="tertiary"
+					@click="close">
 					{{ t('astrolabe', 'Close') }}
 				</NcButton>
 			</div>
+			<!-- The card has no answers panel, so an error shows here. -->
+			<NcNoteCard v-if="compact && error" type="error" class="mcp-app-card-error">
+				{{ error }}
+			</NcNoteCard>
 			<!-- Hidden, not removed, while compact: removing the iframe would reload the view. -->
 			<div class="mcp-app-body" :class="{ compact }">
 				<iframe
@@ -76,7 +86,8 @@ const VIEW_URI = 'ui://nextcloud-mcp/document-viewer.html'
 
 // Below this width (px) an inline viewer is too cramped to use (the Assistant
 // modal's chat column is ~270px), so the widget shows a card that opens it
-// fullscreen instead.
+// fullscreen instead. Deliberately just under the ~565px that column gets
+// with the conversation list collapsed, where the viewer is still usable.
 const NARROW = 560
 
 export default {
@@ -151,6 +162,8 @@ export default {
 				this.narrow = entry.contentRect.width < NARROW
 			})
 			this.widthObserver.observe(this.$el)
+			// Set now, not on the observer's first callback, so a narrow widget never flashes the viewer.
+			this.narrow = this.$el.clientWidth < NARROW
 		}
 		// Not in data(): a Vue proxy would break the bridge's private fields.
 		this.bridge = this.createBridge()
@@ -372,7 +385,9 @@ body.mcp-app-fullscreen #app-navigation-vue {
 
 .mcp-app-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.mcp-app-bar > button { flex-shrink: 0; }
+.mcp-app-bar-action { flex-shrink: 0; }
+
+.mcp-app-card-error { margin: 8px 12px; }
 
 .mcp-app-body { display: flex; min-height: 0; flex: 1; }
 
