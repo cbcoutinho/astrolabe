@@ -1,5 +1,5 @@
 <template>
-	<div :class="{ 'mcp-app-overlay': !inline }" @click.self="close">
+	<div :class="{ 'mcp-app-overlay': !inline }" @click.self="close" @keydown.esc="close">
 		<div v-if="collapsed" class="mcp-app-superseded">
 			<span>{{ t('astrolabe', 'Superseded by a later proposal') }}</span>
 			<NcButton variant="tertiary" @click="showSuperseded = true">
@@ -17,6 +17,7 @@
 				<iframe
 					ref="frame"
 					:src="viewUrl"
+					:title="title"
 					sandbox="allow-scripts"
 					:style="{ height: frameHeight + 'px' }" />
 				<aside v-if="answers.length || error" class="mcp-app-side">
@@ -163,7 +164,8 @@ export default {
 				}
 			}
 			bridge.onmessage = async (params) => {
-				this.ask(params.content?.map((c) => c.text).filter(Boolean).join('\n') || '')
+				// Fire and forget: ask() reports its own failure in the side panel.
+				void this.ask(params.content?.map((c) => c.text).filter(Boolean).join('\n') || '')
 				return {}
 			}
 			bridge.onupdatemodelcontext = async (params) => {
@@ -276,6 +278,5 @@ body.mcp-app-fullscreen #app-navigation-vue {
 .mcp-app-side { width: 340px; overflow: auto; padding: 12px; border-left: 1px solid var(--color-border); }
 .mcp-app-answer { margin-bottom: 16px; }
 .mcp-app-answer .q { font-weight: bold; }
-.mcp-app-answer .a.failed { white-space: pre-wrap; }
-.mcp-app-answer .a.failed { color: var(--color-error-text); }
+.mcp-app-answer .a.failed { white-space: pre-wrap; color: var(--color-error-text); }
 </style>

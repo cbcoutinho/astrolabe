@@ -100,7 +100,7 @@ final class AgentLoopTest extends TestCase {
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 		$random = $this->createMock(ISecureRandom::class);
 		$random->method('generate')->willReturn(str_repeat('a', 24));
-		return new RedactionProposals($cacheFactory, $random);
+		return new RedactionProposals($cacheFactory, $random, $this->createMock(\Psr\Log\LoggerInterface::class));
 	}
 
 	/**

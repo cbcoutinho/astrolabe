@@ -25,7 +25,7 @@ final class RedactionProposalsTest extends TestCase {
 	/** @var array<string, mixed> */
 	private array $store = [];
 
-	private function proposals(): RedactionProposals {
+	private function proposals(?\Psr\Log\LoggerInterface $logger = null, bool $distributed = true): RedactionProposals {
 		$cache = $this->createMock(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $key): mixed => $this->store[$key] ?? null);
 		$cache->method('set')->willReturnCallback(function (string $key, mixed $value): bool {
@@ -34,9 +34,26 @@ final class RedactionProposalsTest extends TestCase {
 		});
 		$cacheFactory = $this->createMock(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($cache);
+		$cacheFactory->method('isAvailable')->willReturn($distributed);
 		$random = $this->createMock(ISecureRandom::class);
 		$random->method('generate')->willReturn(self::ID);
-		return new RedactionProposals($cacheFactory, $random);
+		return new RedactionProposals($cacheFactory, $random, $logger ?? $this->createMock(\Psr\Log\LoggerInterface::class));
+	}
+
+	public function testWarnsOnceWhenNoDistributedCacheIsConfigured(): void {
+		$logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains('No distributed cache'));
+		$proposals = $this->proposals($logger, false);
+
+		$proposals->store('alice', 7, ['x']);
+		$proposals->store('alice', 8, ['y']);
+	}
+
+	public function testDoesNotWarnWithADistributedCache(): void {
+		$logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+		$logger->expects($this->never())->method('warning');
+
+		$this->proposals($logger)->store('alice', 7, ['x']);
 	}
 
 	public function testRoundTripsTextsAndReview(): void {

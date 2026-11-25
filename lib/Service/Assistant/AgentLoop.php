@@ -226,6 +226,25 @@ class AgentLoop {
 		}
 	}
 
+	/** What a turn that hit the iteration or time limit says instead of its raw output. */
+	private static function truncatedAnswer(string $output, bool $ranOutOfTime, bool $viewerOpened): string {
+		if (trim($output) !== '') {
+			// Say it rather than presenting a partial answer as a complete one.
+			return $output . "\n\n_(I stopped before finishing — this may be incomplete.)_";
+		}
+		if ($viewerOpened) {
+			// The viewer opened, which is the answer to a "review this document"
+			// request; a model that keeps calling tools afterwards shouldn't turn
+			// that into a failure message under a working viewer (POC).
+			return 'I opened the document in the viewer above. Review the proposed redactions there.';
+		}
+		// Say which limit was hit: one is the user's cue to narrow the
+		// question, the other is the admin's cue to raise a setting.
+		return $ranOutOfTime
+			? 'I ran out of time working on that. Please try a narrower question.'
+			: 'I kept looking things up without reaching an answer. Please try a more specific question.';
+	}
+
 	/**
 	 * @param list<array{role: string, content: string}> $history
 	 * @return array{output: string, sources: list<string>, turns: list<array{role: string, content: string}>}
@@ -294,20 +313,8 @@ class AgentLoop {
 			$toolResults = $this->renderObservations($observations);
 		}
 
-		if ($truncated && trim($output) === '' && $citations->appLink() !== null) {
-			// The viewer opened, which is the answer to a "review this document"
-			// request; a model that keeps calling tools afterwards shouldn't turn
-			// that into a failure message under a working viewer (POC).
-			$output = 'I opened the document in the viewer above. Review the proposed redactions there.';
-		} elseif ($truncated && trim($output) === '') {
-			// Say which limit was hit: one is the user's cue to narrow the
-			// question, the other is the admin's cue to raise a setting.
-			$output = $ranOutOfTime
-				? 'I ran out of time working on that. Please try a narrower question.'
-				: 'I kept looking things up without reaching an answer. Please try a more specific question.';
-		} elseif ($truncated) {
-			// Say it rather than presenting a partial answer as a complete one.
-			$output .= "\n\n_(I stopped before finishing — this may be incomplete.)_";
+		if ($truncated) {
+			$output = self::truncatedAnswer($output, $ranOutOfTime, $citations->appLink() !== null);
 		}
 
 		// Astrolabe appends the citations rather than relying on the model to name

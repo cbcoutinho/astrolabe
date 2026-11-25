@@ -33,13 +33,14 @@ use Psr\Log\LoggerInterface;
  */
 #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
 final class McpAppController extends Controller {
-	/**
-	 * Tools the view may call, with the scopes minted for that call only. All
-	 * carry "app" in _meta.ui.visibility; anything else is refused.
-	 */
 	/** Origins kept per CSP directive; a viewer needs one or two. */
 	private const MAX_CSP_DOMAINS = 10;
 
+	/**
+	 * Tools the view may call, with the scopes minted for that call only. All
+	 * carry "app" in _meta.ui.visibility and take a file_id; anything else is
+	 * refused.
+	 */
 	private const TOOLS = [
 		'open_document' => 'files.read',
 		'read_document_bytes' => 'files.read',
@@ -66,6 +67,11 @@ final class McpAppController extends Controller {
 		if (!isset(self::TOOLS[$name])) {
 			return new JSONResponse(['error' => "Tool '$name' is not available to this app"], Http::STATUS_FORBIDDEN);
 		}
+		$fileId = self::fileId($arguments['file_id'] ?? null);
+		if ($fileId === null) {
+			return new JSONResponse(['error' => 'file_id must be an integer'], Http::STATUS_BAD_REQUEST);
+		}
+		$arguments['file_id'] = $fileId;
 		if ($name === 'open_document') {
 			$arguments = $this->withProposal($arguments);
 		}
@@ -112,6 +118,7 @@ final class McpAppController extends Controller {
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
+	#[UserRateLimit(limit: 60, period: 60)]
 	public function view(string $uri): Response {
 		if (!str_starts_with($uri, 'ui://')) {
 			return new JSONResponse(['error' => 'Only ui:// resources'], Http::STATUS_BAD_REQUEST);
@@ -123,6 +130,8 @@ final class McpAppController extends Controller {
 			} finally {
 				$client->disconnect();
 			}
+		} catch (McpUnavailableException $e) {
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_SERVICE_UNAVAILABLE);
 		} catch (\Throwable $e) {
 			return $this->upstreamError('Could not load the viewer', $e);
 		}
@@ -159,6 +168,7 @@ final class McpAppController extends Controller {
 
 	/** The viewer's current staged state, for the user's next chat turn (POC). */
 	#[NoAdminRequired]
+	#[UserRateLimit(limit: 60, period: 60)]
 	public function modelContext(int $fileId, string $text): JSONResponse {
 		$this->proposals->saveViewerContext($this->uid(), $fileId, $text);
 		return new JSONResponse([]);
@@ -203,7 +213,9 @@ final class McpAppController extends Controller {
 		} finally {
 			try {
 				$client->disconnect();
-			} catch (\Throwable) {
+			} catch (\Throwable $e) {
+				// The response is already decided; a failed disconnect only leaks a socket.
+				$this->logger->debug('MCP App host: disconnect failed', ['exception' => $e, 'app' => Application::APP_ID]);
 			}
 		}
 	}

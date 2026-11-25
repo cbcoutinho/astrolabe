@@ -61,7 +61,7 @@ final class McpAppControllerTest extends TestCase {
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 		$random = $this->createMock(ISecureRandom::class);
 		$random->method('generate')->willReturn(self::ID);
-		$this->proposals = new RedactionProposals($cacheFactory, $random);
+		$this->proposals = new RedactionProposals($cacheFactory, $random, $this->createMock(\Psr\Log\LoggerInterface::class));
 
 		$this->client = $this->createMock(Client::class);
 		$this->client->method('callTool')->willReturnCallback(function (string $name, array $args): CallToolResult {
@@ -170,11 +170,26 @@ final class McpAppControllerTest extends TestCase {
 		}
 	}
 
-	public function testANonDigitFileIdGetsNoProposal(): void {
+	public function testANonDigitFileIdIsRefusedBeforeAnyCall(): void {
 		$id = $this->proposals->store('alice', 1000, ['Jane Doe']);
-		$this->controller->callTool('open_document', ['file_id' => '1e3', 'proposal' => $id]);
+		$response = $this->controller->callTool('open_document', ['file_id' => '1e3', 'proposal' => $id]);
 
-		$this->assertSame([['open_document', ['file_id' => '1e3']]], $this->calls);
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame([], $this->calls);
+	}
+
+	public function testSaveRedactionNeedsAValidFileId(): void {
+		foreach ([['file_id' => '7; drop'], ['file_id' => 7.5], []] as $arguments) {
+			$response = $this->controller->callTool('save_redaction', $arguments + ['regions' => [], 'etag' => 'e1']);
+			$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus(), var_export($arguments, true));
+		}
+		$this->assertSame([], $this->calls);
+	}
+
+	public function testADigitStringFileIdIsPassedOnAsAnInt(): void {
+		$this->controller->callTool('save_redaction', ['file_id' => '7', 'etag' => 'e1']);
+
+		$this->assertSame([['save_redaction', ['file_id' => 7, 'etag' => 'e1']]], $this->calls);
 	}
 
 	public function testAnUpstreamFailureIsLoggedAndNotRelayed(): void {
