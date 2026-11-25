@@ -12,11 +12,15 @@
 			:class="{ fullscreen: displayMode === 'fullscreen', inline }">
 			<div class="mcp-app-bar">
 				<strong>{{ title }}</strong>
+				<NcButton v-if="compact" variant="primary" @click="displayMode = 'fullscreen'">
+					{{ t('astrolabe', 'Open viewer') }}
+				</NcButton>
 				<NcButton v-if="!inline || displayMode === 'fullscreen'" variant="tertiary" @click="close">
 					{{ t('astrolabe', 'Close') }}
 				</NcButton>
 			</div>
-			<div class="mcp-app-body">
+			<!-- Hidden, not removed, while compact: removing the iframe would reload the view. -->
+			<div class="mcp-app-body" :class="{ compact }">
 				<iframe
 					ref="frame"
 					:src="viewUrl"
@@ -70,6 +74,11 @@ import NcRichText from '@nextcloud/vue/components/NcRichText'
 
 const VIEW_URI = 'ui://nextcloud-mcp/document-viewer.html'
 
+// Below this width (px) an inline viewer is too cramped to use (the Assistant
+// modal's chat column is ~270px), so the widget shows a card that opens it
+// fullscreen instead.
+const NARROW = 560
+
 export default {
 	name: 'McpAppHost',
 	components: { NcButton, NcLoadingIcon, NcNoteCard, NcRichText },
@@ -90,6 +99,7 @@ export default {
 			viewUrl: generateUrl('/apps/astrolabe/mcp-app/view?uri={uri}', { uri: VIEW_URI }),
 			title: t('astrolabe', 'Document'),
 			displayMode: 'inline',
+			narrow: false,
 			frameHeight: 600,
 			answers: [],
 			error: '',
@@ -103,6 +113,11 @@ export default {
 		// Hidden, not unmounted: the iframe keeps its state if shown again.
 		collapsed() {
 			return Boolean(this.state?.superseded) && !this.showSuperseded
+		},
+
+		// Inline in a column too narrow for the viewer: show a card that opens it fullscreen.
+		compact() {
+			return this.inline && this.narrow && this.displayMode !== 'fullscreen'
 		},
 	},
 
@@ -130,6 +145,13 @@ export default {
 			this.error = t('astrolabe', 'This result has no file id to open.')
 			return
 		}
+		if (this.inline) {
+			// Not in data(): it needs no reactivity.
+			this.widthObserver = new ResizeObserver(([entry]) => {
+				this.narrow = entry.contentRect.width < NARROW
+			})
+			this.widthObserver.observe(this.$el)
+		}
 		// Not in data(): a Vue proxy would break the bridge's private fields.
 		this.bridge = this.createBridge()
 		const win = this.$refs.frame.contentWindow
@@ -145,6 +167,7 @@ export default {
 	},
 
 	beforeUnmount() {
+		this.widthObserver?.disconnect()
 		document.body.classList.remove('mcp-app-fullscreen')
 		this.topLayer(false)
 		const bridge = this.bridge
@@ -345,9 +368,15 @@ body.mcp-app-fullscreen #app-navigation-vue {
 
 .mcp-app-superseded { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; border: 1px dashed var(--color-border); border-radius: var(--border-radius-large); color: var(--color-text-maxcontrast); }
 
-.mcp-app-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+.mcp-app-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+
+.mcp-app-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mcp-app-bar > button { flex-shrink: 0; }
 
 .mcp-app-body { display: flex; min-height: 0; flex: 1; }
+
+.mcp-app-body.compact { display: none; }
 
 .mcp-app-body iframe { flex: 1; border: 0; min-width: 0; }
 
