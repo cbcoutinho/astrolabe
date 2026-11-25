@@ -53,8 +53,10 @@ final class McpAppController extends Controller {
 
 	/**
 	 * Relay a view's tools/call. Which tools `$uri` may call, and the scopes to
-	 * mint for each, come from the MCP server ({@see ViewTools}); a write needs
-	 * `$confirmed`, which only the host sets, after asking the user.
+	 * mint for each, come from the MCP server ({@see ViewTools}). A write needs
+	 * `$confirmed`, which the host sets after asking the user. That is a UX
+	 * step against the sandboxed view, which cannot reach this API, not an
+	 * authorization boundary: the user's own session could send it.
 	 *
 	 * @param array<string, mixed> $arguments
 	 */
@@ -74,15 +76,16 @@ final class McpAppController extends Controller {
 		if ($tool === null) {
 			return new JSONResponse(['error' => "Tool '$name' is not available to this app"], Http::STATUS_FORBIDDEN);
 		}
-		if ($tool['write'] && !$confirmed) {
-			return new JSONResponse(['error' => 'This change needs your confirmation', 'confirm' => true, 'title' => $tool['title']], Http::STATUS_CONFLICT);
-		}
 		// Every view this host serves is a file view: its tools take a file_id.
+		// Checked before confirming, so a bad call never asks the user.
 		$fileId = self::fileId($arguments['file_id'] ?? null);
 		if ($fileId === null) {
 			return new JSONResponse(['error' => 'file_id must be an integer'], Http::STATUS_BAD_REQUEST);
 		}
 		$arguments['file_id'] = $fileId;
+		if ($tool['write'] && !$confirmed) {
+			return new JSONResponse(['error' => 'This change needs your confirmation', 'confirm' => true, 'title' => $tool['title']], Http::STATUS_CONFLICT);
+		}
 		if ($name === 'open_document') {
 			$arguments = $this->withProposal($arguments);
 		}

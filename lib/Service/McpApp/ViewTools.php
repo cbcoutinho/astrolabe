@@ -35,6 +35,10 @@ class ViewTools {
 	public const SCOPES_META_KEY = 'nextcloud-mcp/scopes';
 	/** Short: a server upgrade or a changed scope grant shows up within minutes. */
 	private const TTL = 300;
+	/** An empty answer is kept briefly: an upgrade shows up fast, a flood does not reconnect. */
+	private const EMPTY_TTL = 30;
+	/** Room for a tool title in the host's confirmation. */
+	private const MAX_TITLE = 80;
 	/** An OAuth scope token as the MCP server names them (e.g. "files.read"). */
 	private const SCOPE_PATTERN = '/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\z/';
 
@@ -80,10 +84,8 @@ class ViewTools {
 			}
 		}
 		// An empty answer (an older server, or none of its tools reachable) is
-		// not cached, so a server upgrade takes effect on the next call.
-		if ($tools !== []) {
-			$this->cache->set($key, $tools, self::TTL);
-		}
+		// cached only briefly, so a server upgrade takes effect within seconds.
+		$this->cache->set($key, $tools, $tools === [] ? self::EMPTY_TTL : self::TTL);
 		return $tools;
 	}
 
@@ -116,7 +118,7 @@ class ViewTools {
 				'scopes' => $scopes,
 				'write' => $tool->annotations?->readOnlyHint !== true,
 				// What the host names in its confirmation.
-				'title' => $tool->title ?? $tool->annotations?->title ?? $tool->name,
+				'title' => mb_substr($tool->title ?? $tool->annotations?->title ?? $tool->name, 0, self::MAX_TITLE),
 			];
 		}
 		return $tools;

@@ -133,6 +133,12 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertSame([], $this->calls);
 	}
 
+	public function testABadWriteIsRefusedBeforeAskingTheUser(): void {
+		$response = $this->controller->callTool('apply_changes', ['file_id' => 'x'], self::URI);
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
+
 	public function testConfirmedChangesNothingForAReadTool(): void {
 		$response = $this->controller->callTool('preview_changes', ['file_id' => 7], self::URI, true);
 

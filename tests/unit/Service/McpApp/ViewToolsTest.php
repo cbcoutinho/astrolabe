@@ -125,21 +125,32 @@ final class ViewToolsTest extends TestCase {
 		$this->assertSame(['', 'files.read files.write'], $minted);
 		$this->assertSame(['preview_changes' => ['scopes' => 'files.read', 'write' => false, 'title' => 'preview_changes']], $first);
 		$this->assertSame($first, $second);
+		$this->assertSame([300], $this->ttls);
 	}
 
-	public function testAResourceWithoutScopesOffersNoToolsAndIsAskedAgainNextTime(): void {
+	public function testAResourceWithoutScopesOffersNoToolsAndIsCachedOnlyBriefly(): void {
 		$client = $this->createMock(Client::class);
-		// An older server: asked on every call, so its upgrade shows up at once.
-		$client->expects($this->exactly(2))->method('readResource')
+		$client->method('readResource')
 			->willReturn(new ReadResourceResult([new TextResourceContents(self::URI, 'text/html', '<p>')]));
 		$client->expects($this->never())->method('listTools');
 		$factory = $this->createMock(McpClientFactory::class);
 		$factory->method('connect')->willReturn($client);
-		$viewTools = new ViewTools($factory, $this->arrayCacheFactory());
 
-		$this->assertSame([], $viewTools->forView('alice', self::URI));
-		$this->assertSame([], $viewTools->forView('alice', self::URI));
+		$this->assertSame([], (new ViewTools($factory, $this->arrayCacheFactory()))->forView('alice', self::URI));
+		// An older server: its upgrade shows up within seconds, not minutes.
+		$this->assertSame([30], $this->ttls);
 	}
+
+	public function testAToolTitleIsCappedForTheConfirmation(): void {
+		$tools = ViewTools::fromListing([
+			self::tool('apply_changes', self::viewerMeta(['files.write']), false, str_repeat('é', 200)),
+		], self::URI);
+
+		$this->assertSame(str_repeat('é', 80), $tools['apply_changes']['title']);
+	}
+
+	/** @var list<int> TTLs the cache was written with. */
+	private array $ttls = [];
 
 	private function arrayCacheFactory(): ICacheFactory {
 		$store = [];
@@ -147,8 +158,9 @@ final class ViewToolsTest extends TestCase {
 		$cache->method('get')->willReturnCallback(static function (string $key) use (&$store): mixed {
 			return $store[$key] ?? null;
 		});
-		$cache->method('set')->willReturnCallback(static function (string $key, mixed $value) use (&$store): bool {
+		$cache->method('set')->willReturnCallback(function (string $key, mixed $value, int $ttl = 0) use (&$store): bool {
 			$store[$key] = $value;
+			$this->ttls[] = $ttl;
 			return true;
 		});
 		$factory = $this->createMock(ICacheFactory::class);
