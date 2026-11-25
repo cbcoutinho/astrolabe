@@ -146,6 +146,9 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertStringContainsString("default-src 'none'", $csp);
 		$this->assertStringContainsString("connect-src 'none'", $csp);
 		$this->assertStringContainsString("frame-ancestors 'self'", $csp);
+		$this->assertStringContainsString("base-uri 'none'", $csp);
+		$this->assertStringContainsString("form-action 'none'", $csp);
+		$this->assertStringContainsString("script-src 'unsafe-inline';", $csp);
 		$this->assertStringNotContainsString('https:', $csp);
 	}
 
@@ -165,7 +168,7 @@ final class McpAppControllerTest extends TestCase {
 	public function testFileIdMustBeAnIntOrDigits(): void {
 		$this->assertSame(7, McpAppController::fileId(7));
 		$this->assertSame(7, McpAppController::fileId('7'));
-		foreach (['1e3', '7.0', ' 7', '-7', '', '0x7', null, 7.0, '99999999999999999999'] as $bad) {
+		foreach ([-7, 0, '0', '1e3', '7.0', ' 7', '-7', '', '0x7', null, 7.0, '99999999999999999999'] as $bad) {
 			$this->assertNull(McpAppController::fileId($bad), var_export($bad, true));
 		}
 	}
@@ -246,6 +249,15 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertSame(['error' => 'No tools are available to the assistant.'], $response->getData());
 	}
 
+	public function testMessageHidesAnUnexpectedFailure(): void {
+		$this->agentLoop->method('run')->willThrowException(new \RuntimeException('http://internal:8000 token expired'));
+
+		$response = $this->controller->message('hello');
+
+		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		$this->assertStringNotContainsString('internal', json_encode($response->getData()) ?: '');
+	}
+
 	/** Found by the property below: PCRE's `$` also matches before a final newline. */
 	public function testViewCspRefusesAnOriginWithATrailingNewline(): void {
 		$csp = McpAppController::viewCsp(['resourceDomains' => ["https://cdn.example\n"]]);
@@ -277,7 +289,7 @@ final class McpAppControllerTest extends TestCase {
 		$this->forAll(Generators::seq($domain), Generators::seq($domain))->withMaxSize(15)
 			->then(function (array $res, array $connect) use ($baseQuotes): void {
 				$csp = McpAppController::viewCsp(['resourceDomains' => $res, 'connectDomains' => $connect]);
-				$this->assertCount(8, explode('; ', $csp));
+				$this->assertCount(10, explode('; ', $csp));
 				$this->assertDoesNotMatchRegularExpression('/[\r\n"]/', $csp);
 				$this->assertLessThanOrEqual($baseQuotes, substr_count($csp, "'"));
 				foreach (preg_split('/[; ]+/', $csp) ?: [] as $token) {

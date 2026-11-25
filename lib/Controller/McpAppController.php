@@ -102,12 +102,12 @@ final class McpAppController extends Controller {
 		return $arguments;
 	}
 
-	/** A file id as an int or a digit-only string; anything else (e.g. "1e3") is no id. */
+	/** A positive file id as an int or a digit-only string; anything else (e.g. "1e3", -7) is no id. */
 	public static function fileId(mixed $value): ?int {
-		if (is_int($value)) {
-			return $value;
+		if (is_string($value) && ctype_digit($value) && strlen($value) < 19) {
+			$value = (int)$value;
 		}
-		return is_string($value) && ctype_digit($value) && strlen($value) < 19 ? (int)$value : null;
+		return is_int($value) && $value > 0 ? $value : null;
 	}
 
 	/**
@@ -154,8 +154,10 @@ final class McpAppController extends Controller {
 		};
 		$res = $list('resourceDomains');
 		$connect = $list('connectDomains');
-		return implode('; ', [
+		return implode('; ', array_map('trim', [
 			"default-src 'none'",
+			"base-uri 'none'",
+			"form-action 'none'",
 			"script-src 'unsafe-inline' $res",
 			"style-src 'unsafe-inline' $res",
 			"img-src data: blob: $res",
@@ -163,7 +165,7 @@ final class McpAppController extends Controller {
 			"worker-src blob: $res",
 			'connect-src ' . ($connect !== '' ? $connect : "'none'"),
 			"frame-ancestors 'self'",
-		]);
+		]));
 	}
 
 	/** The viewer's current staged state, for the user's next chat turn (POC). */
@@ -181,6 +183,8 @@ final class McpAppController extends Controller {
 			$result = $this->agentLoop->run($this->uid(), $text, []);
 		} catch (AgentException $e) {
 			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_GATEWAY);
+		} catch (\Throwable $e) {
+			return $this->upstreamError('The assistant could not answer', $e);
 		}
 		return new JSONResponse(['output' => $result['output'], 'sources' => $result['sources']]);
 	}
