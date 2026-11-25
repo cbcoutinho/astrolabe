@@ -6,7 +6,10 @@
 				{{ t('astrolabe', 'Show') }}
 			</NcButton>
 		</div>
-		<div v-show="!collapsed" class="mcp-app-shell" :class="{ fullscreen: displayMode === 'fullscreen', inline }">
+		<div v-show="!collapsed"
+			ref="shell"
+			class="mcp-app-shell"
+			:class="{ fullscreen: displayMode === 'fullscreen', inline }">
 			<div class="mcp-app-bar">
 				<strong>{{ title }}</strong>
 				<NcButton v-if="!inline || displayMode === 'fullscreen'" variant="tertiary" @click="close">
@@ -104,12 +107,13 @@ export default {
 	},
 
 	watch: {
-		// The shell sits inside the host app's stacking context, so no z-index
-		// lifts it over NC's header/navigation. Teleporting would move the
-		// iframe and reload the view (losing staged regions), so hide those
-		// instead while fullscreen.
+		// Teleporting the shell would move the iframe and reload the view
+		// (losing staged regions). Fullscreen instead lifts it into the popover
+		// top layer, which does not move it, and hides NC's header/navigation
+		// for browsers without popover support.
 		displayMode(mode) {
 			document.body.classList.toggle('mcp-app-fullscreen', mode === 'fullscreen')
+			this.topLayer(mode === 'fullscreen')
 			this.bridge?.sendHostContextChange({ displayMode: mode })
 		},
 	},
@@ -135,6 +139,7 @@ export default {
 
 	beforeUnmount() {
 		document.body.classList.remove('mcp-app-fullscreen')
+		this.topLayer(false)
 		const bridge = this.bridge
 		bridge?.teardownResource({ reason: 'closed' })
 			.catch(() => {})
@@ -248,6 +253,30 @@ export default {
 			return data
 		},
 
+		/**
+		 * Show the shell in (or take it out of) the top layer. In the Assistant
+		 * modal, a transformed ancestor makes `position: fixed` relative to the
+		 * modal, so a fullscreen shell overflowed the screen and its tray was
+		 * unreachable. The top layer ignores every ancestor.
+		 *
+		 * @param {boolean} on whether the shell should cover the viewport
+		 */
+		topLayer(on) {
+			const el = this.$refs.shell
+			if (!el?.showPopover) {
+				return
+			}
+			if (on && !el.matches(':popover-open')) {
+				el.setAttribute('popover', 'manual')
+				el.showPopover()
+			} else if (!on && el.hasAttribute('popover')) {
+				if (el.matches(':popover-open')) {
+					el.hidePopover()
+				}
+				el.removeAttribute('popover')
+			}
+		},
+
 		close() {
 			if (this.inline) {
 				// Inline: closing only leaves fullscreen; the widget stays in the chat.
@@ -303,6 +332,9 @@ body.mcp-app-fullscreen #app-navigation-vue {
 .mcp-app-shell.inline.fullscreen { position: fixed; inset: 0; z-index: 10000; }
 
 .mcp-app-shell.fullscreen { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
+
+/* Undo the UA popover box (centred, bordered, fit-content). */
+.mcp-app-shell.fullscreen:popover-open { inset: 0; margin: 0; padding: 0; border: 0; max-width: none; color: inherit; }
 
 .mcp-app-superseded { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; border: 1px dashed var(--color-border); border-radius: var(--border-radius-large); color: var(--color-text-maxcontrast); }
 
