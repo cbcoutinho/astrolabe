@@ -157,6 +157,12 @@ export default {
 				this.pushResult()
 			}
 			bridge.oncalltool = async ({ name, arguments: args }) => {
+				// The view is third-party HTML: a write needs the user's say-so here,
+				// in the host, where the view cannot click for them.
+				// ponytail: native confirm(); swap for a Nextcloud dialog if it jars.
+				if (name === 'save_redaction' && !window.confirm(t('astrolabe', 'Save a redacted copy of this file?'))) {
+					return { content: [{ type: 'text', text: 'The user cancelled the save.' }], isError: true }
+				}
 				try {
 					return await this.callTool(name, args || {})
 				} catch (err) {
