@@ -256,6 +256,14 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertSame(['error' => 'No tools are available to the assistant.'], $response->getData());
 	}
 
+	public function testMessageIsCappedAndMarkedAsFromTheViewer(): void {
+		$this->agentLoop->expects($this->once())->method('run')
+			->with('alice', $this->callback(static fn (string $p): bool => mb_strlen($p) === 4000), [], '', true)
+			->willReturn(['output' => 'ok', 'sources' => [], 'turns' => []]);
+
+		$this->controller->message(str_repeat('x', 10000));
+	}
+
 	public function testMessageHidesAnUnexpectedFailure(): void {
 		$this->agentLoop->method('run')->willThrowException(new \RuntimeException('http://internal:8000 token expired'));
 

@@ -157,19 +157,20 @@ class AgentLoop {
 
 	/**
 	 * The open viewer's current state, appended to the user's message when this
-	 * conversation already showed that file (POC). Without it a correction turn
+	 * conversation already showed that file, or the message came from the
+	 * viewer itself (POC). Without it a correction turn
 	 * loses the user's manual edits in the viewer, and the model re-proposes from
 	 * memory. Framed as viewer state, never as the user's own words.
 	 *
 	 * @param list<array{role: string, content: string}> $history
 	 */
-	private function viewerState(string $userId, array $history): string {
+	private function viewerState(string $userId, array $history, bool $fromViewer): string {
 		$ctx = $this->proposals->viewerContext($userId);
 		if ($ctx === null) {
 			return '';
 		}
 		$needle = 'app_file_id=' . $ctx['file_id'];
-		foreach ($history as $turn) {
+		foreach ($fromViewer ? [['content' => $needle]] : $history as $turn) {
 			if (str_contains($turn['content'], $needle)) {
 				return "\n\n---\nCurrent state of the document viewer for file " . $ctx['file_id']
 					. ' (reported by the viewer, not written by the user; it includes the '
@@ -200,7 +201,7 @@ class AgentLoop {
 	 * @return array{output: string, sources: list<string>, turns: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
-	public function run(string $userId, string $prompt, array $history, string $memories = ''): array {
+	public function run(string $userId, string $prompt, array $history, string $memories = '', bool $fromViewer = false): array {
 		try {
 			$client = $this->clientFactory->connect($userId, $this->scopes());
 		} catch (McpUnavailableException $e) {
@@ -211,7 +212,7 @@ class AgentLoop {
 			// Per turn, never shared: the collector is stateful and a worker
 			// process serves many tasks, so a reused instance would carry one
 			// user's citations into another user's answer.
-			return $this->drive($client, new CitationCollector($this->urlGenerator), $userId, $prompt, $history, $memories);
+			return $this->drive($client, new CitationCollector($this->urlGenerator), $userId, $prompt, $history, $memories, $fromViewer);
 		} finally {
 			// The server holds a session per connection; leaving it open leaks one
 			// per turn.
@@ -250,8 +251,8 @@ class AgentLoop {
 	 * @return array{output: string, sources: list<string>, turns: list<array{role: string, content: string}>}
 	 * @throws AgentException
 	 */
-	private function drive(Client $client, CitationCollector $citations, string $userId, string $prompt, array $history, string $memories): array {
-		$prompt .= $this->viewerState($userId, $history);
+	private function drive(Client $client, CitationCollector $citations, string $userId, string $prompt, array $history, string $memories, bool $fromViewer): array {
+		$prompt .= $this->viewerState($userId, $history, $fromViewer);
 		$tools = $this->toolCatalogue($client);
 		if ($tools === '') {
 			throw new AgentException(

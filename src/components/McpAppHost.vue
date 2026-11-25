@@ -84,7 +84,6 @@ export default {
 			frameHeight: 600,
 			answers: [],
 			error: '',
-			modelContext: null,
 			openResult: null,
 			viewReady: false,
 			showSuperseded: false,
@@ -175,7 +174,6 @@ export default {
 				return {}
 			}
 			bridge.onupdatemodelcontext = async (params) => {
-				this.modelContext = params
 				// Kept server-side so the user's next chat turn sees the viewer's state.
 				const text = params.content?.map((c) => c.text).filter(Boolean).join('\n')
 				if (text) {
@@ -246,10 +244,10 @@ export default {
 			this.answers.unshift({ question, answer: '', pending: true, failed: false })
 			// Mutate the reactive proxy, not the raw object, or nothing re-renders.
 			const entry = this.answers[0]
-			const ctx = this.modelContext?.content?.map((c) => c.text).filter(Boolean).join('\n')
 			try {
 				const { data } = await axios.post(generateUrl('/apps/astrolabe/api/v1/mcp-app/message'), {
-					text: ctx ? `${ctx}\n\n${question}` : question,
+					// The viewer state reaches the model server-side, fenced as data.
+					text: question,
 				})
 				entry.answer = data.output
 			} catch (err) {

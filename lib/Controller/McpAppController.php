@@ -35,6 +35,7 @@ use Psr\Log\LoggerInterface;
 final class McpAppController extends Controller {
 	/** Origins kept per CSP directive; a viewer needs one or two. */
 	private const MAX_CSP_DOMAINS = 10;
+	private const MAX_MESSAGE_CHARS = 4000;
 
 	/**
 	 * Tools the view may call, with the scopes minted for that call only. All
@@ -185,7 +186,9 @@ final class McpAppController extends Controller {
 	#[UserRateLimit(limit: 20, period: 60)]
 	public function message(string $text): JSONResponse {
 		try {
-			$result = $this->agentLoop->run($this->uid(), $text, []);
+			// No history: a widget message starts fresh. The viewer's state is
+			// added server-side, fenced as data (AgentLoop::viewerState).
+			$result = $this->agentLoop->run($this->uid(), mb_substr($text, 0, self::MAX_MESSAGE_CHARS), [], '', true);
 		} catch (AgentException $e) {
 			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_GATEWAY);
 		} catch (\Throwable $e) {
