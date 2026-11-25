@@ -239,6 +239,13 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertNull($this->proposals->viewerContext('bob'));
 	}
 
+	public function testModelContextRefusesANonPositiveFileId(): void {
+		foreach ([0, -7] as $bad) {
+			$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller->modelContext($bad, 'x')->getStatus());
+		}
+		$this->assertNull($this->proposals->viewerContext('alice'));
+	}
+
 	/** AgentException messages are written for users, so they pass through. */
 	public function testMessageReportsAFailedTurn(): void {
 		$this->agentLoop->method('run')->willThrowException(new AgentException('No tools are available to the assistant.'));

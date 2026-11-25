@@ -131,6 +131,7 @@ final class McpAppController extends Controller {
 				$client->disconnect();
 			}
 		} catch (McpUnavailableException $e) {
+			// Thrown by connect(), before there is a client to disconnect.
 			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_SERVICE_UNAVAILABLE);
 		} catch (\Throwable $e) {
 			return $this->upstreamError('Could not load the viewer', $e);
@@ -172,6 +173,10 @@ final class McpAppController extends Controller {
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 60, period: 60)]
 	public function modelContext(int $fileId, string $text): JSONResponse {
+		if (self::fileId($fileId) === null) {
+			return new JSONResponse(['error' => 'Invalid file id'], Http::STATUS_BAD_REQUEST);
+		}
+		// saveViewerContext caps the text (CONTEXT_MAX_CHARS) before caching it.
 		$this->proposals->saveViewerContext($this->uid(), $fileId, $text);
 		return new JSONResponse([]);
 	}
