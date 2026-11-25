@@ -75,7 +75,7 @@ final class McpAppController extends Controller {
 			return new JSONResponse(['error' => "Tool '$name' is not available to this app"], Http::STATUS_FORBIDDEN);
 		}
 		if ($tool['write'] && !$confirmed) {
-			return new JSONResponse(['error' => 'This change needs your confirmation', 'confirm' => true], Http::STATUS_CONFLICT);
+			return new JSONResponse(['error' => 'This change needs your confirmation', 'confirm' => true, 'title' => $tool['title']], Http::STATUS_CONFLICT);
 		}
 		// Every view this host serves is a file view: its tools take a file_id.
 		$fileId = self::fileId($arguments['file_id'] ?? null);

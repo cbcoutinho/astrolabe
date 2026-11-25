@@ -156,19 +156,23 @@ export default {
 				this.pushResult()
 			}
 			bridge.oncalltool = async ({ name, arguments: args }) => {
+				let title
 				try {
 					return await this.callTool(name, args || {})
 				} catch (err) {
 					// The server says which calls write (409 + confirm). The view is
 					// third-party HTML, so the user's say-so is asked here, in the host,
-					// where the view cannot click for them.
+					// where the view cannot click for them. (A session could POST
+					// confirmed itself; the guard is against the view, which has no
+					// access to this API.)
 					if (err.response?.status !== 409 || !err.response.data?.confirm) {
 						throw new Error(err.response?.data?.error || err.message, { cause: err })
 					}
+					title = err.response.data.title || name
 				}
 				// ponytail: native confirm(); swap for a Nextcloud dialog if it jars.
-				if (!window.confirm(t('astrolabe', 'Save a copy of this file with these changes? The original is not changed.'))) {
-					return { content: [{ type: 'text', text: 'The user cancelled the save.' }], isError: true }
+				if (!window.confirm(t('astrolabe', 'The document viewer wants to: {title}. This changes your files. Continue?', { title }))) {
+					return { content: [{ type: 'text', text: 'The user cancelled the change.' }], isError: true }
 				}
 				try {
 					return await this.callTool(name, args || {}, true)

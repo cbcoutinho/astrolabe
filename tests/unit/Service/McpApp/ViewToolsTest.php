@@ -29,8 +29,8 @@ final class ViewToolsTest extends TestCase {
 	private const URI = 'ui://nextcloud-mcp/document-viewer.html';
 
 	/** @param array<string, mixed> $meta */
-	private static function tool(string $name, array $meta, ?bool $readOnly = true): Tool {
-		return new Tool($name, null, ['type' => 'object'], null, new ToolAnnotations(readOnlyHint: $readOnly), null, $meta);
+	private static function tool(string $name, array $meta, ?bool $readOnly = true, ?string $title = null): Tool {
+		return new Tool($name, $title, ['type' => 'object'], null, new ToolAnnotations(readOnlyHint: $readOnly), null, $meta);
 	}
 
 	/** @param list<string> $scopes */
@@ -46,14 +46,15 @@ final class ViewToolsTest extends TestCase {
 		$tools = ViewTools::fromListing([
 			self::tool('open_document', self::viewerMeta(['files.read'], null)),
 			self::tool('preview_changes', self::viewerMeta(['files.read'])),
-			self::tool('apply_changes', self::viewerMeta(['files.read', 'files.write']), null),
+			self::tool('apply_changes', self::viewerMeta(['files.read', 'files.write']), null, 'Save a Changed Copy'),
 		], self::URI);
 
 		$this->assertSame([
-			'open_document' => ['scopes' => 'files.read', 'write' => false],
-			'preview_changes' => ['scopes' => 'files.read', 'write' => false],
+			// No title published: the host falls back to the name.
+			'open_document' => ['scopes' => 'files.read', 'write' => false, 'title' => 'open_document'],
+			'preview_changes' => ['scopes' => 'files.read', 'write' => false, 'title' => 'preview_changes'],
 			// No readOnlyHint is not "read-only": the host confirms it.
-			'apply_changes' => ['scopes' => 'files.read files.write', 'write' => true],
+			'apply_changes' => ['scopes' => 'files.read files.write', 'write' => true, 'title' => 'Save a Changed Copy'],
 		], $tools);
 	}
 
@@ -122,18 +123,22 @@ final class ViewToolsTest extends TestCase {
 
 		// The resource needs no scope; the listing asks for the published union.
 		$this->assertSame(['', 'files.read files.write'], $minted);
-		$this->assertSame(['preview_changes' => ['scopes' => 'files.read', 'write' => false]], $first);
+		$this->assertSame(['preview_changes' => ['scopes' => 'files.read', 'write' => false, 'title' => 'preview_changes']], $first);
 		$this->assertSame($first, $second);
 	}
 
-	public function testAResourceWithoutScopesOffersNoTools(): void {
+	public function testAResourceWithoutScopesOffersNoToolsAndIsAskedAgainNextTime(): void {
 		$client = $this->createMock(Client::class);
-		$client->method('readResource')->willReturn(new ReadResourceResult([new TextResourceContents(self::URI, 'text/html', '<p>')]));
+		// An older server: asked on every call, so its upgrade shows up at once.
+		$client->expects($this->exactly(2))->method('readResource')
+			->willReturn(new ReadResourceResult([new TextResourceContents(self::URI, 'text/html', '<p>')]));
 		$client->expects($this->never())->method('listTools');
 		$factory = $this->createMock(McpClientFactory::class);
 		$factory->method('connect')->willReturn($client);
+		$viewTools = new ViewTools($factory, $this->arrayCacheFactory());
 
-		$this->assertSame([], (new ViewTools($factory, $this->arrayCacheFactory()))->forView('alice', self::URI));
+		$this->assertSame([], $viewTools->forView('alice', self::URI));
+		$this->assertSame([], $viewTools->forView('alice', self::URI));
 	}
 
 	private function arrayCacheFactory(): ICacheFactory {

@@ -21,6 +21,14 @@ use OCP\ICacheFactory;
  * which is how a user without files.write never gets apply_changes. Each call is
  * then made with a token for that tool's own scopes.
  *
+ * Trust: this trusts the configured MCP server to say which of its tools a
+ * view may call and which scopes they need, as it is already trusted with
+ * the user's tokens and data. The host's own guarantees do not depend on it:
+ * the IdP caps every token at the user's grant and the Astrolabe client's
+ * allowed scopes, scopes must be well-formed, only tools bound to this view
+ * and visible to apps are reachable, and a tool not declared read-only waits
+ * for the user's confirmation.
+ *
  * @psalm-suppress ClassMustBeFinal — kept non-final so the controller tests can mock it.
  */
 class ViewTools {
@@ -43,7 +51,7 @@ class ViewTools {
 	/**
 	 * Name => what calling it needs, for the tools `$uri` may call as `$userId`.
 	 *
-	 * @return array<string, array{scopes: string, write: bool}>
+	 * @return array<string, array{scopes: string, write: bool, title: string}>
 	 * @throws \Throwable when the MCP server cannot be reached; nothing is cached then
 	 */
 	public function forView(string $userId, string $uri): array {
@@ -51,7 +59,7 @@ class ViewTools {
 		/** @var mixed $cached */
 		$cached = $this->cache->get($key);
 		if (is_array($cached)) {
-			/** @var array<string, array{scopes: string, write: bool}> $cached */
+			/** @var array<string, array{scopes: string, write: bool, title: string}> $cached */
 			return $cached;
 		}
 		// The resource needs no scope; its _meta names the ones to list with.
@@ -71,7 +79,11 @@ class ViewTools {
 				$client->disconnect();
 			}
 		}
-		$this->cache->set($key, $tools, self::TTL);
+		// An empty answer (an older server, or none of its tools reachable) is
+		// not cached, so a server upgrade takes effect on the next call.
+		if ($tools !== []) {
+			$this->cache->set($key, $tools, self::TTL);
+		}
 		return $tools;
 	}
 
@@ -81,7 +93,7 @@ class ViewTools {
 	 * scopes is left out (fail closed): there is no token to mint for it.
 	 *
 	 * @param array<array-key, Tool> $listed
-	 * @return array<string, array{scopes: string, write: bool}>
+	 * @return array<string, array{scopes: string, write: bool, title: string}>
 	 */
 	public static function fromListing(array $listed, string $uri): array {
 		$tools = [];
@@ -100,7 +112,12 @@ class ViewTools {
 				continue;
 			}
 			// Anything not declared read-only is a write, which the host confirms.
-			$tools[$tool->name] = ['scopes' => $scopes, 'write' => $tool->annotations?->readOnlyHint !== true];
+			$tools[$tool->name] = [
+				'scopes' => $scopes,
+				'write' => $tool->annotations?->readOnlyHint !== true,
+				// What the host names in its confirmation.
+				'title' => $tool->title ?? $tool->annotations?->title ?? $tool->name,
+			];
 		}
 		return $tools;
 	}

@@ -42,9 +42,9 @@ final class McpAppControllerTest extends TestCase {
 	private const URI = 'ui://nextcloud-mcp/document-viewer.html';
 	/** What the server publishes for the viewer today (ViewTools::forView). */
 	private const VIEW_TOOLS = [
-		'open_document' => ['scopes' => 'files.read', 'write' => false],
-		'preview_changes' => ['scopes' => 'files.read', 'write' => false],
-		'apply_changes' => ['scopes' => 'files.read files.write', 'write' => true],
+		'open_document' => ['scopes' => 'files.read', 'write' => false, 'title' => 'Open Document'],
+		'preview_changes' => ['scopes' => 'files.read', 'write' => false, 'title' => 'Preview Changes'],
+		'apply_changes' => ['scopes' => 'files.read files.write', 'write' => true, 'title' => 'Save a Changed Copy'],
 	];
 
 	private Client&MockObject $client;
@@ -128,7 +128,16 @@ final class McpAppControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
 		$this->assertTrue($response->getData()['confirm']);
+		// The host names the change in its confirmation.
+		$this->assertSame('Save a Changed Copy', $response->getData()['title']);
 		$this->assertSame([], $this->calls);
+	}
+
+	public function testConfirmedChangesNothingForAReadTool(): void {
+		$response = $this->controller->callTool('preview_changes', ['file_id' => 7], self::URI, true);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['files.read'], $this->minted);
 	}
 
 	public function testEachCallIsMintedWithItsToolsOwnScopes(): void {
