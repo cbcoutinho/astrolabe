@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.51.0 (2026-11-25)
+
+### Feat
+
+- host the MCP App document viewer on the Astrolabe page and in the Assistant
+
+### Fix
+
+- fence the viewer's state server-side for its own messages
+- ask the user before the viewer saves a redacted copy
+- refuse a non-positive file id in modelContext
+- tighten file ids, view CSP and message errors from review round 3
+- tighten the MCP App host from review round 2
+- harden the MCP App host proxy from review
+
 ## v0.50.2 (2026-11-24)
 
 ### Fix
