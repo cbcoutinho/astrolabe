@@ -12,6 +12,7 @@ use OCA\Astrolabe\Service\Assistant\AgentLoop;
 use OCA\Astrolabe\Service\Mcp\McpClientFactory;
 use OCA\Astrolabe\Service\Mcp\McpUnavailableException;
 use OCA\Astrolabe\Service\McpApp\RedactionProposals;
+use OCA\Astrolabe\Service\McpApp\ViewTools;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -37,18 +38,6 @@ final class McpAppController extends Controller {
 	private const MAX_CSP_DOMAINS = 10;
 	private const MAX_MESSAGE_CHARS = 4000;
 
-	/**
-	 * Tools the view may call, with the scopes minted for that call only. All
-	 * carry "app" in _meta.ui.visibility and take a file_id; anything else is
-	 * refused.
-	 */
-	private const TOOLS = [
-		'open_document' => 'files.read',
-		'read_document_bytes' => 'files.read',
-		'preview_redaction' => 'files.read',
-		'save_redaction' => 'files.read files.write',
-	];
-
 	public function __construct(
 		string $appName,
 		IRequest $request,
@@ -56,18 +45,39 @@ final class McpAppController extends Controller {
 		private AgentLoop $agentLoop,
 		private IUserSession $userSession,
 		private RedactionProposals $proposals,
+		private ViewTools $viewTools,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($appName, $request);
 	}
 
-	/** @param array<string, mixed> $arguments */
+	/**
+	 * Relay a view's tools/call. Which tools `$uri` may call, and the scopes to
+	 * mint for each, come from the MCP server ({@see ViewTools}); a write needs
+	 * `$confirmed`, which only the host sets, after asking the user.
+	 *
+	 * @param array<string, mixed> $arguments
+	 */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 120, period: 60)]
-	public function callTool(string $name, array $arguments = []): JSONResponse {
-		if (!isset(self::TOOLS[$name])) {
+	public function callTool(string $name, array $arguments = [], string $uri = '', bool $confirmed = false): JSONResponse {
+		if (!str_starts_with($uri, 'ui://')) {
+			return new JSONResponse(['error' => 'Only ui:// views may call tools'], Http::STATUS_BAD_REQUEST);
+		}
+		try {
+			$tool = $this->viewTools->forView($this->uid(), $uri)[$name] ?? null;
+		} catch (McpUnavailableException $e) {
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_SERVICE_UNAVAILABLE);
+		} catch (\Throwable $e) {
+			return $this->upstreamError("Could not list the viewer's tools", $e);
+		}
+		if ($tool === null) {
 			return new JSONResponse(['error' => "Tool '$name' is not available to this app"], Http::STATUS_FORBIDDEN);
 		}
+		if ($tool['write'] && !$confirmed) {
+			return new JSONResponse(['error' => 'This change needs your confirmation', 'confirm' => true], Http::STATUS_CONFLICT);
+		}
+		// Every view this host serves is a file view: its tools take a file_id.
 		$fileId = self::fileId($arguments['file_id'] ?? null);
 		if ($fileId === null) {
 			return new JSONResponse(['error' => 'file_id must be an integer'], Http::STATUS_BAD_REQUEST);
@@ -76,7 +86,7 @@ final class McpAppController extends Controller {
 		if ($name === 'open_document') {
 			$arguments = $this->withProposal($arguments);
 		}
-		return $this->withClient(self::TOOLS[$name], fn ($c) => $c->callTool($name, $arguments)->jsonSerialize());
+		return $this->withClient($tool['scopes'], fn ($c) => $c->callTool($name, $arguments)->jsonSerialize());
 	}
 
 	/**
@@ -125,7 +135,8 @@ final class McpAppController extends Controller {
 			return new JSONResponse(['error' => 'Only ui:// resources'], Http::STATUS_BAD_REQUEST);
 		}
 		try {
-			$client = $this->clientFactory->connect($this->uid(), 'files.read', true);
+			// The resource needs no scope.
+			$client = $this->clientFactory->connect($this->uid(), '', true);
 			try {
 				$contents = $client->readResource($uri)->contents[0] ?? null;
 			} finally {

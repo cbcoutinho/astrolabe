@@ -16,6 +16,7 @@ use OCA\Astrolabe\Service\Assistant\AgentException;
 use OCA\Astrolabe\Service\Assistant\AgentLoop;
 use OCA\Astrolabe\Service\Mcp\McpClientFactory;
 use OCA\Astrolabe\Service\McpApp\RedactionProposals;
+use OCA\Astrolabe\Service\McpApp\ViewTools;
 use OCA\Astrolabe\Tests\Unit\PropertyGenerators;
 use OCP\AppFramework\Http;
 use OCP\ICache;
@@ -29,7 +30,8 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 /**
- * The MCP App host proxy: which tools the view may reach, and that redaction
+ * The MCP App host proxy: which tools the view may reach (as discovered by
+ * ViewTools), that writes wait for the host's confirmation, and that redaction
  * strings and review controls come only from the server-side proposal store,
  * never from the (untrusted) view.
  */
@@ -37,6 +39,13 @@ final class McpAppControllerTest extends TestCase {
 	use TestTrait;
 
 	private const ID = 'abcdefghijklmnopqrstuvwx';
+	private const URI = 'ui://nextcloud-mcp/document-viewer.html';
+	/** What the server publishes for the viewer today (ViewTools::forView). */
+	private const VIEW_TOOLS = [
+		'open_document' => ['scopes' => 'files.read', 'write' => false],
+		'preview_changes' => ['scopes' => 'files.read', 'write' => false],
+		'apply_changes' => ['scopes' => 'files.read files.write', 'write' => true],
+	];
 
 	private Client&MockObject $client;
 	private RedactionProposals $proposals;
@@ -45,6 +54,8 @@ final class McpAppControllerTest extends TestCase {
 	private LoggerInterface&MockObject $logger;
 	/** @var list<array{string, array<string, mixed>}> */
 	private array $calls = [];
+	/** @var list<string> scopes of each minted client */
+	private array $minted = [];
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -69,7 +80,14 @@ final class McpAppControllerTest extends TestCase {
 			return new CallToolResult([new TextContent('ok')]);
 		});
 		$clientFactory = $this->createMock(McpClientFactory::class);
-		$clientFactory->method('connect')->willReturn($this->client);
+		$clientFactory->method('connect')->willReturnCallback(function (string $uid, string $scopes): Client {
+			$this->minted[] = $scopes;
+			return $this->client;
+		});
+		$viewTools = $this->createMock(ViewTools::class);
+		$viewTools->method('forView')->willReturnCallback(
+			static fn (string $uid, string $uri): array => $uri === self::URI ? self::VIEW_TOOLS : [],
+		);
 
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('alice');
@@ -85,22 +103,67 @@ final class McpAppControllerTest extends TestCase {
 			$this->agentLoop,
 			$userSession,
 			$this->proposals,
+			$viewTools,
 			$this->logger,
 		);
 	}
 
 	public function testRefusesToolsTheViewMayNotCall(): void {
-		$response = $this->controller->callTool('nc_webdav_delete_resource', ['path' => '/']);
+		$response = $this->controller->callTool('nc_webdav_delete_resource', ['path' => '/'], self::URI);
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 		$this->assertSame([], $this->calls);
+	}
+
+	public function testRefusesACallFromANonUiView(): void {
+		$response = $this->controller->callTool('open_document', ['file_id' => 7], 'https://evil.example/x.html');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame([], $this->calls);
+	}
+
+	/** Only the host sets $confirmed, after asking; the view cannot skip it. */
+	public function testAWriteWaitsForTheHostsConfirmation(): void {
+		$response = $this->controller->callTool('apply_changes', ['file_id' => 7, 'etag' => 'e1'], self::URI);
+
+		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		$this->assertTrue($response->getData()['confirm']);
+		$this->assertSame([], $this->calls);
+	}
+
+	public function testEachCallIsMintedWithItsToolsOwnScopes(): void {
+		$this->controller->callTool('preview_changes', ['file_id' => 7], self::URI);
+		$this->controller->callTool('apply_changes', ['file_id' => 7, 'etag' => 'e1'], self::URI, true);
+
+		$this->assertSame(['files.read', 'files.read files.write'], $this->minted);
+	}
+
+	public function testADiscoveryFailureIsLoggedAndNotRelayed(): void {
+		$viewTools = $this->createMock(ViewTools::class);
+		$viewTools->method('forView')->willThrowException(new \RuntimeException('http://mcp.internal:8000 401'));
+		$this->logger->expects($this->once())->method('warning');
+		$controller = new McpAppController(
+			'astrolabe',
+			$this->createMock(IRequest::class),
+			$this->createMock(McpClientFactory::class),
+			$this->agentLoop,
+			$this->createMock(IUserSession::class),
+			$this->proposals,
+			$viewTools,
+			$this->logger,
+		);
+
+		$response = $controller->callTool('open_document', ['file_id' => 7], self::URI);
+
+		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		$this->assertStringNotContainsString('internal', json_encode($response->getData(), JSON_THROW_ON_ERROR));
 	}
 
 	public function testSwapsTheProposalIdForTheStoredTextsAndReview(): void {
 		$review = ['heading' => 'People', 'buttons' => [['label' => 'Only A', 'set' => 'only', 'groups' => ['Person A']]]];
 		$id = $this->proposals->store('alice', 7, [['text' => 'Jane Doe', 'group' => 'Person A']], $review);
 
-		$response = $this->controller->callTool('open_document', ['file_id' => 7, 'proposal' => $id]);
+		$response = $this->controller->callTool('open_document', ['file_id' => 7, 'proposal' => $id], self::URI);
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame([['open_document', [
@@ -116,17 +179,17 @@ final class McpAppControllerTest extends TestCase {
 			'file_id' => 7,
 			'redact_text' => ['injected'],
 			'review' => ['heading' => 'injected'],
-		]);
+		], self::URI);
 
 		$this->assertSame([['open_document', ['file_id' => 7]]], $this->calls);
 	}
 
 	public function testAnotherUsersOrFilesProposalOpensWithoutRegions(): void {
 		$this->proposals->store('bob', 7, ['bob secret']);
-		$this->controller->callTool('open_document', ['file_id' => 7, 'proposal' => self::ID]);
+		$this->controller->callTool('open_document', ['file_id' => 7, 'proposal' => self::ID], self::URI);
 
 		$this->proposals->store('alice', 8, ['other file']);
-		$this->controller->callTool('open_document', ['file_id' => 7, 'proposal' => self::ID]);
+		$this->controller->callTool('open_document', ['file_id' => 7, 'proposal' => self::ID], self::URI);
 
 		$this->assertSame([
 			['open_document', ['file_id' => 7]],
@@ -135,9 +198,9 @@ final class McpAppControllerTest extends TestCase {
 	}
 
 	public function testOtherToolsPassArgumentsThrough(): void {
-		$this->controller->callTool('preview_redaction', ['file_id' => 7, 'redact_text' => ['x']]);
+		$this->controller->callTool('preview_changes', ['file_id' => 7, 'redact_text' => ['x']], self::URI);
 
-		$this->assertSame([['preview_redaction', ['file_id' => 7, 'redact_text' => ['x']]]], $this->calls);
+		$this->assertSame([['preview_changes', ['file_id' => 7, 'redact_text' => ['x']]]], $this->calls);
 	}
 
 	public function testViewCspDefaultsToNothingExternal(): void {
@@ -175,24 +238,24 @@ final class McpAppControllerTest extends TestCase {
 
 	public function testANonDigitFileIdIsRefusedBeforeAnyCall(): void {
 		$id = $this->proposals->store('alice', 1000, ['Jane Doe']);
-		$response = $this->controller->callTool('open_document', ['file_id' => '1e3', 'proposal' => $id]);
+		$response = $this->controller->callTool('open_document', ['file_id' => '1e3', 'proposal' => $id], self::URI);
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		$this->assertSame([], $this->calls);
 	}
 
-	public function testSaveRedactionNeedsAValidFileId(): void {
+	public function testAWriteNeedsAValidFileId(): void {
 		foreach ([['file_id' => '7; drop'], ['file_id' => 7.5], []] as $arguments) {
-			$response = $this->controller->callTool('save_redaction', $arguments + ['regions' => [], 'etag' => 'e1']);
+			$response = $this->controller->callTool('apply_changes', $arguments + ['changes' => [], 'etag' => 'e1'], self::URI, true);
 			$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus(), var_export($arguments, true));
 		}
 		$this->assertSame([], $this->calls);
 	}
 
 	public function testADigitStringFileIdIsPassedOnAsAnInt(): void {
-		$this->controller->callTool('save_redaction', ['file_id' => '7', 'etag' => 'e1']);
+		$this->controller->callTool('apply_changes', ['file_id' => '7', 'etag' => 'e1'], self::URI, true);
 
-		$this->assertSame([['save_redaction', ['file_id' => 7, 'etag' => 'e1']]], $this->calls);
+		$this->assertSame([['apply_changes', ['file_id' => 7, 'etag' => 'e1']]], $this->calls);
 	}
 
 	public function testAnUpstreamFailureIsLoggedAndNotRelayed(): void {
@@ -200,7 +263,7 @@ final class McpAppControllerTest extends TestCase {
 		$client->method('callTool')->willThrowException(new \RuntimeException('POST http://mcp.internal:8000/mcp: 401 invalid_token'));
 		$this->logger->expects($this->once())->method('warning');
 
-		$response = $this->controllerWith($client)->callTool('preview_redaction', ['file_id' => 7]);
+		$response = $this->controllerWith($client)->callTool('preview_changes', ['file_id' => 7], self::URI);
 
 		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
 		$this->assertStringNotContainsString('internal', json_encode($response->getData(), JSON_THROW_ON_ERROR));
@@ -322,6 +385,8 @@ final class McpAppControllerTest extends TestCase {
 		$user->method('getUID')->willReturn('alice');
 		$userSession = $this->createMock(IUserSession::class);
 		$userSession->method('getUser')->willReturn($user);
+		$viewTools = $this->createMock(ViewTools::class);
+		$viewTools->method('forView')->willReturn(self::VIEW_TOOLS);
 		return new McpAppController(
 			'astrolabe',
 			$this->createMock(IRequest::class),
@@ -329,6 +394,7 @@ final class McpAppControllerTest extends TestCase {
 			$this->agentLoop,
 			$userSession,
 			$this->proposals,
+			$viewTools,
 			$this->logger,
 		);
 	}

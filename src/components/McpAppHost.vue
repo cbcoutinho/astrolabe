@@ -156,14 +156,22 @@ export default {
 				this.pushResult()
 			}
 			bridge.oncalltool = async ({ name, arguments: args }) => {
-				// The view is third-party HTML: a write needs the user's say-so here,
-				// in the host, where the view cannot click for them.
+				try {
+					return await this.callTool(name, args || {})
+				} catch (err) {
+					// The server says which calls write (409 + confirm). The view is
+					// third-party HTML, so the user's say-so is asked here, in the host,
+					// where the view cannot click for them.
+					if (err.response?.status !== 409 || !err.response.data?.confirm) {
+						throw new Error(err.response?.data?.error || err.message, { cause: err })
+					}
+				}
 				// ponytail: native confirm(); swap for a Nextcloud dialog if it jars.
-				if (name === 'save_redaction' && !window.confirm(t('astrolabe', 'Save a redacted copy of this file?'))) {
+				if (!window.confirm(t('astrolabe', 'Save a copy of this file with these changes? The original is not changed.'))) {
 					return { content: [{ type: 'text', text: 'The user cancelled the save.' }], isError: true }
 				}
 				try {
-					return await this.callTool(name, args || {})
+					return await this.callTool(name, args || {}, true)
 				} catch (err) {
 					throw new Error(err.response?.data?.error || err.message, { cause: err })
 				}
@@ -225,8 +233,8 @@ export default {
 			this.bridge.sendToolResult(JSON.parse(JSON.stringify(this.openResult)))
 		},
 
-		async callTool(name, args) {
-			const { data } = await axios.post(generateUrl('/apps/astrolabe/api/v1/mcp-app/tools/call'), { name, arguments: args })
+		async callTool(name, args, confirmed = false) {
+			const { data } = await axios.post(generateUrl('/apps/astrolabe/api/v1/mcp-app/tools/call'), { name, arguments: args, uri: VIEW_URI, confirmed })
 			return data
 		},
 
