@@ -272,17 +272,30 @@ body.mcp-app-fullscreen #app-navigation-vue {
 
 <style scoped>
 .mcp-app-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+
 .mcp-app-shell { background: var(--color-main-background); border-radius: var(--border-radius-large); width: min(1200px, 95vw); max-height: 95vh; display: flex; flex-direction: column; overflow: hidden; }
+
 .mcp-app-shell.inline { width: 100%; max-height: none; border: 1px solid var(--color-border); }
+
 .mcp-app-shell.inline.fullscreen { position: fixed; inset: 0; z-index: 10000; }
+
 .mcp-app-shell.fullscreen { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
+
 .mcp-app-superseded { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; border: 1px dashed var(--color-border); border-radius: var(--border-radius-large); color: var(--color-text-maxcontrast); }
+
 .mcp-app-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+
 .mcp-app-body { display: flex; min-height: 0; flex: 1; }
+
 .mcp-app-body iframe { flex: 1; border: 0; min-width: 0; }
+
 .fullscreen .mcp-app-body iframe { height: auto !important; }
-.mcp-app-side { width: 340px; overflow: auto; padding: 12px; border-left: 1px solid var(--color-border); }
+
+.mcp-app-side { width: 340px; overflow: auto; padding: 12px; border-inline-start: 1px solid var(--color-border); }
+
 .mcp-app-answer { margin-bottom: 16px; }
+
 .mcp-app-answer .q { font-weight: bold; }
+
 .mcp-app-answer .a.failed { white-space: pre-wrap; color: var(--color-error-text); }
 </style>
