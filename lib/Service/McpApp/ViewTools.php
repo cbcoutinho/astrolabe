@@ -33,7 +33,14 @@ use OCP\ICacheFactory;
  */
 class ViewTools {
 	public const SCOPES_META_KEY = 'nextcloud-mcp/scopes';
-	/** Short: a server upgrade or a changed scope grant shows up within minutes. */
+	/** Longest view URI accepted: each distinct URI costs a lookup and a cache entry. */
+	public const MAX_URI = 512;
+	/**
+	 * Short: a server upgrade or a changed scope grant shows up within minutes.
+	 * The key is the user and URI, not their grant, so for up to this long a
+	 * user who lost a scope still sees the tool, whose call then fails at the
+	 * IdP (every token is capped there), and one who gained it waits.
+	 */
 	private const TTL = 300;
 	/** An empty answer is kept briefly: an upgrade shows up fast, a flood does not reconnect. */
 	private const EMPTY_TTL = 30;
@@ -49,7 +56,8 @@ class ViewTools {
 		private McpClientFactory $clientFactory,
 		ICacheFactory $cacheFactory,
 	) {
-		$this->cache = $cacheFactory->createDistributed('astrolabe-mcp-app-tools');
+		// Bump the version when the entry shape changes; isEntries() drops a stale one anyway.
+		$this->cache = $cacheFactory->createDistributed('astrolabe-mcp-app-tools-v1');
 	}
 
 	/**
@@ -62,8 +70,7 @@ class ViewTools {
 		$key = hash('sha256', json_encode([$userId, $uri], JSON_THROW_ON_ERROR));
 		/** @var mixed $cached */
 		$cached = $this->cache->get($key);
-		if (is_array($cached)) {
-			/** @var array<string, array{scopes: string, write: bool, title: string}> $cached */
+		if (self::isEntries($cached)) {
 			return $cached;
 		}
 		// The resource needs no scope; its _meta names the ones to list with.
@@ -118,10 +125,40 @@ class ViewTools {
 				'scopes' => $scopes,
 				'write' => $tool->annotations?->readOnlyHint !== true,
 				// What the host names in its confirmation.
-				'title' => mb_substr($tool->title ?? $tool->annotations?->title ?? $tool->name, 0, self::MAX_TITLE),
+				'title' => mb_substr(self::title($tool), 0, self::MAX_TITLE),
 			];
 		}
 		return $tools;
+	}
+
+	/** The first non-empty of the tool's title, its annotations' title and its name. */
+	private static function title(Tool $tool): string {
+		foreach ([$tool->title, $tool->annotations?->title] as $title) {
+			if ($title !== null && $title !== '') {
+				return $title;
+			}
+		}
+		return $tool->name;
+	}
+
+	/**
+	 * Whether a cached value has the shape forView() returns, so an entry from
+	 * an older shape (or anything else in the cache) is looked up again
+	 * instead of failing later.
+	 *
+	 * @psalm-assert-if-true array<string, array{scopes: string, write: bool, title: string}> $value
+	 */
+	public static function isEntries(mixed $value): bool {
+		if (!is_array($value)) {
+			return false;
+		}
+		foreach ($value as $name => $tool) {
+			if (!is_string($name) || !is_array($tool)
+				|| !is_string($tool['scopes'] ?? null) || !is_bool($tool['write'] ?? null) || !is_string($tool['title'] ?? null)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

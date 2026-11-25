@@ -122,6 +122,20 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertSame([], $this->calls);
 	}
 
+	public function testRefusesAnOverlongViewUri(): void {
+		$response = $this->controller->callTool('open_document', ['file_id' => 7], 'ui://' . str_repeat('a', 600));
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame([], $this->minted);
+	}
+
+	public function testAServerOfferingNoToolsIsReportedAsPossiblyOutdated(): void {
+		$response = $this->controller->callTool('open_document', ['file_id' => 7], 'ui://nextcloud-mcp/other.html');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertStringContainsString('updated', json_encode($response->getData(), JSON_THROW_ON_ERROR));
+	}
+
 	/** Only the host sets $confirmed, after asking; the view cannot skip it. */
 	public function testAWriteWaitsForTheHostsConfirmation(): void {
 		$response = $this->controller->callTool('apply_changes', ['file_id' => 7, 'etag' => 'e1'], self::URI);

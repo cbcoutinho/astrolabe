@@ -63,16 +63,23 @@ final class McpAppController extends Controller {
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 120, period: 60)]
 	public function callTool(string $name, array $arguments = [], string $uri = '', bool $confirmed = false): JSONResponse {
-		if (!str_starts_with($uri, 'ui://')) {
+		if (!str_starts_with($uri, 'ui://') || strlen($uri) > ViewTools::MAX_URI) {
 			return new JSONResponse(['error' => 'Only ui:// views may call tools'], Http::STATUS_BAD_REQUEST);
 		}
 		try {
-			$tool = $this->viewTools->forView($this->uid(), $uri)[$name] ?? null;
+			$tools = $this->viewTools->forView($this->uid(), $uri);
 		} catch (McpUnavailableException $e) {
 			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_SERVICE_UNAVAILABLE);
 		} catch (\Throwable $e) {
 			return $this->upstreamError("Could not list the viewer's tools", $e);
 		}
+		if ($tools === []) {
+			// Most likely a server from before tools published their scopes
+			// (_meta["nextcloud-mcp/scopes"]); say so rather than refuse each tool.
+			$this->logger->info('The MCP server published no tools for {uri}; it may predate viewer tool discovery', ['uri' => $uri]);
+			return new JSONResponse(['error' => 'The MCP server offers no tools for this view. It may need to be updated.'], Http::STATUS_FORBIDDEN);
+		}
+		$tool = $tools[$name] ?? null;
 		if ($tool === null) {
 			return new JSONResponse(['error' => "Tool '$name' is not available to this app"], Http::STATUS_FORBIDDEN);
 		}

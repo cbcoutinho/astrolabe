@@ -149,6 +149,39 @@ final class ViewToolsTest extends TestCase {
 		$this->assertSame(str_repeat('é', 80), $tools['apply_changes']['title']);
 	}
 
+	public function testATitleFallsBackToTheAnnotationTitleThenTheName(): void {
+		$annotated = new Tool('b', '', ['type' => 'object'], null, new ToolAnnotations(title: 'From annotations', readOnlyHint: true), null, self::viewerMeta(['files.read']));
+		$tools = ViewTools::fromListing([
+			self::tool('a', self::viewerMeta(['files.read']), true, 'Own title'),
+			$annotated,
+			self::tool('c', self::viewerMeta(['files.read']), true, ''),
+		], self::URI);
+
+		$this->assertSame(['Own title', 'From annotations', 'c'], array_column($tools, 'title'));
+	}
+
+	public function testACachedEntryOfAnotherShapeIsLookedUpAgain(): void {
+		$client = $this->createMock(Client::class);
+		$client->expects($this->once())->method('readResource')
+			->willReturn(new ReadResourceResult([new TextResourceContents(self::URI, 'text/html', '<p>')]));
+		$factory = $this->createMock(McpClientFactory::class);
+		$factory->method('connect')->willReturn($client);
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturn(['open_document' => ['scopes' => 'files.read']]);
+		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory->method('createDistributed')->willReturn($cache);
+
+		$this->assertSame([], (new ViewTools($factory, $cacheFactory))->forView('alice', self::URI));
+	}
+
+	public function testIsEntriesAcceptsOnlyWhatForViewReturns(): void {
+		$this->assertTrue(ViewTools::isEntries([]));
+		$this->assertTrue(ViewTools::isEntries(['t' => ['scopes' => 'files.read', 'write' => false, 'title' => 'T']]));
+		$this->assertFalse(ViewTools::isEntries('x'));
+		$this->assertFalse(ViewTools::isEntries([['scopes' => 'files.read', 'write' => false, 'title' => 'T']]));
+		$this->assertFalse(ViewTools::isEntries(['t' => ['scopes' => 'files.read', 'write' => 'no', 'title' => 'T']]));
+	}
+
 	/** @var list<int> TTLs the cache was written with. */
 	private array $ttls = [];
 
