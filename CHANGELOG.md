@@ -25,6 +25,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.52.0 (2026-11-25)
+
+### BREAKING CHANGE
+
+- the view proxy only relays tools whose server publishes
+_meta "nextcloud-mcp/scopes" (nextcloud-mcp-server from the release that adds
+it); against an older server the viewer's tool calls are refused. The
+tools/call request now carries the view's `uri`.
+
+### Feat
+
+- **mcp-app**: open the viewer fullscreen from a narrow chat column
+- **mcp-app**: let the user hide the viewer's answers panel
+- **mcp-app**: discover the viewer's tools from the MCP server instead of listing them
+
+### Fix
+
+- **mcp-app**: show an error in the narrow card; start compact without a flash (round-1 review)
+- **mcp-app**: leave fullscreen when the viewer is superseded (round-1 review)
+- **mcp-app**: keep the fullscreen viewer on screen inside the Assistant modal
+- **mcp-app**: keep each SDK default for non-app connections (round-2 review)
+- **mcp-app**: let the viewer open PDFs over 6 MB
+- **mcp-app**: check cached tool entries; cap the view uri; say when the server offers no tools (round-4 review)
+- **mcp-app**: check file_id before confirming; cache an empty tool list briefly (round-3 review)
+- **mcp-app**: name the change in the confirmation; don't cache an empty tool list (round-2 review)
+
 ## v0.51.0 (2026-11-25)
 
 ### Feat
