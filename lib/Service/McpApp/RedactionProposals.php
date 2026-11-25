@@ -23,7 +23,7 @@ use OCP\Security\ISecureRandom;
 final class RedactionProposals {
 	/** ponytail: cache-backed; move to a table if chats must outlive eviction. */
 	private const TTL = 7 * 24 * 3600;
-	public const ID_PATTERN = '/^[A-Za-z0-9]{24}$/';
+	public const ID_PATTERN = '/^[A-Za-z0-9]{24}\z/';
 
 	private ICache $cache;
 

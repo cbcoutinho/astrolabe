@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace OCA\Astrolabe\Tests\Unit\Controller;
 
+use Eris\Generators;
+use Eris\TestTrait;
 use Mcp\Client\Client;
+use Mcp\Schema\Content\BlobResourceContents;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
+use Mcp\Schema\Result\ReadResourceResult;
 use OCA\Astrolabe\Controller\McpAppController;
+use OCA\Astrolabe\Service\Assistant\AgentException;
 use OCA\Astrolabe\Service\Assistant\AgentLoop;
 use OCA\Astrolabe\Service\Mcp\McpClientFactory;
 use OCA\Astrolabe\Service\McpApp\RedactionProposals;
+use OCA\Astrolabe\Tests\Unit\PropertyGenerators;
 use OCP\AppFramework\Http;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -20,6 +26,7 @@ use OCP\IUserSession;
 use OCP\Security\ISecureRandom;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 /**
  * The MCP App host proxy: which tools the view may reach, and that redaction
@@ -27,11 +34,15 @@ use PHPUnit\Framework\TestCase;
  * never from the (untrusted) view.
  */
 final class McpAppControllerTest extends TestCase {
+	use TestTrait;
+
 	private const ID = 'abcdefghijklmnopqrstuvwx';
 
 	private Client&MockObject $client;
 	private RedactionProposals $proposals;
 	private McpAppController $controller;
+	private AgentLoop&MockObject $agentLoop;
+	private LoggerInterface&MockObject $logger;
 	/** @var list<array{string, array<string, mixed>}> */
 	private array $calls = [];
 
@@ -65,13 +76,16 @@ final class McpAppControllerTest extends TestCase {
 		$userSession = $this->createMock(IUserSession::class);
 		$userSession->method('getUser')->willReturn($user);
 
+		$this->agentLoop = $this->createMock(AgentLoop::class);
+		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->controller = new McpAppController(
 			'astrolabe',
 			$this->createMock(IRequest::class),
 			$clientFactory,
-			$this->createMock(AgentLoop::class),
+			$this->agentLoop,
 			$userSession,
 			$this->proposals,
+			$this->logger,
 		);
 	}
 
@@ -145,5 +159,135 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertStringContainsString('connect-src https://api.example.com', $csp);
 		$this->assertStringNotContainsString('plain.example', $csp);
 		$this->assertStringNotContainsString('script-src *', $csp);
+	}
+
+	/** "1e3" is numeric and would cast to file 1000; only digits name a file. */
+	public function testFileIdMustBeAnIntOrDigits(): void {
+		$this->assertSame(7, McpAppController::fileId(7));
+		$this->assertSame(7, McpAppController::fileId('7'));
+		foreach (['1e3', '7.0', ' 7', '-7', '', '0x7', null, 7.0, '99999999999999999999'] as $bad) {
+			$this->assertNull(McpAppController::fileId($bad), var_export($bad, true));
+		}
+	}
+
+	public function testANonDigitFileIdGetsNoProposal(): void {
+		$id = $this->proposals->store('alice', 1000, ['Jane Doe']);
+		$this->controller->callTool('open_document', ['file_id' => '1e3', 'proposal' => $id]);
+
+		$this->assertSame([['open_document', ['file_id' => '1e3']]], $this->calls);
+	}
+
+	public function testAnUpstreamFailureIsLoggedAndNotRelayed(): void {
+		$client = $this->createMock(Client::class);
+		$client->method('callTool')->willThrowException(new \RuntimeException('POST http://mcp.internal:8000/mcp: 401 invalid_token'));
+		$this->logger->expects($this->once())->method('warning');
+
+		$response = $this->controllerWith($client)->callTool('preview_redaction', ['file_id' => 7]);
+
+		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		$this->assertStringNotContainsString('internal', json_encode($response->getData(), JSON_THROW_ON_ERROR));
+	}
+
+	public function testViewRefusesANonUiUri(): void {
+		$response = $this->controller->view('https://evil.example/x.html');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
+
+	public function testViewRefusesAResourceWithoutHtml(): void {
+		$client = $this->createMock(Client::class);
+		$client->method('readResource')->willReturn(new ReadResourceResult([new BlobResourceContents('ui://x', 'text/html', 'AAAA')]));
+
+		$response = $this->controllerWith($client)->view('ui://x');
+
+		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+	}
+
+	public function testViewHidesTheUpstreamError(): void {
+		$client = $this->createMock(Client::class);
+		$client->method('readResource')->willThrowException(new \RuntimeException('token for alice at http://mcp.internal'));
+		$this->logger->expects($this->once())->method('warning');
+
+		$response = $this->controllerWith($client)->view('ui://x');
+
+		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		$this->assertStringNotContainsString('internal', json_encode($response->getData(), JSON_THROW_ON_ERROR));
+	}
+
+	public function testModelContextIsStoredForTheCurrentUserOnly(): void {
+		$this->controller->modelContext(7, 'Jane Doe: on');
+
+		$this->assertSame(['file_id' => 7, 'text' => 'Jane Doe: on'], $this->proposals->viewerContext('alice'));
+		$this->assertNull($this->proposals->viewerContext('bob'));
+	}
+
+	/** AgentException messages are written for users, so they pass through. */
+	public function testMessageReportsAFailedTurn(): void {
+		$this->agentLoop->method('run')->willThrowException(new AgentException('No tools are available to the assistant.'));
+
+		$response = $this->controller->message('hello');
+
+		$this->assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		$this->assertSame(['error' => 'No tools are available to the assistant.'], $response->getData());
+	}
+
+	/** Found by the property below: PCRE's `$` also matches before a final newline. */
+	public function testViewCspRefusesAnOriginWithATrailingNewline(): void {
+		$csp = McpAppController::viewCsp(['resourceDomains' => ["https://cdn.example\n"]]);
+
+		$this->assertStringNotContainsString("\n", $csp);
+		$this->assertStringNotContainsString('cdn.example', $csp);
+	}
+
+	public function testViewCspKeepsAtMostTenOriginsPerDirective(): void {
+		$domains = array_map(static fn (int $i): string => "https://cdn$i.example", range(1, 25));
+		$csp = McpAppController::viewCsp(['resourceDomains' => $domains]);
+
+		$this->assertStringContainsString('https://cdn10.example', $csp);
+		$this->assertStringNotContainsString('https://cdn11.example', $csp);
+	}
+
+	/**
+	 * Whatever the server declares, the header keeps its eight directives and
+	 * only well-formed https origins: no ';', newline or quote gets in from input.
+	 */
+	public function testViewCspNeverCarriesSeparatorsOrQuotesFromInput(): void {
+		$alphabet = ['a', 'z', '0', '9', '.', '-', ':', ';', "\n", "\r", "'", '"', ' ', '/', '*'];
+		$domain = Generators::oneOf(
+			PropertyGenerators::text($alphabet),
+			Generators::map(static fn (string $s): string => 'https://' . $s, PropertyGenerators::text($alphabet)),
+			Generators::map(static fn (string $s): string => 'https://cdn.example' . $s, PropertyGenerators::text($alphabet)),
+		);
+		$baseQuotes = substr_count(McpAppController::viewCsp([]), "'");
+		$this->forAll(Generators::seq($domain), Generators::seq($domain))->withMaxSize(15)
+			->then(function (array $res, array $connect) use ($baseQuotes): void {
+				$csp = McpAppController::viewCsp(['resourceDomains' => $res, 'connectDomains' => $connect]);
+				$this->assertCount(8, explode('; ', $csp));
+				$this->assertDoesNotMatchRegularExpression('/[\r\n"]/', $csp);
+				$this->assertLessThanOrEqual($baseQuotes, substr_count($csp, "'"));
+				foreach (preg_split('/[; ]+/', $csp) ?: [] as $token) {
+					if (str_starts_with($token, 'https://')) {
+						$this->assertMatchesRegularExpression('#^https://[a-z0-9.-]+(:\d+)?$#i', $token);
+					}
+				}
+			});
+	}
+
+	private function controllerWith(Client $client): McpAppController {
+		$clientFactory = $this->createMock(McpClientFactory::class);
+		$clientFactory->method('connect')->willReturn($client);
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn('alice');
+		$userSession = $this->createMock(IUserSession::class);
+		$userSession->method('getUser')->willReturn($user);
+		return new McpAppController(
+			'astrolabe',
+			$this->createMock(IRequest::class),
+			$clientFactory,
+			$this->agentLoop,
+			$userSession,
+			$this->proposals,
+			$this->logger,
+		);
 	}
 }

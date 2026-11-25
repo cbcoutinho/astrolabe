@@ -48,6 +48,16 @@ final class McpAppReferenceProviderTest extends TestCase {
 		$this->assertSame(['file_id' => 42, 'chunk_index' => null, 'proposal' => null], $reference->getRichObject());
 	}
 
+	/** PCRE's `$` matches before a final newline, so the id pattern ends in \z. */
+	public function testAProposalWithATrailingNewlineIsDropped(): void {
+		$reference = $this->provider->resolveReference(
+			'https://cloud.example/apps/astrolabe/?app_file_id=42&proposal=abcdefghijklmnopqrstuvwx%0A',
+		);
+
+		$this->assertNotNull($reference);
+		$this->assertNull($reference->getRichObject()['proposal']);
+	}
+
 	/**
 	 * @dataProvider notViewerLinks
 	 */
