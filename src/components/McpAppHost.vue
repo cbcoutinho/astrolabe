@@ -21,6 +21,12 @@
 					sandbox="allow-scripts"
 					:style="{ height: frameHeight + 'px' }" />
 				<aside v-if="answers.length || error" class="mcp-app-side">
+					<div class="mcp-app-side-bar">
+						<strong>{{ t('astrolabe', 'Assistant') }}</strong>
+						<NcButton variant="tertiary" :aria-label="t('astrolabe', 'Hide the answers panel')" @click="closeSide">
+							{{ t('astrolabe', 'Hide') }}
+						</NcButton>
+					</div>
 					<NcNoteCard v-if="error" type="error">
 						{{ error }}
 					</NcNoteCard>
@@ -251,6 +257,13 @@ export default {
 			this.$emit('close')
 		},
 
+		// Closing drops the answers (a pending one is discarded when it lands:
+		// ask() mutates an entry no longer in the list) and the error.
+		closeSide() {
+			this.answers = []
+			this.error = ''
+		},
+
 		// ui/message: answered by the agent in the side panel, not the chat.
 		async ask(question) {
 			this.answers.unshift({ question, answer: '', pending: true, failed: false })
@@ -302,6 +315,8 @@ body.mcp-app-fullscreen #app-navigation-vue {
 .fullscreen .mcp-app-body iframe { height: auto !important; }
 
 .mcp-app-side { width: 340px; overflow: auto; padding: 12px; border-inline-start: 1px solid var(--color-border); }
+
+.mcp-app-side-bar { display: flex; justify-content: space-between; align-items: center; margin: -4px 0 8px; }
 
 .mcp-app-answer { margin-bottom: 16px; }
 
