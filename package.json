@@ -7,7 +7,7 @@
     "npm": "^12.0.0"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build -c vite.reference.config.js",
     "dev": "vite --mode development build",
     "watch": "vite --mode development build --watch",
     "lint": "eslint src",
@@ -22,6 +22,9 @@
     "extends @nextcloud/browserslist-config"
   ],
   "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/ext-apps": "2.1.0",
     "@nextcloud/auth": "^2.6.0",
     "@nextcloud/axios": "^2.5.1",
     "@nextcloud/dialogs": "^7.2.0",
@@ -33,7 +36,8 @@
     "pdfjs-dist": "^6.0.0",
     "plotly.js-dist-min": "^4.0.0",
     "vue": "^3.0.0",
-    "vue-material-design-icons": "^5.3.1"
+    "vue-material-design-icons": "^5.3.1",
+    "zod": "4.2.1"
   },
   "devDependencies": {
     "@nextcloud/browserslist-config": "3.1.2",

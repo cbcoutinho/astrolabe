@@ -13,9 +13,13 @@ use OCA\Astrolabe\Service\Assistant\AgentException;
 use OCA\Astrolabe\Service\Assistant\AgentLoop;
 use OCA\Astrolabe\Service\Mcp\McpClientFactory;
 use OCA\Astrolabe\Service\Mcp\McpUnavailableException;
+use OCA\Astrolabe\Service\McpApp\RedactionProposals;
 use OCA\Astrolabe\Settings\Admin as AdminSettings;
 use OCP\IAppConfig;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IURLGenerator;
+use OCP\Security\ISecureRandom;
 use OCP\TaskProcessing\IManager;
 use OCP\TaskProcessing\Task;
 use OCP\TaskProcessing\TaskTypes\TextToTextChatWithTools;
@@ -74,12 +78,31 @@ final class AgentLoopTest extends TestCase {
 			$this->appConfig,
 			$this->urlGenerator(),
 			$logger ?? $this->createMock(LoggerInterface::class),
+			$this->proposals(),
 		);
 	}
 
 	/**
-	 * @param list<string> $names
+	 * The real store over an in-memory cache: the class is final, and the loop
+	 * only round-trips through it.
 	 */
+	private function proposals(): RedactionProposals {
+		$store = [];
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturnCallback(static function (string $key) use (&$store): mixed {
+			return $store[$key] ?? null;
+		});
+		$cache->method('set')->willReturnCallback(static function (string $key, mixed $value) use (&$store): bool {
+			$store[$key] = $value;
+			return true;
+		});
+		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory->method('createDistributed')->willReturn($cache);
+		$random = $this->createMock(ISecureRandom::class);
+		$random->method('generate')->willReturn(str_repeat('a', 24));
+		return new RedactionProposals($cacheFactory, $random);
+	}
+
 	/**
 	 * A stub URL generator rather than a mocked collector: the loop builds its
 	 * own collector per turn (it is stateful, and a worker serves many tasks), so
@@ -220,6 +243,33 @@ final class AgentLoopTest extends TestCase {
 		// a setting, not the user's cue to rephrase.
 		$this->assertStringContainsString('without reaching an answer', $result['output']);
 		$this->assertStringNotContainsString('ran out of time', $result['output']);
+	}
+
+	/**
+	 * A model that opens the viewer and then keeps calling tools hits the cap
+	 * with nothing to say. The viewer is the answer, so say that, rather than
+	 * show a failure under a working viewer. The proposed strings stay
+	 * server-side: the link carries an opaque id only.
+	 */
+	public function testAnOpenedViewerAnswersATurnThatRanOutOfIterations(): void {
+		$this->maxIterations = 2;
+		$this->timeout = 600;
+		$this->client = $this->createMock(Client::class);
+		$this->clientFactory = $this->createMock(McpClientFactory::class);
+		$this->clientFactory->method('connect')->willReturn($this->client);
+		$this->withTools(['open_document']);
+		$this->withToolResult('Document opened');
+		$this->withModelTurns(array_fill(0, 5, [
+			'output' => '',
+			'tool_calls' => json_encode([['name' => 'open_document', 'args' => ['file_id' => 42, 'redact_text' => ['Jane Doe']]]]),
+		]));
+
+		$output = $this->loop()->run('alice', 'Redact the names', [])['output'];
+
+		$this->assertStringContainsString('I opened the document in the viewer above', $output);
+		$this->assertStringNotContainsString('without reaching an answer', $output);
+		$this->assertStringStartsWith('https://cloud.example/apps/astrolabe/?app_file_id=42&proposal=', $output);
+		$this->assertStringNotContainsString('Jane Doe', $output);
 	}
 
 	public function testAnnotatesAPartialAnswerRatherThanPresentingItAsComplete(): void {
@@ -541,6 +591,7 @@ final class AgentLoopTest extends TestCase {
 			$this->appConfig,
 			$this->urlGenerator(),
 			$this->createMock(LoggerInterface::class),
+			$this->proposals(),
 		);
 
 		$this->expectException(AgentException::class);
@@ -565,6 +616,7 @@ final class AgentLoopTest extends TestCase {
 			$this->appConfig,
 			$this->urlGenerator(),
 			$this->createMock(LoggerInterface::class),
+			$this->proposals(),
 		);
 
 		$this->expectException(AgentException::class);

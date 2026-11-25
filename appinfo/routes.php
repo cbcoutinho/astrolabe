@@ -15,6 +15,11 @@ declare(strict_types=1);
 
 return [
 	'routes' => [
+		// MCP Apps host proxy (POC)
+		['name' => 'mcp_app#callTool', 'url' => '/api/v1/mcp-app/tools/call', 'verb' => 'POST'],
+		['name' => 'mcp_app#view', 'url' => '/mcp-app/view', 'verb' => 'GET'],
+		['name' => 'mcp_app#message', 'url' => '/api/v1/mcp-app/message', 'verb' => 'POST'],
+		['name' => 'mcp_app#modelContext', 'url' => '/api/v1/mcp-app/model-context', 'verb' => 'POST'],
 		// Background sync credentials (app password for MCP server WebDAV access)
 		[
 			'name' => 'credentials#storeAppPassword',
