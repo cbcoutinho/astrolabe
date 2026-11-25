@@ -140,6 +140,42 @@ final class CitationCollector {
 		return "\n\n**Sources**\n" . implode("\n", $lines);
 	}
 
+	/** Bare URL so Assistant's reference extraction turns it into the viewer widget. */
+	private ?string $appLink = null;
+	private bool $appLinkHasProposal = false;
+
+	public function appLink(): ?string {
+		return $this->appLink;
+	}
+
+	/**
+	 * Record a successful open_document call as an MCP App viewer link (POC);
+	 * {@see \OCA\Astrolabe\Reference\McpAppReferenceProvider} renders it.
+	 *
+	 * @param array<string, mixed> $args the tool call's arguments
+	 * @param ?string $proposalId stored redact_text ({@see \OCA\Astrolabe\Service\McpApp\RedactionProposals}); the
+	 *                            strings themselves never go into the link
+	 */
+	public function openApp(array $args, ?string $proposalId = null): void {
+		$fileId = $args['file_id'] ?? null;
+		// First open wins, except that a later open carrying a proposal replaces
+		// one without: models often open first, then re-open with redact_text.
+		if (!is_numeric($fileId) || ($this->appLink !== null && ($proposalId === null || $this->appLinkHasProposal))) {
+			return;
+		}
+		$this->appLinkHasProposal = $proposalId !== null;
+		$params = ['app_file_id' => (int)$fileId];
+		if (is_numeric($args['chunk_index'] ?? null)) {
+			$params['chunk_index'] = (int)$args['chunk_index'];
+		}
+		if ($proposalId !== null) {
+			$params['proposal'] = $proposalId;
+		}
+		$this->appLink = $this->urlGenerator->getAbsoluteURL(
+			$this->urlGenerator->linkToRoute(Application::APP_ID . '.page.index') . '?' . http_build_query($params),
+		);
+	}
+
 	/**
 	 * @param array<array-key, mixed> $row
 	 */

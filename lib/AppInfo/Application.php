@@ -54,6 +54,13 @@ class Application extends App implements IBootstrap {
 		$context->registerServiceAlias(RequestFactoryInterface::class, HttpFactory::class);
 		$context->registerServiceAlias(StreamFactoryInterface::class, HttpFactory::class);
 
+		// MCP App document viewer as a rich reference, e.g. in the Assistant chat (POC)
+		$context->registerReferenceProvider(\OCA\Astrolabe\Reference\McpAppReferenceProvider::class);
+		$context->registerEventListener(
+			\OCP\Collaboration\Reference\RenderReferenceEvent::class,
+			\OCA\Astrolabe\Listener\McpAppReferenceListener::class,
+		);
+
 		// Register unified search provider for semantic search
 		$context->registerSearchProvider(SemanticSearchProvider::class);
 

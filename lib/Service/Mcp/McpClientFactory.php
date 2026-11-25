@@ -112,7 +112,7 @@ class McpClientFactory {
 	 *
 	 * @throws McpUnavailableException
 	 */
-	public function connect(string $userId, string $scopes = ''): Client {
+	public function connect(string $userId, string $scopes = '', bool $apps = false): Client {
 		self::bootstrapSdk();
 
 		try {
@@ -141,8 +141,12 @@ class McpClientFactory {
 			// mcp/sdk 0.9 defaults to 2026-07-28 and probes `server/discover` before
 			// falling back. Pin the revision the server speaks today: one round trip,
 			// deterministic. Drop this once the server adopts the 2026-07-28 spec.
-			->setProtocolVersion(ProtocolVersion::V2025_11_25)
-			->build();
+			->setProtocolVersion(ProtocolVersion::V2025_11_25);
+		if ($apps) {
+			// MCP Apps host (POC): without it the server's client_supports_apps() is false.
+			$client->enableExtension(new \Mcp\Schema\Extension\Apps\McpApps());
+		}
+		$client = $client->build();
 
 		// The PSR-18 client here is Nextcloud's own (see Application::register),
 		// so MCP traffic inherits its proxy, CA and SSRF handling rather than

@@ -344,6 +344,12 @@
 										{{ t('astrolabe', 'Show Chunk') }}
 									</NcButton>
 									<NcButton
+										v-if="result.doc_type === 'file'"
+										variant="tertiary"
+										@click="mcpApp = { fileId: parseInt(result.id, 10), chunkIndex: result.chunk_index ?? null }">
+										{{ t('astrolabe', 'Open in App') }}
+									</NcButton>
+									<NcButton
 										v-if="sarCollecting"
 										variant="tertiary"
 										class="mcp-add-to-sar"
@@ -649,6 +655,12 @@
 				</div>
 			</div>
 		</div>
+
+		<McpAppHost
+			v-if="mcpApp"
+			:fileId="mcpApp.fileId"
+			:chunkIndex="mcpApp.chunkIndex"
+			@close="mcpApp = null" />
 	</NcContent>
 </template>
 
@@ -691,6 +703,7 @@ import Refresh from 'vue-material-design-icons/Refresh.vue'
 import ShieldAccount from 'vue-material-design-icons/ShieldAccount.vue'
 import CsvViewer from './components/CsvViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
+import McpAppHost from './components/McpAppHost.vue'
 // Imported statically, despite PDF.js being several MB. A dynamic import emits
 // a separate chunk whose URL Vite resolves against `base` (`/`), so it is
 // requested from /js/… instead of /custom_apps/astrolabe/js/… and 404s — the
@@ -764,6 +777,7 @@ export default {
 		CsvViewer,
 		SarCasePanel,
 		SarCases,
+		McpAppHost,
 		NcCounterBubble,
 		PlaylistCheck,
 		PlaylistPlus,
@@ -865,6 +879,8 @@ export default {
 			vectorStatus: null,
 			statusLoading: false,
 			statusError: null,
+			// MCP App host (POC): { fileId, chunkIndex } or null
+			mcpApp: null,
 			// Viewer state
 			showViewer: false,
 			viewerLoading: false,
@@ -1217,6 +1233,11 @@ export default {
 		handleUrlParameters() {
 			// Parse URL parameters
 			const urlParams = new URLSearchParams(window.location.search)
+			// POC debug route: ?app_file_id=<fileid>[&chunk_index=<n>] opens the MCP App
+			if (urlParams.get('app_file_id')) {
+				const ci = urlParams.get('chunk_index')
+				this.mcpApp = { fileId: parseInt(urlParams.get('app_file_id'), 10), chunkIndex: ci === null ? null : parseInt(ci, 10) }
+			}
 			const docType = urlParams.get('doc_type')
 			const docId = urlParams.get('doc_id')
 			const chunkStart = urlParams.get('chunk_start')
