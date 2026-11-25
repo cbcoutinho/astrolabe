@@ -107,6 +107,13 @@ export default {
 	},
 
 	watch: {
+		// Superseded while fullscreen: leave fullscreen too, so no hidden popover stays open.
+		collapsed(isCollapsed) {
+			if (isCollapsed && this.displayMode === 'fullscreen') {
+				this.displayMode = 'inline'
+			}
+		},
+
 		// Teleporting the shell would move the iframe and reload the view
 		// (losing staged regions). Fullscreen instead lifts it into the popover
 		// top layer, which does not move it, and hides NC's header/navigation
