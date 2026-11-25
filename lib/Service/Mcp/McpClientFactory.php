@@ -47,6 +47,16 @@ class McpClientFactory {
 
 	private const INIT_TIMEOUT = 20;
 
+	/**
+	 * The largest single MCP message an MCP App connection accepts. The
+	 * document viewer's tools return a whole PDF, base64-encoded, in one tool
+	 * result, and the MCP server serves PDFs up to 25 MiB: about 33.4 MiB
+	 * encoded. The SDK's 8 MiB default refused a 6.6 MB PDF ("SSE stream
+	 * aborted: buffered … bytes without a complete event"). Other connections
+	 * keep the default.
+	 */
+	public const MCP_APP_MAX_MESSAGE_BYTES = 40 * 1024 * 1024;
+
 	/** @psalm-suppress PossiblyUnusedMethod — constructed via DI. */
 	public function __construct(
 		private McpTokenMinter $tokenMinter,
@@ -103,6 +113,11 @@ class McpClientFactory {
 		});
 	}
 
+	/** The message size cap for a connection; see MCP_APP_MAX_MESSAGE_BYTES. */
+	public static function maxMessageBytes(bool $apps): int {
+		return $apps ? self::MCP_APP_MAX_MESSAGE_BYTES : HttpTransport::DEFAULT_MAX_SSE_BUFFER_BYTES;
+	}
+
 	/**
 	 * Connect as the given user. The caller owns the client and must disconnect.
 	 *
@@ -151,12 +166,15 @@ class McpClientFactory {
 		// The PSR-18 client here is Nextcloud's own (see Application::register),
 		// so MCP traffic inherits its proxy, CA and SSRF handling rather than
 		// opening sockets of its own.
+		$maxMessageBytes = self::maxMessageBytes($apps);
 		$transport = new HttpTransport(
 			$this->endpoint(),
 			['Authorization' => 'Bearer ' . $token],
 			$this->httpClient,
 			$this->requestFactory,
 			$this->streamFactory,
+			maxSseBufferBytes: $maxMessageBytes,
+			maxResponseBodyBytes: $maxMessageBytes,
 		);
 
 		try {
