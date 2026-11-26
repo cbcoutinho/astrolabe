@@ -188,7 +188,7 @@ test.describe('Astrolabe search', () => {
 				body: JSON.stringify({
 					success: true,
 					algorithm_used: 'hybrid',
-					total_documents: 1,
+					total_documents: 2,
 					reranked: true,
 					results: [{
 						id: 10,
@@ -201,6 +201,19 @@ test.describe('Astrolabe search', () => {
 						path: '/Photos/Hummingbird.jpg',
 						chunk_index: 0,
 						total_chunks: 1,
+					}, {
+						id: 11,
+						doc_type: 'file',
+						title: 'Birds.md',
+						excerpt: 'A hummingbird hovers.',
+						score: 0.0164,
+						relevance: 0.16,
+						relevance_source: 'fusion_ordinal',
+						metadata: { path: '/Birds.md', chunk_index: 0, total_chunks: 1 },
+						chunk_index: 0,
+						total_chunks: 1,
+						chunk_start_offset: 0,
+						chunk_end_offset: 21,
 					}],
 				}),
 			})
@@ -216,5 +229,9 @@ test.describe('Astrolabe search', () => {
 		await expect(preview).toHaveAttribute('src', /\/core\/preview\?fileId=10&/)
 		await expect(row.locator('.mcp-result-preview')).toHaveAttribute('href', /\/apps\/files\/files\/10\?/)
 		await expect(row.getByRole('button', { name: 'Show Chunk' })).toHaveCount(0)
+		// A text row is unchanged: no preview, and its chunk is still viewable.
+		const textRow = page.locator('.mcp-result-item').nth(1)
+		await expect(textRow.locator('.mcp-result-preview')).toHaveCount(0)
+		await expect(textRow.getByRole('button', { name: 'Show Chunk' })).toBeVisible()
 	})
 })

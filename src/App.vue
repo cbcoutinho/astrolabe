@@ -374,14 +374,16 @@
 							<!-- An image hit matched what the picture shows, not a passage of
 								text: it has no chunk to view, so show the picture itself. -->
 							<a
-								v-if="isImageHit(result)"
+								v-if="isImageHit(result) && !brokenPreviews[result.id]"
 								:href="getDocumentUrl(result)"
 								class="mcp-result-preview"
+								tabindex="-1"
 								@click.prevent="navigateToDocument(result)">
 								<img
 									:src="imagePreviewUrl(result)"
 									:alt="result.title || t('astrolabe', 'Image')"
-									loading="lazy">
+									loading="lazy"
+									@error="brokenPreviews[result.id] = true">
 							</a>
 							<!--
 								Relevance. The bar is drawn for every source because
@@ -862,6 +864,9 @@ export default {
 			// be two sliders, one per side; on a server that reports
 			// `relevance` both cut on the same value, so one is enough.
 			minRelevance: 0,
+			// Image hits whose /core/preview failed: the row drops the
+			// thumbnail rather than show a broken-image icon.
+			brokenPreviews: {},
 			// Whether the LAST response was actually reranked. The server asks
 			// for it whenever it can, but reranking degrades to retrieval order
 			// instead of failing, so this reports what happened.
