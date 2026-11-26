@@ -157,6 +157,9 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 		// The view route reads the viewer from the MCP server as this user.
 		await completeAuthorization(page)
 		const failures = watchDecoderFailures(page)
+		// Every page and viewer-frame message, reported if the page stays blank.
+		const consoleLines: string[] = []
+		page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`))
 		// The viewer's own tool calls, answered for the uploaded file. The view
 		// route itself is not faked: it serves the MCP server's HTML with the CSP
 		// under test.
@@ -186,6 +189,9 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 			return frame !== undefined
 		}).toBe(true)
 		await expect.poll(() => frame!.evaluate(navyPixels), { timeout: 30_000 }).toBeGreaterThan(500)
+			.catch((e: Error) => {
+				throw new Error(`${e.message}\nConsole:\n${consoleLines.join('\n')}`)
+			})
 		expect(failures).toEqual([])
 	})
 })
