@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.52.1 (2026-11-26)
+
+### Fix
+
+- **search**: reset failed previews per search; make the thumbnail decorative (round-2 review)
+- **search**: hide a failed image preview and keep it out of the tab order (round-1 review)
+- **search**: show image hits as a preview that opens the file
+
 ## v0.52.0 (2026-11-25)
 
 ### BREAKING CHANGE
