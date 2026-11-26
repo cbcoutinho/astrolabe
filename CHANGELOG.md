@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.52.3 (2026-11-26)
+
+### Fix
+
+- **pdf-viewer**: let the app page compile wasm for scanned PDFs
+- **mcp-app**: let the view CSP compile wasm so scanned PDFs render
+
 ## v0.52.2 (2026-11-26)
 
 ### Fix
