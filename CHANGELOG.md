@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.52.2 (2026-11-26)
+
+### Fix
+
+- **settings**: stop the main app's CSS from displacing the settings layout
+
 ## v0.52.1 (2026-11-26)
 
 ### Fix
