@@ -189,8 +189,10 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 			return frame !== undefined
 		}).toBe(true)
 		await expect.poll(() => frame!.evaluate(navyPixels), { timeout: 30_000 }).toBeGreaterThan(500)
-			.catch((e: Error) => {
-				throw new Error(`${e.message}\nConsole:\n${consoleLines.join('\n')}`)
+			.catch(async (e: Error) => {
+				// 300x150 is a canvas never drawn on; anything else drew blank.
+				const canvases = await frame!.evaluate(() => Array.from(document.querySelectorAll('canvas'), (c) => `${c.width}x${c.height}`).join(', '))
+				throw new Error(`${e.message}\nCanvases: ${canvases}\nConsole:\n${consoleLines.join('\n')}`)
 			})
 		expect(failures).toEqual([])
 	})
