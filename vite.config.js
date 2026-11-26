@@ -56,8 +56,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         'astrolabe-main': resolve(__dirname, 'src/main.js'),
-        'astrolabe-adminSettings': resolve(__dirname, 'src/adminSettings.js'),
-        'astrolabe-personalSettings': resolve(__dirname, 'src/personalSettings.js'),
       },
       output: {
         entryFileNames: 'js/[name].mjs',

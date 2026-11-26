@@ -7,9 +7,10 @@
     "npm": "^12.0.0"
   },
   "scripts": {
-    "build": "vite build && vite build -c vite.reference.config.js",
-    "dev": "vite --mode development build",
+    "build": "vite build && vite build -c vite.reference.config.js && vite build -c vite.settings.config.js",
+    "dev": "vite --mode development build && vite --mode development build -c vite.settings.config.js",
     "watch": "vite --mode development build --watch",
+    "watch:settings": "vite --mode development build --watch -c vite.settings.config.js",
     "lint": "eslint src",
     "stylelint": "stylelint 'src/**/*.vue' 'src/**/*.scss' 'src/**/*.css'",
     "test:unit": "node --test 'src/**/*.test.mjs'",

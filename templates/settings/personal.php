@@ -7,7 +7,7 @@
  */
 
 script('astrolabe', 'astrolabe-personalSettings');
-style('astrolabe', 'astrolabe-main');
+style('astrolabe', 'astrolabe-settings');  // Settings-only CSS (vite.settings.config.js)
 ?>
 
 <div id="astrolabe-personal-settings"></div>
