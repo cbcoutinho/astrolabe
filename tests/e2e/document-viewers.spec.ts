@@ -170,7 +170,8 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 		await page.getByRole('button', { name: 'Open in App' }).click()
 
 		const viewResponse = await view
-		expect(viewResponse.status()).toBe(200)
+		// The body names the failure: the token mint or the MCP connection.
+		expect(viewResponse.status(), await viewResponse.text()).toBe(200)
 		expect(viewResponse.headers()['content-security-policy']).toMatch(/script-src[^;]*'wasm-unsafe-eval'/)
 
 		let frame: Frame | undefined
