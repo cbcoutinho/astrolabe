@@ -66,7 +66,7 @@ services:
 
   mcp:
     # renovate: datasource=docker depName=ghcr.io/cbcoutinho/nextcloud-mcp-server
-    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.218.1@sha256:bb133eb8288666e78cfd2b8712e9c096c0034efd36abf554b4ad6512fb8baceb
+    image: ghcr.io/cbcoutinho/nextcloud-mcp-server:0.221.3@sha256:5dc33fc7195342a4ae7c5b64bddf4dfd1355832e85f856d8bda943022b791c8d
     restart: "no"
     command: ["--transport", "streamable-http", "--oauth"]
     depends_on:
