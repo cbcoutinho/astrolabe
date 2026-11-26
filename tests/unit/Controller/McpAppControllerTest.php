@@ -240,7 +240,8 @@ final class McpAppControllerTest extends TestCase {
 		$this->assertStringContainsString("frame-ancestors 'self'", $csp);
 		$this->assertStringContainsString("base-uri 'none'", $csp);
 		$this->assertStringContainsString("form-action 'none'", $csp);
-		$this->assertStringContainsString("script-src 'unsafe-inline';", $csp);
+		$this->assertStringContainsString("script-src 'unsafe-inline' 'wasm-unsafe-eval';", $csp);
+		$this->assertStringNotContainsString("'unsafe-eval'", $csp);
 		$this->assertStringNotContainsString('https:', $csp);
 	}
 
@@ -250,7 +251,7 @@ final class McpAppControllerTest extends TestCase {
 			'connectDomains' => ['https://api.example.com'],
 		]);
 
-		$this->assertStringContainsString('script-src \'unsafe-inline\' https://cdn.example.com https://ok.example:8443', $csp);
+		$this->assertStringContainsString('script-src \'unsafe-inline\' \'wasm-unsafe-eval\' https://cdn.example.com https://ok.example:8443', $csp);
 		$this->assertStringContainsString('connect-src https://api.example.com', $csp);
 		$this->assertStringNotContainsString('plain.example', $csp);
 		$this->assertStringNotContainsString('script-src *', $csp);
