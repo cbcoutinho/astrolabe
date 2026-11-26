@@ -13,6 +13,8 @@
  * so the search test handles auth → sync wait → search in sequence.
  */
 
+import type { Page } from '@playwright/test'
+
 import { test, expect } from './fixtures.ts'
 import { completeAuthorization } from './helpers/authorize.ts'
 import { waitForIndexing } from './helpers/indexing.ts'
@@ -175,5 +177,88 @@ test.describe('Astrolabe search', () => {
 		await page.getByRole('button', { name: 'Cancel' }).click()
 		await expect(page.getByText('Search cancelled.')).toBeVisible()
 		await expect(page.getByText('Still searching.')).toHaveCount(0)
+	})
+
+	// The shape /api/v1/search returns for an ADR-042 image hit (no excerpt, no
+	// chunk offsets, metadata.match === 'image') beside a text row. Faked: the
+	// e2e stack has no image embedding model.
+	const mockImageSearch = async (page: Page, previewStatus: number) => {
+		await page.route('**/apps/astrolabe/api/search?**', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					algorithm_used: 'hybrid',
+					total_documents: 2,
+					reranked: true,
+					results: [{
+						id: 10,
+						doc_type: 'file',
+						title: 'Hummingbird.jpg',
+						score: 0.0167,
+						relevance: 0.17,
+						relevance_source: 'fusion_ordinal',
+						metadata: { match: 'image', path: '/Photos/Hummingbird.jpg', chunk_index: 0, total_chunks: 1 },
+						path: '/Photos/Hummingbird.jpg',
+						chunk_index: 0,
+						total_chunks: 1,
+					}, {
+						id: 11,
+						doc_type: 'file',
+						title: 'Birds.md',
+						excerpt: 'A hummingbird hovers.',
+						score: 0.0164,
+						relevance: 0.16,
+						relevance_source: 'fusion_ordinal',
+						metadata: { path: '/Birds.md', chunk_index: 0, total_chunks: 1 },
+						chunk_index: 0,
+						total_chunks: 1,
+						chunk_start_offset: 0,
+						chunk_end_offset: 21,
+					}],
+				}),
+			})
+		})
+		// The file ids above do not exist in the stack, so the preview is faked too.
+		await page.route('**/core/preview?**', async (route) => {
+			if (previewStatus !== 200) {
+				await route.fulfill({ status: previewStatus })
+				return
+			}
+			await route.fulfill({
+				status: 200,
+				contentType: 'image/png',
+				// 1x1 transparent PNG
+				body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'),
+			})
+		})
+		await page.goto('/apps/astrolabe')
+		const input = page.getByRole('textbox', { name: 'Search query' })
+		await input.fill('hummingbird')
+		await input.press('Control+Enter')
+	}
+
+	test('an image hit shows the picture and opens the file, not the chunk viewer', async ({ authenticatedPage: page }) => {
+		await mockImageSearch(page, 200)
+
+		const row = page.locator('.mcp-result-item').first()
+		const preview = row.locator('.mcp-result-preview img')
+		await expect(preview).toBeVisible()
+		await expect(preview).toHaveAttribute('src', /\/core\/preview\?fileId=10&/)
+		await expect(row.locator('.mcp-result-preview')).toHaveAttribute('href', /\/apps\/files\/files\/10\?/)
+		await expect(row.getByRole('button', { name: 'Show Chunk' })).toHaveCount(0)
+		// A text row is unchanged: no preview, and its chunk is still viewable.
+		const textRow = page.locator('.mcp-result-item').nth(1)
+		await expect(textRow.locator('.mcp-result-preview')).toHaveCount(0)
+		await expect(textRow.getByRole('button', { name: 'Show Chunk' })).toBeVisible()
+	})
+
+	test('an image hit whose preview fails drops the thumbnail but keeps the row', async ({ authenticatedPage: page }) => {
+		await mockImageSearch(page, 404)
+
+		const row = page.locator('.mcp-result-item').first()
+		await expect(row.locator('.mcp-result-title')).toContainText('Hummingbird.jpg')
+		await expect(row.locator('.mcp-result-preview')).toHaveCount(0)
 	})
 })
