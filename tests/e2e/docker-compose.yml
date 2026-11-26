@@ -81,8 +81,8 @@ services:
       NEXTCLOUD_HOST: http://app:80
       NEXTCLOUD_MCP_SERVER_URL: http://localhost:8000
       # Also the issuer /mcp verifies: the `oidc` app stamps tokens with
-      # overwrite.cli.url, port included (it dropped the port before oidc 2.6,
-      # which an OIDC_ISSUER override here used to paper over).
+      # overwrite.cli.url, port included, so an OIDC_ISSUER override without
+      # the port makes /mcp reject every token as bad_issuer.
       NEXTCLOUD_PUBLIC_ISSUER_URL: http://localhost:8080
       # 0.91.x dropped ENABLE_LOGIN_FLOW; deployment mode now selects the auth flow (ADR-022)
       MCP_DEPLOYMENT_MODE: login_flow

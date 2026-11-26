@@ -20,6 +20,11 @@
  * fixtures/scanned-jpx.pdf is one 300x400 page with no text, holding a single
  * /JPXDecode image: a navy band on white. A page counts as rendered when its
  * canvas holds navy pixels.
+ *
+ * "Open in App" needs an MCP server whose viewer embeds the wasm decoders:
+ * 0.221.3 or later, the image docker-compose.yml pins. Older viewers stay blank.
+ * Pixel checks need Chromium newer than 141 (Playwright 1.56), which drew this
+ * page blank without an error.
  */
 
 import type { Frame, Page } from '@playwright/test'
@@ -120,6 +125,7 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 			headers: { Authorization: ADMIN_AUTH, Depth: '0', 'Content-Type': 'application/xml' },
 			body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>',
 		})
+		expect(propfind.status).toBe(207)
 		fileId = Number(/<oc:fileid>(\d+)<\/oc:fileid>/.exec(await propfind.text())?.[1])
 		expect(fileId).toBeGreaterThan(0)
 	})
@@ -157,9 +163,6 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 		// The view route reads the viewer from the MCP server as this user.
 		await completeAuthorization(page)
 		const failures = watchDecoderFailures(page)
-		// Every page and viewer-frame message, reported if the page stays blank.
-		const consoleLines: string[] = []
-		page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`))
 		// The viewer's own tool calls, answered for the uploaded file. The view
 		// route itself is not faked: it serves the MCP server's HTML with the CSP
 		// under test.
@@ -189,11 +192,6 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 			return frame !== undefined
 		}).toBe(true)
 		await expect.poll(() => frame!.evaluate(navyPixels), { timeout: 30_000 }).toBeGreaterThan(500)
-			.catch(async (e: Error) => {
-				// 300x150 is a canvas never drawn on; anything else drew blank.
-				const canvases = await frame!.evaluate(() => Array.from(document.querySelectorAll('canvas'), (c) => `${c.width}x${c.height}`).join(', '))
-				throw new Error(`${e.message}\nCanvases: ${canvases}\nConsole:\n${consoleLines.join('\n')}`)
-			})
 		expect(failures).toEqual([])
 	})
 })
