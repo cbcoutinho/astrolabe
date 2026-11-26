@@ -176,4 +176,45 @@ test.describe('Astrolabe search', () => {
 		await expect(page.getByText('Search cancelled.')).toBeVisible()
 		await expect(page.getByText('Still searching.')).toHaveCount(0)
 	})
+
+	test('an image hit shows the picture and opens the file, not the chunk viewer', async ({ authenticatedPage: page }) => {
+		// Faked: the e2e stack has no image embedding model. The row is the
+		// shape /api/v1/search returns for an ADR-042 image hit: no excerpt,
+		// no chunk offsets, metadata.match === 'image'.
+		await page.route('**/apps/astrolabe/api/search?**', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					algorithm_used: 'hybrid',
+					total_documents: 1,
+					reranked: true,
+					results: [{
+						id: 10,
+						doc_type: 'file',
+						title: 'Hummingbird.jpg',
+						score: 0.0167,
+						relevance: 0.17,
+						relevance_source: 'fusion_ordinal',
+						metadata: { match: 'image', path: '/Photos/Hummingbird.jpg', chunk_index: 0, total_chunks: 1 },
+						path: '/Photos/Hummingbird.jpg',
+						chunk_index: 0,
+						total_chunks: 1,
+					}],
+				}),
+			})
+		})
+		await page.goto('/apps/astrolabe')
+		const input = page.getByRole('textbox', { name: 'Search query' })
+		await input.fill('hummingbird')
+		await input.press('Control+Enter')
+
+		const row = page.locator('.mcp-result-item').first()
+		const preview = row.getByRole('img', { name: 'Hummingbird.jpg' })
+		await expect(preview).toBeVisible()
+		await expect(preview).toHaveAttribute('src', /\/core\/preview\?fileId=10&/)
+		await expect(row.locator('.mcp-result-preview')).toHaveAttribute('href', /\/apps\/files\/files\/10\?/)
+		await expect(row.getByRole('button', { name: 'Show Chunk' })).toHaveCount(0)
+	})
 })

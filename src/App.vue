@@ -335,6 +335,7 @@
 								<span class="mcp-result-type">{{ result.doc_type || 'unknown' }}</span>
 								<div class="mcp-result-actions">
 									<NcButton
+										v-if="!isImageHit(result)"
 										variant="tertiary"
 										:aria-label="t('astrolabe', 'Show Chunk')"
 										@click="viewChunk(result)">
@@ -369,6 +370,18 @@
 								@click.prevent="navigateToDocument(result)">
 								{{ result.title || t('astrolabe', 'Untitled') }}
 								<OpenInNew :size="14" class="mcp-external-icon" />
+							</a>
+							<!-- An image hit matched what the picture shows, not a passage of
+								text: it has no chunk to view, so show the picture itself. -->
+							<a
+								v-if="isImageHit(result)"
+								:href="getDocumentUrl(result)"
+								class="mcp-result-preview"
+								@click.prevent="navigateToDocument(result)">
+								<img
+									:src="imagePreviewUrl(result)"
+									:alt="result.title || t('astrolabe', 'Image')"
+									loading="lazy">
 							</a>
 							<!--
 								Relevance. The bar is drawn for every source because
@@ -1230,6 +1243,16 @@ export default {
 	},
 
 	methods: {
+		// ADR-042 image hit: matched by what the picture shows, so it has no
+		// excerpt or chunk offsets.
+		isImageHit(result) {
+			return result.doc_type === 'file' && result.metadata?.match === 'image'
+		},
+
+		imagePreviewUrl(result) {
+			return generateUrl('/core/preview') + '?' + new URLSearchParams({ fileId: String(result.id), x: '256', y: '256', a: '1' })
+		},
+
 		handleUrlParameters() {
 			// Parse URL parameters
 			const urlParams = new URLSearchParams(window.location.search)
@@ -2776,6 +2799,18 @@ export default {
 	&:hover {
 		color: var(--color-primary-element);
 	}
+}
+
+.mcp-result-preview {
+	display: inline-block;
+	margin-bottom: 6px;
+}
+
+.mcp-result-preview img {
+	display: block;
+	max-width: 256px;
+	max-height: 256px;
+	border-radius: var(--border-radius-large);
 }
 
 a.mcp-result-title {
