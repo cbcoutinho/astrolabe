@@ -181,7 +181,9 @@ final class McpAppController extends Controller {
 			"default-src 'none'",
 			"base-uri 'none'",
 			"form-action 'none'",
-			"script-src 'unsafe-inline' $res",
+			// pdf.js 4+ decodes scanned pages (JPEG 2000, JBIG2) in wasm; this allows
+			// compiling it, and nothing like eval().
+			"script-src 'unsafe-inline' 'wasm-unsafe-eval' $res",
 			"style-src 'unsafe-inline' $res",
 			"img-src data: blob: $res",
 			"font-src data: $res",

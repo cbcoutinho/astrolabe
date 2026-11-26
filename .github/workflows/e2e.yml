@@ -152,6 +152,10 @@ jobs:
         if: always()
         run: |
           docker compose ${{ matrix.compose }} logs --tail=500 > /tmp/docker-compose-logs.txt 2>&1 || true
+          # The vector-sync scanner floods the tail, and Astrolabe logs to
+          # nextcloud.log, not stdout: keep both whole for diagnosis.
+          docker compose ${{ matrix.compose }} logs --no-log-prefix mcp > /tmp/mcp.log 2>&1 || true
+          docker compose ${{ matrix.compose }} exec -T app cat /var/www/html/data/nextcloud.log > /tmp/nextcloud.log 2>&1 || true
 
       - name: Tear down services
         if: always()
@@ -167,6 +171,8 @@ jobs:
             test-results/
             playwright-report/
             /tmp/docker-compose-logs.txt
+            /tmp/mcp.log
+            /tmp/nextcloud.log
           retention-days: 7
           if-no-files-found: ignore
 
