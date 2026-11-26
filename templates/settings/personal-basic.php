@@ -16,7 +16,7 @@
 
 use OCP\Util;
 
-Util::addStyle('astrolabe', 'astrolabe-main');
+Util::addStyle('astrolabe', 'astrolabe-settings');
 ?>
 
 <div class="section">

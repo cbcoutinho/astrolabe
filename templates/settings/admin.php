@@ -7,7 +7,7 @@
  */
 
 script('astrolabe', 'astrolabe-adminSettings');
-style('astrolabe', 'astrolabe-main');  // All CSS bundled into main
+style('astrolabe', 'astrolabe-settings');  // Settings-only CSS (vite.settings.config.js)
 ?>
 
 <div id="astrolabe-admin-settings" class="section">

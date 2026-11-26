@@ -3073,8 +3073,10 @@ a.mcp-result-title {
 </style>
 
 <style lang="scss">
-/* Fix for double margin/padding issue when nested in #content */
-#content-vue {
+/* Fix for double margin/padding issue when nested in #content. Scoped to this
+   app's own NcContent: the server's settings page is an NcContent too
+   (#content-vue), and an unscoped rule stripped its header offset. */
+#content-vue.app-astrolabe {
 	margin-top: 0 !important;
 	margin-inline-start: 0 !important;
 }
