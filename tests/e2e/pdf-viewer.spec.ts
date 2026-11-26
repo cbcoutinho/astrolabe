@@ -117,6 +117,9 @@ test.describe('browser-side PDF rendering', () => {
 		// URL can never satisfy.
 		expect(csp).toContain('worker-src')
 		expect(csp).toMatch(/worker-src[^;]*blob:/)
+		// Scanned pages decode in wasm (see document-viewers.spec.ts).
+		expect(csp).toMatch(/script-src[^;]*'wasm-unsafe-eval'/)
+		expect(csp).not.toMatch(/'unsafe-eval'/)
 	})
 
 	test('a document missing from the index answers 404 and says so', async ({ authenticatedPage: page }) => {

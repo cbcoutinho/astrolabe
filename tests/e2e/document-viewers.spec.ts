@@ -7,8 +7,8 @@
  * Scanners write page images as JPEG 2000 (or JBIG2), and pdf.js 4+ only
  * decodes those with WebAssembly. Each viewer runs under its own CSP, and a CSP
  * that refuses wasm leaves every scanned page blank, while text PDFs still
- * look fine. That is why these tests use a scan. The page CSP of "Show Chunk"
- * is Nextcloud's own. "Open in App" runs the MCP server's viewer in a sandboxed
+ * look fine. That is why these tests use a scan. "Show Chunk" runs under the
+ * page CSP from PageController. "Open in App" runs the MCP server's viewer in a sandboxed
  * frame under the CSP from McpAppController::viewCsp(), which lacked
  * 'wasm-unsafe-eval' before this test was added.
  *
@@ -129,6 +129,7 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 	})
 
 	test('Show Chunk draws the scanned page', async ({ authenticatedPage: page }) => {
+		const failures = watchDecoderFailures(page)
 		await page.route('**/apps/astrolabe/api/chunk-context?**', async (route) => {
 			await route.fulfill({
 				status: 200,
@@ -141,9 +142,9 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 		await page.getByRole('button', { name: 'Show Chunk' }).click()
 
 		await expect(page.locator('.pdf-viewer canvas.pdf-page-image')).toBeVisible()
-		// Nextcloud's page CSP refuses wasm, so pdf.js warns and decodes with its
-		// JS fallback, which this page can load. The pixels are what counts.
 		await expect.poll(() => page.evaluate(navyPixels), { timeout: 30_000 }).toBeGreaterThan(500)
+		// No warning: the page CSP allows wasm, so pdf.js never needs its slower JS fallback.
+		expect(failures).toEqual([])
 	})
 
 	test('Open in App draws the scanned page inside the sandboxed viewer', async ({ authenticatedPage: page }) => {

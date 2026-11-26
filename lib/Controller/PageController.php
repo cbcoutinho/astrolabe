@@ -88,6 +88,9 @@ class PageController extends Controller {
 		// off the table, so data: is deliberately not permitted here.
 		$csp = new ContentSecurityPolicy();
 		$csp->addAllowedWorkerSrcDomain('blob:');
+		// Scanned pages (JPEG 2000, JBIG2) decode in wasm; without this PDF.js
+		// falls back to a slower JS decoder. Allows compiling wasm, not eval().
+		$csp->allowEvalWasm();
 		$response->setContentSecurityPolicy($csp);
 
 		return $response;
