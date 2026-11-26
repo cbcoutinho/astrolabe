@@ -151,6 +151,9 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 	})
 
 	test('Open in App draws the scanned page inside the sandboxed viewer', async ({ authenticatedPage: page }) => {
+		// Authorization, several MCP round trips and a pdf.js render outlast the
+		// default 30 s budget.
+		test.slow()
 		// The view route reads the viewer from the MCP server as this user.
 		await completeAuthorization(page)
 		const failures = watchDecoderFailures(page)
