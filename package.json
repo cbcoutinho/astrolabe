@@ -23,7 +23,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/client": "2.0.0",
-    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/core": "2.4.0",
     "@modelcontextprotocol/ext-apps": "2.1.0",
     "@nextcloud/auth": "^2.6.0",
     "@nextcloud/axios": "^2.5.1",
