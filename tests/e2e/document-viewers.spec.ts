@@ -35,6 +35,9 @@ const PDF = readFileSync(new URL('./fixtures/scanned-jpx.pdf', import.meta.url))
 
 let fileId = 0
 
+/** The MCP server's viewer resource, as McpAppHost.vue opens it. */
+const VIEW_URI = 'ui://nextcloud-mcp/document-viewer.html'
+
 /** Navy pixels across every canvas in the document: the decoded JPX band. */
 function navyPixels(): number {
 	let count = 0
@@ -165,15 +168,14 @@ test.describe('a scanned PDF renders in both document viewers', () => {
 				body: JSON.stringify({ content: [{ type: 'text', text: `Opened ${PDF_PATH}` }], structuredContent, isError: false }),
 			})
 		})
-		const view = page.waitForResponse((r) => r.url().includes('/apps/astrolabe/mcp-app/view'))
-		await searchForScan(page)
-
-		await page.getByRole('button', { name: 'Open in App' }).click()
-
-		const viewResponse = await view
-		// The body names the failure: the token mint or the MCP connection.
+		// Fetched directly, with this session, because an iframe navigation's body
+		// is not readable; on failure the JSON body says which step failed.
+		const viewResponse = await page.request.get('/apps/astrolabe/mcp-app/view?uri=' + encodeURIComponent(VIEW_URI))
 		expect(viewResponse.status(), await viewResponse.text()).toBe(200)
 		expect(viewResponse.headers()['content-security-policy']).toMatch(/script-src[^;]*'wasm-unsafe-eval'/)
+
+		await searchForScan(page)
+		await page.getByRole('button', { name: 'Open in App' }).click()
 
 		let frame: Frame | undefined
 		await expect.poll(() => {
