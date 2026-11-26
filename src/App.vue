@@ -378,10 +378,12 @@
 								:href="getDocumentUrl(result)"
 								class="mcp-result-preview"
 								tabindex="-1"
+								aria-hidden="true"
 								@click.prevent="navigateToDocument(result)">
+								<!-- Decorative: the title link beside it names the same file. -->
 								<img
 									:src="imagePreviewUrl(result)"
-									:alt="result.title || t('astrolabe', 'Image')"
+									alt=""
 									loading="lazy"
 									@error="brokenPreviews[result.id] = true">
 							</a>
@@ -1718,6 +1720,10 @@ export default {
 				if (response.data.success) {
 					const page = response.data.results || []
 					this.results = loadMore ? [...this.results, ...page] : page
+					if (!loadMore) {
+						// A preview may exist by now (generated since the last search).
+						this.brokenPreviews = {}
+					}
 					this.algorithmUsed = response.data.algorithm_used || this.algorithm
 					if (this.sarCollecting) {
 						this.sarNextOffset += params.limit
