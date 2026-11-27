@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.52.7 (2026-11-27)
+
+### Refactor
+
+- **app**: move the ADR-042 image-hit comment to isImageHit
+- **app**: extract SearchForm and SearchResultItem from App.vue
+- **app**: extract SearchResultsPlot from App.vue
+- **viewer**: pull load/summary logic into tested helpers
+- **app**: extract IndexStatus and DocumentViewer from App.vue
+
 ## v0.52.6 (2026-11-27)
 
 ### Fix
