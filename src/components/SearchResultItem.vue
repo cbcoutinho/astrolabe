@@ -308,7 +308,9 @@ a.mcp-result-title {
 }
 
 // A native <meter>, restyled to the thin bar it replaced. Each engine draws
-// the track and the value with its own pseudo-elements.
+// the track and the value with its own pseudo-elements. With no low/high/
+// optimum set, WebKit only ever uses the optimum pseudo-element; setting
+// thresholds would need the suboptimum ones styled too.
 .mcp-relevance-bar {
 	flex: 0 0 96px;
 	width: 96px;
