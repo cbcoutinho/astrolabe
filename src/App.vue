@@ -310,20 +310,16 @@
 					</div>
 
 					<!-- 3D Visualization -->
-					<div v-if="showVisualization && coordinates.length > 0" class="mcp-viz-container">
-						<div class="mcp-viz-header">
-							<h3>{{ t('astrolabe', 'Vector Space Visualization') }}</h3>
-							<NcCheckboxRadioSwitch
-								:modelValue="showQueryPoint"
-								type="switch"
-								@update:modelValue="showQueryPoint = $event; updatePlot()">
-								{{ t('astrolabe', 'Show query point') }}
-							</NcCheckboxRadioSwitch>
-						</div>
-						<div id="viz-plot-container" class="mcp-viz-plot-container">
-							<div id="viz-plot" ref="vizPlot" />
-						</div>
-					</div>
+					<SearchResultsPlot
+						v-if="showVisualization && coordinates.length > 0"
+						ref="resultsPlot"
+						v-model:showQueryPoint="showQueryPoint"
+						:results="filteredResultsAndCoords.results"
+						:coordinates="filteredResultsAndCoords.coordinates"
+						:queryCoords="queryCoords"
+						:scoreRange="scoreRange"
+						:uncalibratedRange="uncalibratedRange"
+						@select="viewChunk" />
 
 					<div class="mcp-results-list">
 						<div
@@ -504,7 +500,6 @@ import axios from '@nextcloud/axios'
 import { FilePickerType, getFilePickerBuilder, showError } from '@nextcloud/dialogs'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
-import Plotly from 'plotly.js-dist-min'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
@@ -536,8 +531,9 @@ import IndexStatus from './components/IndexStatus.vue'
 import McpAppHost from './components/McpAppHost.vue'
 import SarCasePanel from './components/SarCasePanel.vue'
 import SarCases from './components/SarCases.vue'
+import SearchResultsPlot from './components/SearchResultsPlot.vue'
 import { documentUrl } from './utils/documentUrl.js'
-import { hasUncalibrated as anyUncalibrated, scoreRange as computeScoreRange, displayRelevance, rankScore as rankScoreOf, relevancePredicate, UNCALIBRATED } from './utils/relevance.js'
+import { hasUncalibrated as anyUncalibrated, scoreRange as computeScoreRange, displayRelevance, relevancePredicate, UNCALIBRATED } from './utils/relevance.js'
 
 // The active SAR case is a per-browser convenience; the case itself is on the
 // server. Storage can be unavailable (private windows), so both are guarded.
@@ -591,6 +587,7 @@ export default {
 		IndexStatus,
 		SarCasePanel,
 		SarCases,
+		SearchResultsPlot,
 		McpAppHost,
 		NcCounterBubble,
 		PlaylistCheck,
@@ -835,19 +832,6 @@ export default {
 			return chips
 		},
 
-		// Rank key for the relevance filter: the cross-encoder score when the
-		// server reranked, else the retrieval score. Matches the order the
-		// server returned rows in, so the filter always removes a suffix of the
-		// list rather than punching holes in it.
-		//
-		// Reranking is NOT required for any of this. Searches ask for it only
-		// when the server advertises `rerank_available`, and it degrades to
-		// retrieval order on failure, so `rerank_score` may be absent from some
-		// or all rows -- this must stay a fallback, never a requirement.
-		rankScore() {
-			return rankScoreOf
-		},
-
 		// Score RANGE (both ends) over this page -- see utils/relevance.js for
 		// why the slider is relative-to-top wherever the value is not
 		// comparable across queries (RRF ~0.033 max, DBSF can go negative).
@@ -906,7 +890,7 @@ export default {
 			return this.results.filter(this.isRelevant)
 		},
 
-		// Parallel arrays used by renderPlot. The coordinate guard is
+		// Parallel arrays used by the plot (SearchResultsPlot). The coordinate guard is
 		// defensive against API drift so the plot never sees holes; the
 		// list view (filteredResults) intentionally stays independent so
 		// it still renders when PCA coordinates are unavailable.
@@ -961,19 +945,15 @@ export default {
 			}
 			this._minRelevanceTimer = setTimeout(() => {
 				this._minRelevanceTimer = null
-				if (this.coordinates.length > 0) {
-					this.renderPlot()
-				}
+				this.$refs.resultsPlot?.render()
 			}, 150)
 		},
 	},
 
 	created() {
-		// Non-reactive instance state. Storing these in data() would make
-		// Vue deep-observe a timer ID and a results-snapshot array on every
-		// mutation, with no template benefit.
+		// Non-reactive instance state. Storing it in data() would make
+		// Vue observe a timer ID, with no template benefit.
 		this._minRelevanceTimer = null
-		this._renderedResults = []
 	},
 
 	mounted() {
@@ -991,11 +971,6 @@ export default {
 		if (this._minRelevanceTimer) {
 			clearTimeout(this._minRelevanceTimer)
 			this._minRelevanceTimer = null
-		}
-		// Clean up Plotly event handlers to prevent memory leaks
-		const plotDiv = document.getElementById('viz-plot')
-		if (plotDiv && plotDiv.on) {
-			plotDiv.removeAllListeners('plotly_click')
 		}
 	},
 
@@ -1500,7 +1475,7 @@ export default {
 					// Render visualization after DOM updates
 					if (this.coordinates.length > 0) {
 						this.$nextTick(() => {
-							this.renderPlot()
+							this.$refs.resultsPlot?.render()
 						})
 					}
 				} else {
@@ -1610,218 +1585,8 @@ export default {
 			window.location.href = generateUrl('/settings/user/astrolabe')
 		},
 
-		renderPlot() {
-			const container = document.getElementById('viz-plot-container')
-			if (!container) {
-				return
-			}
-
-			const width = container.clientWidth
-			const height = container.clientHeight || 400
-
-			const queryCoords = this.queryCoords
-
-			// Single source of truth for the threshold + coord guard.
-			const { results, coordinates } = this.filteredResultsAndCoords
-
-			// Snapshot the filtered subset that will actually be rendered.
-			// handlePlotClick indexes into this — not this.results — because
-			// Plotly's pointIndex refers to the rendered trace data.
-			this._renderedResults = results
-
-			// Plot the same [0,1] number the list's relevance bar shows, so a row
-			// the list calls relevant is not a speck here. `score` is the raw
-			// retrieval value -- ~0.03 at most under RRF -- and sizing by it put
-			// every point at the minimum. `relevance` is the calibrated
-			// cross-encoder probability when the search was reranked. Older
-			// servers that do not send it fall back to the rank score
-			// (rerank_score ?? score) scaled across this page's range.
-			const { min, max } = this.scoreRange
-			// A row without a finite `relevance` is unknown, not 0% -- the same
-			// rule isRelevant applies -- so it falls back to the relative score
-			// and its hover says which number it shows. A non-finite fallback
-			// plots at 0 rather than as a NaN-sized marker.
-			const hasOwnRelevance = (r) => Number.isFinite(r.relevance)
-			const plotScore = (r) => {
-				const s = hasOwnRelevance(r)
-					? displayRelevance(r, this.uncalibratedRange)
-					: (max > min ? (this.rankScore(r) - min) / (max - min) : 1)
-				return Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0
-			}
-			const scores = results.map(plotScore)
-
-			// Trace 1: Document results (always visible)
-			const documentTrace = {
-				x: coordinates.map((c) => c[0]),
-				y: coordinates.map((c) => c[1]),
-				z: coordinates.map((c) => c[2]),
-				mode: 'markers',
-				type: 'scatter3d',
-				name: 'Documents',
-				visible: true,
-				// The score lines are prebuilt per point: the rerank line exists
-				// only for rows the reranker scored, which one shared
-				// hovertemplate cannot express.
-				customdata: results.map((r, i) => ({
-					title: r.title,
-					scores: [
-						`${hasOwnRelevance(r) ? 'Relevance' : 'Relative score'}: ${Math.round(scores[i] * 100)}%`,
-						...(Number.isFinite(r.rerank_score) ? [`Rerank score: ${r.rerank_score.toFixed(3)}`] : []),
-						`Retrieval score: ${(r.score ?? 0).toFixed(3)}`,
-					].join('<br>'),
-					x: coordinates[i][0],
-					y: coordinates[i][1],
-					z: coordinates[i][2],
-				})),
-
-				hovertemplate:
-					'<b>%{customdata.title}</b><br>'
-					+ '%{customdata.scores}<br>'
-					+ '(x=%{customdata.x}, y=%{customdata.y}, z=%{customdata.z})'
-					+ '<extra></extra>',
-
-				hoverlabel: {
-					bgcolor: '#0082c9',
-					bordercolor: '#0082c9',
-					font: {
-						size: 15,
-						color: 'white',
-					},
-				},
-
-				marker: {
-					size: scores.map((s) => 4 + (Math.pow(s, 2) * 10)),
-					opacity: scores.map((s) => 0.3 + (s * 0.7)),
-					color: scores,
-					colorscale: 'Viridis',
-					showscale: true,
-					colorbar: {
-						title: { text: 'Relevance' },
-						x: 1.02,
-						xanchor: 'left',
-						thickness: 20,
-						len: 0.8,
-					},
-
-					cmin: 0,
-					cmax: 1,
-				},
-			}
-
-			// Trace 2: Query point (visibility controlled by toggle)
-			const queryTrace = {
-				x: [queryCoords[0]],
-				y: [queryCoords[1]],
-				z: [queryCoords[2]],
-				mode: 'markers',
-				type: 'scatter3d',
-				name: 'Query',
-				visible: this.showQueryPoint,
-				hovertemplate:
-					'<b>Search Query</b><br>'
-					+ `(x=${queryCoords[0]}, y=${queryCoords[1]}, z=${queryCoords[2]})`
-					+ '<extra></extra>',
-
-				marker: {
-					size: 10,
-					color: '#ef5350', // Subdued red (Material Design Red 400)
-					line: {
-						color: '#c62828', // Darker red border (Material Design Red 800)
-						width: 1,
-					},
-				},
-			}
-
-			const layout = {
-				title: { text: `Vector Space (PCA 3D) - ${results.length} results` },
-				width,
-				height,
-				scene: {
-					xaxis: { title: { text: 'PC1' } },
-					yaxis: { title: { text: 'PC2' } },
-					zaxis: { title: { text: 'PC3' } },
-					camera: {
-						eye: { x: 1.5, y: 1.5, z: 1.5 },
-					},
-
-					domain: {
-						x: [0, 1],
-						y: [0, 1],
-					},
-				},
-
-				hovermode: 'closest',
-				autosize: true,
-				showlegend: false,
-				margin: { l: 0, r: 100, t: 40, b: 0 },
-			}
-
-			const traces = [documentTrace, queryTrace]
-
-			const config = {
-				responsive: true,
-				displayModeBar: true,
-			}
-
-			Plotly.newPlot('viz-plot', traces, layout, config)
-
-			// Register click event handler for result points. Plotly.newPlot
-			// reuses the same DOM node, so listeners stack across re-renders —
-			// remove any prior handler before attaching a fresh one.
-			const plotDiv = document.getElementById('viz-plot')
-			if (plotDiv) {
-				plotDiv.removeAllListeners('plotly_click')
-				plotDiv.on('plotly_click', this.handlePlotClick)
-			}
-		},
-
-		updatePlot() {
-			// Toggle query point visibility without recreating the plot
-			if (this.coordinates.length > 0 && this.queryCoords.length > 0 && this.results.length > 0) {
-				const plotDiv = document.getElementById('viz-plot')
-
-				if (plotDiv && plotDiv.data && plotDiv.data.length >= 2) {
-					// Trace index 1 is the query point
-					Plotly.restyle('viz-plot', { visible: this.showQueryPoint }, [1])
-				} else {
-					// Plot doesn't exist yet, render it
-					this.renderPlot()
-				}
-			}
-		},
-
 		viewChunk(result) {
 			this.$refs.documentViewer.open(result)
-		},
-
-		handlePlotClick(eventData) {
-			// Only handle clicks on trace 0 (document results)
-			// Trace 1 is the query point - ignore clicks on it
-			if (!eventData.points || eventData.points.length === 0) {
-				return
-			}
-
-			const point = eventData.points[0]
-			const traceIndex = point.curveNumber // 0 = documents, 1 = query
-			const pointIndex = point.pointNumber // Index in trace data
-
-			// Ignore clicks on query point (trace 1)
-			if (traceIndex !== 0) {
-				return
-			}
-
-			// Index into the rendered (filtered) subset, not this.results.
-			// pointIndex refers to the trace data Plotly painted, which may
-			// be a subset of this.results when minRelevance is non-zero.
-			const result = this._renderedResults[pointIndex]
-
-			if (!result) {
-				console.warn('Click handler: result not found for index', pointIndex)
-				return
-			}
-
-			// Call existing viewChunk method
-			this.viewChunk(result)
 		},
 	},
 }
@@ -2002,49 +1767,6 @@ export default {
 	color: var(--color-text-maxcontrast);
 	overflow-wrap: break-word;
 	font-family: monospace;
-}
-
-// Visualization
-.mcp-viz-container {
-	background: var(--color-background-hover);
-	border-radius: var(--border-radius-large);
-	padding: 16px;
-	margin-bottom: 24px;
-}
-
-.mcp-viz-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 12px;
-
-	h3 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 600;
-	}
-}
-
-.mcp-viz-plot-container {
-	width: 100%;
-	height: 400px;
-	background: var(--color-main-background);
-	border-radius: var(--border-radius);
-}
-
-#viz-plot {
-	width: 100%;
-	height: 100%;
-
-	// Pointer cursor for clickable result points (trace 0)
-	:deep(.scatterlayer .trace:first-child .point) {
-		cursor: pointer !important;
-	}
-
-	// Default cursor for query point (trace 1)
-	:deep(.scatterlayer .trace:nth-child(2) .point) {
-		cursor: default !important;
-	}
 }
 
 // Results
