@@ -7,8 +7,22 @@
 // cut on it is meaningless -- amazon.rerank-v1 puts good hits around 0.2.
 export const UNCALIBRATED = 'uncalibrated'
 
+// Only the calibrated source is a probability. `fusion_ordinal` orders results
+// honestly but is NOT one, and rendering it as a percentage would recreate the
+// exact bug the relevance work exists to remove -- just with a better-behaved
+// number behind it.
+export const isCalibrated = (r) => r.relevance_source === 'cross_encoder_calibrated'
+
 // For uncalibrated rows the cut and bars follow this, not `relevance`; the
 // server derives that from the same signal (a clamp), so the two agree in order.
+//
+// It is the cross-encoder score when the server reranked, else the retrieval
+// score, matching the order the server returned rows in, so the filter always
+// removes a suffix of the list rather than punching holes in it. Reranking is
+// NOT required: searches ask for it only when the server advertises
+// `rerank_available`, and it degrades to retrieval order on failure, so
+// `rerank_score` may be absent from some or all rows -- this must stay a
+// fallback, never a requirement.
 export const rankScore = (r) => r.rerank_score ?? r.score ?? 0
 
 const isUncalibrated = (r) => r.relevance_source === UNCALIBRATED
