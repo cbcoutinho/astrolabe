@@ -253,8 +253,9 @@
 					</p>
 
 					<div class="form-field">
-						<label>{{ t('astrolabe', 'Minimum Score Threshold') }}: {{ settings.scoreThreshold }}%</label>
+						<label for="astrolabe-score-threshold">{{ t('astrolabe', 'Minimum Score Threshold') }}: {{ settings.scoreThreshold }}%</label>
 						<input
+							id="astrolabe-score-threshold"
 							v-model="settings.scoreThreshold"
 							type="range"
 							min="0"

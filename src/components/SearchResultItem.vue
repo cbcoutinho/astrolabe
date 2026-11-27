@@ -68,18 +68,13 @@
 			number behind it.
 		-->
 		<div v-if="typeof result.relevance === 'number' && result.relevance_source !== 'exact_match'" class="mcp-relevance">
-			<div
+			<meter
 				class="mcp-relevance-bar"
-				role="meter"
-				aria-valuemin="0"
-				aria-valuemax="100"
-				:aria-valuenow="relevancePercent"
+				min="0"
+				max="100"
+				:value="relevancePercent"
 				:title="relevanceTitle"
-				:aria-label="relevanceTitle">
-				<div
-					class="mcp-relevance-fill"
-					:style="{ width: relevancePercent + '%' }" />
-			</div>
+				:aria-label="relevanceTitle" />
 			<span v-if="relevanceCalibrated" class="mcp-relevance-value">
 				{{ relevancePercent }}%
 			</span>
@@ -212,6 +207,14 @@ export default {
 		transform: translateX(4px);
 		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+
+		&:hover {
+			transform: none;
+		}
+	}
 }
 
 .mcp-result-header {
@@ -244,7 +247,7 @@ export default {
 
 .mcp-doc-type-deck_card {
 	border-inline-start-color: #ef6c00;
-	.mcp-result-type { background: #fff3e0; color: #ef6c00; }
+	.mcp-result-type { background: #fff3e0; color: #bf360c; }
 }
 
 .mcp-doc-type-calendar {
@@ -259,7 +262,7 @@ export default {
 
 .mcp-doc-type-news_item {
 	border-inline-start-color: #00838f;
-	.mcp-result-type { background: #e0f7fa; color: #00838f; }
+	.mcp-result-type { background: #e0f7fa; color: #00727b; }
 }
 
 .mcp-doc-type-mail_message {
@@ -304,18 +307,34 @@ a.mcp-result-title {
 	margin-top: 6px;
 }
 
+// A native <meter>, restyled to the thin bar it replaced. Each engine draws
+// the track and the value with its own pseudo-elements.
 .mcp-relevance-bar {
 	flex: 0 0 96px;
+	width: 96px;
 	height: 4px;
+	border: 0;
 	border-radius: 2px;
 	background: var(--color-background-darker);
 	overflow: hidden;
-}
+	appearance: none;
 
-.mcp-relevance-fill {
-	height: 100%;
-	border-radius: 2px;
-	background: var(--color-primary-element);
+	&::-webkit-meter-bar {
+		height: 4px;
+		border: 0;
+		border-radius: 2px;
+		background: var(--color-background-darker);
+	}
+
+	&::-webkit-meter-optimum-value {
+		border-radius: 2px;
+		background: var(--color-primary-element);
+	}
+
+	&::-moz-meter-bar {
+		border-radius: 2px;
+		background: var(--color-primary-element);
+	}
 }
 
 .mcp-relevance-value {
