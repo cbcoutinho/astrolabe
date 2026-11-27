@@ -129,8 +129,9 @@ jobs:
       contents: write
 
   # Called here rather than on `push: tags` so it runs only after `release`
-  # and records the triggering commit's SHA (see pact-record-deployment.yml). Gated on `release` too: the record asserts "this version is
-  # in production", which is only true once the app store publish succeeded.
+  # and records the triggering commit's SHA (see pact-record-deployment.yml).
+  # Gated on `release` too: the record asserts "this version is in production",
+  # which is only true once the app store publish succeeded.
   pact-record-deployment:
     needs: [bump-version, release]
     if: needs.bump-version.outputs.bumped == 'true'

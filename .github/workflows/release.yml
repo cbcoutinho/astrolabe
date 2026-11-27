@@ -39,8 +39,8 @@ jobs:
 
   build-and-publish:
     needs: guard
-    # always(): guard is skipped on workflow_call; a failed guard fails open (releases).
-    if: always() && (inputs.tag != '' || needs.guard.outputs.skip != 'true')
+    # !cancelled(): guard is skipped on workflow_call; a failed guard fails open (releases).
+    if: ${{ !cancelled() && (inputs.tag != '' || needs.guard.outputs.skip != 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
