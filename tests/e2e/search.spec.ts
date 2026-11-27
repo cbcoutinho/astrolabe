@@ -55,6 +55,12 @@ test.describe('Astrolabe search', () => {
 		// result limit" too.
 		await expect(mainContent.getByText('Result Limit', { exact: true })).toBeVisible()
 
+		// The captions are tied to their controls, so assistive tech announces
+		// them: the grouped controls by fieldset legend, the field by for/id.
+		await expect(mainContent.getByRole('group', { name: 'Document Types' })).toBeVisible()
+		await expect(mainContent.getByRole('group', { name: 'Folders (files)' })).toBeVisible()
+		await expect(mainContent.getByLabel('Result Limit', { exact: true })).toHaveAttribute('type', 'number')
+
 		// Result shape. Dense-only search cannot group passages by document,
 		// so the per-document option is offered only for the other algorithms.
 		await expect(mainContent.getByLabel('Results per document')).toBeVisible()

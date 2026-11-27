@@ -187,7 +187,7 @@ test.describe('Astrolabe search options', () => {
 
 		await expect(page.locator('.mcp-results-header')).toContainText('· reranked')
 		await expect(page.locator('.mcp-relevance-value')).toHaveText('87%')
-		await expect(page.getByRole('meter')).toHaveAttribute('aria-valuenow', '87')
+		await expect(page.getByRole('meter')).toHaveJSProperty('value', 87)
 	})
 
 	test('the global search bar returns Astrolabe results', async ({ authenticatedPage: page }) => {

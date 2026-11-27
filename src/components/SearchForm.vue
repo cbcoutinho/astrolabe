@@ -47,8 +47,8 @@
 		<!-- Advanced Options -->
 		<div v-show="showAdvanced" class="mcp-advanced-options">
 			<div class="mcp-advanced-grid">
-				<div class="mcp-option-group">
-					<label>{{ t('astrolabe', 'Document Types') }}</label>
+				<fieldset class="mcp-option-group">
+					<legend>{{ t('astrolabe', 'Document Types') }}</legend>
 					<div class="mcp-checkbox-grid">
 						<NcCheckboxRadioSwitch
 							v-for="docType in docTypeOptions"
@@ -59,11 +59,13 @@
 							{{ docType.label }}
 						</NcCheckboxRadioSwitch>
 					</div>
-				</div>
+				</fieldset>
 
 				<div class="mcp-option-group">
-					<label>{{ t('astrolabe', 'Result Limit') }}</label>
+					<label for="mcp-result-limit">{{ t('astrolabe', 'Result Limit') }}</label>
 					<NcTextField
+						id="mcp-result-limit"
+						labelOutside
 						:modelValue="limit"
 						type="number"
 						:min="1"
@@ -129,8 +131,8 @@
 						@input="$emit('update:modifiedBefore', $event.target.value)">
 				</div>
 
-				<div class="mcp-option-group">
-					<label>{{ t('astrolabe', 'Folders (files)') }}</label>
+				<fieldset class="mcp-option-group">
+					<legend>{{ t('astrolabe', 'Folders (files)') }}</legend>
 					<NcButton
 						variant="secondary"
 						class="mcp-folder-pick-btn"
@@ -149,7 +151,7 @@
 					<span v-if="!pathFilterApplicable" class="mcp-path-hint">
 						{{ t('astrolabe', 'Select the Files type to filter by folder') }}
 					</span>
-				</div>
+				</fieldset>
 			</div>
 
 			<NcNoteCard v-if="dateRangeError" type="warning" class="mcp-date-error">
@@ -360,8 +362,17 @@ export default {
 }
 
 .mcp-option-group {
-	label {
+	// Groups of controls (the doc-type checkboxes, the folder picker) are
+	// fieldsets so the caption is announced with them; drop the UA chrome.
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+
+	label,
+	legend {
 		display: block;
+		padding: 0;
 		font-weight: 600;
 		margin-bottom: 8px;
 		color: var(--color-text-maxcontrast);

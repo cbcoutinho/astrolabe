@@ -9,15 +9,12 @@
 			<p>{{ error }}</p>
 		</div>
 		<!-- The rendered page is the container, not just the canvas: it is the
-			 canvas plus its highlight overlays. Labelling it here also keeps the
-			 img role off the canvas, which is an interactive element and so
-			 cannot carry a non-interactive role. Without this the viewer exposes
-			 nothing to assistive tech, where the <img> it replaced at least had
-			 alt text. -->
-		<div
+			 canvas plus its highlight overlays. A labelled <figure> names it for
+			 assistive tech (the <img> it replaced had alt text) without putting
+			 a role on the canvas itself. -->
+		<figure
 			v-show="!loading && !error"
 			class="pdf-image-container"
-			role="img"
 			:aria-label="t('astrolabe', 'Page {page} of the PDF', { page: pageNumber })">
 			<canvas ref="canvasEl" class="pdf-page-image" />
 			<div
@@ -25,7 +22,7 @@
 				:key="i"
 				class="pdf-highlight"
 				:style="highlightStyle(rect)" />
-		</div>
+		</figure>
 	</div>
 </template>
 
@@ -451,6 +448,7 @@ onBeforeUnmount(teardown)
 
 .pdf-image-container {
 	position: relative;
+	margin: 0;
 	display: inline-block;
 	border: 1px solid var(--color-border);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
