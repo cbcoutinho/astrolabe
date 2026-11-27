@@ -15,7 +15,31 @@ env:
   APP_NAME: astrolabe
 
 jobs:
+  # bump-version pushes its tag with a deploy key, which fires the `push: tags`
+  # trigger too, but it already releases that tag via workflow_call. Its tags
+  # are annotated "bump-version pipeline"; skip those here. Manual tags release.
+  guard:
+    if: inputs.tag == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          obj=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq 'select(.object.type == "tag") | .object.sha')
+          msg=""; [ -n "$obj" ] && msg=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$obj" --jq .message)
+          case "$msg" in "bump-version pipeline"*) skip=true ;; *) skip=false ;; esac
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
   build-and-publish:
+    needs: guard
+    # always(): guard is skipped on workflow_call; a failed guard fails open (releases).
+    if: always() && (inputs.tag != '' || needs.guard.outputs.skip != 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: write
