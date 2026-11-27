@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires external MCP server deployment
 - See documentation for setup: https://github.com/cbcoutinho/nextcloud-mcp-server
 
+## v0.52.4 (2026-11-27)
+
+### Fix
+
+- **deps**: update dependency @nextcloud/dialogs to v8
+
 ## v0.52.3 (2026-11-26)
 
 ### Fix
