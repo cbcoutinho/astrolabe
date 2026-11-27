@@ -658,8 +658,6 @@ export default {
 	},
 
 	methods: {
-		// ADR-042 image hit: matched by what the picture shows, so it has no
-		// excerpt or chunk offsets.
 		handleUrlParameters() {
 			// Parse URL parameters
 			const urlParams = new URLSearchParams(window.location.search)

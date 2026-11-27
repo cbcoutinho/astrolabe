@@ -156,6 +156,8 @@ export default {
 	emits: ['view', 'openApp', 'addToSar', 'previewError'],
 
 	computed: {
+		// ADR-042 image hit: matched by what the picture shows, so it has no
+		// excerpt or chunk offsets.
 		isImageHit() {
 			return this.result.doc_type === 'file' && this.result.metadata?.match === 'image'
 		},
