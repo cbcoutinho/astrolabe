@@ -126,3 +126,78 @@ export function summaryPageWindow(current, total, size) {
 	}
 	return pages
 }
+
+/**
+ * The Nextcloud fileId of a file result, as an integer, or null.
+ *
+ * @param {number|string} id The result's id (the fileId for file doc types).
+ * @return {number|null} The fileId.
+ */
+export function pdfDocId(id) {
+	return Number.isInteger(id) ? id : (Number.parseInt(id, 10) || null)
+}
+
+/**
+ * The viewer state for a loaded chunk-context response: a PDF page with its
+ * bounding box when the server located the chunk on a page, otherwise the
+ * text (or CSV) passage with its surrounding context.
+ *
+ * @param {object} result The search result being opened.
+ * @param {object} data The chunk-context response body.
+ * @return {object} Viewer data fields to assign.
+ */
+export function chunkViewerState(result, data) {
+	if (result.doc_type === 'file' && data.page_number) {
+		return {
+			viewerType: 'pdf',
+			currentPdfPath: result.metadata?.path || '',
+			currentPdfDocId: pdfDocId(result.id),
+			viewerPage: data.page_number,
+			currentBbox: data.chunk_bbox || [],
+			currentBboxPage: data.page_number,
+		}
+	}
+	return {
+		viewerType: isCsvResult(result) ? 'csv' : 'text',
+		viewerContext: {
+			chunk: data.chunk_text || '',
+			before: data.before_context || '',
+			after: data.after_context || '',
+			// Absent flag = unknown: assume truncated, so no
+			// partial line is shown and no bogus header guessed.
+			hasMoreBefore: data.has_more_before !== false,
+			hasMoreAfter: data.has_more_after !== false,
+		},
+	}
+}
+
+/**
+ * The text fields of a summary request for the passage around `result`.
+ * Optional fields are omitted when absent; the access-check identifiers let
+ * the backend re-verify this user still reaches the document before anything
+ * is generated.
+ *
+ * @param {object} result The search result currently open.
+ * @return {[string, string][]} Form fields, in order.
+ */
+export function summaryFormFields(result) {
+	const fields = [
+		['doc_type', result.doc_type ?? ''],
+		['doc_id', String(result.id ?? '')],
+		['start', String(result.chunk_start_offset ?? 0)],
+		['end', String(result.chunk_end_offset ?? 0)],
+	]
+	if (result.chunk_index !== undefined && result.chunk_index !== null) {
+		fields.push(['chunk_index', String(result.chunk_index)])
+	}
+	if (result.total_chunks !== undefined && result.total_chunks !== null) {
+		fields.push(['total_chunks', String(result.total_chunks)])
+	}
+	for (const key of ['board_id', 'mailbox_id', 'calendar_uri', 'path']) {
+		const value = result.metadata?.[key]
+		if (value !== undefined && value !== null && value !== '') {
+			fields.push([key, String(value)])
+		}
+	}
+	return fields
+}

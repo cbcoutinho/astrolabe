@@ -1,6 +1,10 @@
 <template>
 	<!-- PDF/Chunk Viewer Modal -->
-	<div v-if="showViewer" class="mcp-modal-overlay" @click.self="close">
+	<div
+		v-if="showViewer"
+		class="mcp-modal-overlay"
+		@click.self="close"
+		@keydown.esc="close">
 		<div class="mcp-modal">
 			<!-- Fixed Header -->
 			<div class="mcp-modal-header">
@@ -138,7 +142,7 @@ import MarkdownViewer from './MarkdownViewer.vue'
 // same root-relative-URL problem that forces the worker to be inlined. Making
 // this lazy again needs a base-aware chunk URL first.
 import PDFViewer from './PDFViewer.vue'
-import { chunkContextParams, chunkMarkdown, imageFileIdsForSummary, isCsvResult, summaryPageWindow } from '../utils/chunkViewer.js'
+import { chunkContextParams, chunkMarkdown, chunkViewerState, imageFileIdsForSummary, summaryFormFields, summaryPageWindow } from '../utils/chunkViewer.js'
 import { documentUrl } from '../utils/documentUrl.js'
 
 // How many PDF pages to render for a multimodal summary. Kept under the
@@ -269,27 +273,7 @@ export default {
 				const response = await axios.get(url, { params: chunkContextParams(result) })
 
 				if (response.data.success) {
-					// Determine viewer type and setup
-					if (result.doc_type === 'file' && response.data.page_number) {
-						this.viewerType = 'pdf'
-						this.currentPdfPath = result.metadata?.path || ''
-						// result.id is the Nextcloud fileId for file doc types.
-						this.currentPdfDocId = Number.isInteger(result.id) ? result.id : (parseInt(result.id, 10) || null)
-						this.viewerPage = response.data.page_number
-						this.currentBbox = response.data.chunk_bbox || []
-						this.currentBboxPage = response.data.page_number
-					} else {
-						this.viewerType = isCsvResult(result) ? 'csv' : 'text'
-						this.viewerContext = {
-							chunk: response.data.chunk_text || '',
-							before: response.data.before_context || '',
-							after: response.data.after_context || '',
-							// Absent flag = unknown: assume truncated, so no
-							// partial line is shown and no bogus header guessed.
-							hasMoreBefore: response.data.has_more_before !== false,
-							hasMoreAfter: response.data.has_more_after !== false,
-						}
-					}
+					Object.assign(this, chunkViewerState(result, response.data))
 				} else {
 					console.error('Failed to load chunk:', response.data.error)
 					this.close()
@@ -297,9 +281,10 @@ export default {
 			} catch (err) {
 				// 403 = access revoked since indexing (the staleness the local
 				// check guards). Surface a friendly message instead of a stack trace.
-				if (err.response && err.response.status === 403) {
+				const status = err.response?.status
+				if (status === 403) {
 					this.$emit('error', this.t('astrolabe', 'You no longer have access to this document.'))
-				} else if (err.response && err.response.status === 404) {
+				} else if (status === 404) {
 					// Deleted or unindexed since the search, or a stale deep link.
 					this.$emit('error', this.t('astrolabe', 'This document is no longer in the search index.'))
 				} else {
@@ -373,23 +358,8 @@ export default {
 
 			try {
 				const form = new FormData()
-				form.append('doc_type', result.doc_type ?? '')
-				form.append('doc_id', String(result.id ?? ''))
-				form.append('start', String(result.chunk_start_offset ?? 0))
-				form.append('end', String(result.chunk_end_offset ?? 0))
-				if (result.chunk_index !== undefined && result.chunk_index !== null) {
-					form.append('chunk_index', String(result.chunk_index))
-				}
-				if (result.total_chunks !== undefined && result.total_chunks !== null) {
-					form.append('total_chunks', String(result.total_chunks))
-				}
-				// Access-check identifiers, so the backend can re-verify this user
-				// still reaches the document before anything is generated.
-				for (const key of ['board_id', 'mailbox_id', 'calendar_uri', 'path']) {
-					const value = result.metadata?.[key]
-					if (value !== undefined && value !== null && value !== '') {
-						form.append(key, String(value))
-					}
+				for (const [key, value] of summaryFormFields(result)) {
+					form.append(key, value)
 				}
 
 				for (const blob of await this.capturePagesForSummary()) {

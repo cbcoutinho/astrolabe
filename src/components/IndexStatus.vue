@@ -121,11 +121,8 @@ export default {
 				}
 			} catch (err) {
 				console.error('Status error:', err)
-				if (err.response && err.response.data && err.response.data.error) {
-					this.statusError = err.response.data.error
-				} else {
-					this.statusError = this.t('astrolabe', 'Network error. Please try again.')
-				}
+				this.statusError = err.response?.data?.error
+					|| this.t('astrolabe', 'Network error. Please try again.')
 			} finally {
 				this.statusLoading = false
 			}
