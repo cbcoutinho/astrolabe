@@ -1,0 +1,36 @@
+// Layout shared by the page's top-level sections (App.vue, IndexStatus.vue).
+// Pulled in with `@use` from each component's scoped style block, so the rules
+// stay scoped to whichever component renders them.
+
+.mcp-section {
+	/* Standard Nextcloud app padding - matches Deck/core spacing */
+	padding: 44px 24px 24px var(--default-clickable-area);
+	/* Remove max-width to allow content to fill available space like Notes app */
+	min-height: calc(100vh - 150px); /* Ensure content extends to bottom of viewport */
+}
+
+.mcp-section-header {
+	margin-bottom: 24px;
+
+	h2 {
+		margin: 0 0 8px 0;
+		font-size: 22px;
+		font-weight: 600;
+	}
+
+	.mcp-description {
+		color: var(--color-text-maxcontrast);
+		margin: 0;
+	}
+}
+
+// Loading state
+.mcp-loading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 48px;
+	color: var(--color-text-maxcontrast);
+}
