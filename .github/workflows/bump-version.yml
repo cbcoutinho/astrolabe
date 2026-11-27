@@ -93,6 +93,8 @@ jobs:
           TAG: ${{ steps.bump.outputs.tag }}
           BUMP_DEPLOY_KEY: ${{ secrets.BUMP_DEPLOY_KEY }}
         run: |
+          # Fail before rewriting the tag rather than with an opaque ssh error.
+          [ -n "$BUMP_DEPLOY_KEY" ] || { echo "::error::BUMP_DEPLOY_KEY secret is not set"; exit 1; }
           git tag -f -a "$TAG" -m "bump-version pipeline" HEAD
           d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
           printf '%s\n' "$BUMP_DEPLOY_KEY" > "$d/key"; chmod 600 "$d/key"
@@ -126,9 +128,8 @@ jobs:
     permissions:
       contents: write
 
-  # Called here rather than on `push: tags` because tags pushed with
-  # GITHUB_TOKEN do not trigger workflows (the same reason `release` is a
-  # workflow_call). Gated on `release` too: the record asserts "this version is
+  # Called here rather than on `push: tags` so it runs only after `release`
+  # and records the triggering commit's SHA (see pact-record-deployment.yml). Gated on `release` too: the record asserts "this version is
   # in production", which is only true once the app store publish succeeded.
   pact-record-deployment:
     needs: [bump-version, release]

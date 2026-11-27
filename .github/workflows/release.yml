@@ -17,7 +17,8 @@ env:
 jobs:
   # bump-version pushes its tag with a deploy key, which fires the `push: tags`
   # trigger too, but it already releases that tag via workflow_call. Its tags
-  # are annotated "bump-version pipeline"; skip those here. Manual tags release.
+  # are annotated "bump-version pipeline"; skip those here. Manual tags release
+  # (hand-made annotated tags must not reuse that message, or they are skipped).
   guard:
     if: inputs.tag == ''
     runs-on: ubuntu-latest
