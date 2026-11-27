@@ -45,9 +45,7 @@ final class McpProbe extends Command {
 
 	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
-		/** @var string $userId */
 		$userId = $input->getArgument('user');
-		/** @var string $scopes */
 		$scopes = $input->getOption('scopes');
 
 		$client = $this->clientFactory->connect($userId, $scopes);
@@ -63,7 +61,6 @@ final class McpProbe extends Command {
 			$tools = $client->listTools()->tools;
 			$output->writeln(sprintf('<info>%d tool(s) visible to %s</info>', count($tools), $userId));
 
-			/** @var string $filter */
 			$filter = $input->getOption('filter');
 			foreach ($tools as $tool) {
 				if ($filter !== '' && !str_contains($tool->name, $filter)) {
@@ -79,10 +76,8 @@ final class McpProbe extends Command {
 				));
 			}
 
-			/** @var string|null $call */
 			$call = $input->getOption('call');
 			if ($call !== null && $call !== '') {
-				/** @var string $rawArgs */
 				$rawArgs = $input->getOption('args');
 				try {
 					/** @var array<string, mixed> $args */

@@ -46,7 +46,6 @@ class Application extends App implements IBootstrap {
 		// the standard ClientInterface; contract and unit tests swap in any
 		// PSR-18 client (e.g. the Pact mock server).
 		$context->registerService(ClientInterface::class, function (ContainerInterface $c): ClientInterface {
-			/** @var IClientService $clientService */
 			$clientService = $c->get(IClientService::class);
 			return new NextcloudPsr18Client($clientService->newClient());
 		});
