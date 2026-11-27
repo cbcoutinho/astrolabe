@@ -38,7 +38,7 @@
     "plotly.js-dist-min": "^4.0.0",
     "vue": "^3.0.0",
     "vue-material-design-icons": "^5.3.1",
-    "zod": "4.2.1"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@nextcloud/browserslist-config": "3.1.2",
