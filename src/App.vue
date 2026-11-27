@@ -74,172 +74,22 @@
 					</p>
 				</NcNoteCard>
 
-				<!-- Search Controls -->
-				<div class="mcp-search-card">
-					<NcTextArea
-						v-model="query"
-						:label="t('astrolabe', 'Search query')"
-						:placeholder="t('astrolabe', 'Enter your search query… (Ctrl/⌘+Enter to search)')"
-						class="mcp-search-input"
-						resize="vertical"
-						:rows="2"
-						@keydown.ctrl.enter.prevent="performSearch"
-						@keydown.meta.enter.prevent="performSearch" />
-
-					<div class="mcp-search-row">
-						<NcSelect
-							:modelValue="selectedAlgorithmOption"
-							:options="algorithmOptions"
-							:placeholder="t('astrolabe', 'Algorithm')"
-							:clearable="false"
-							class="mcp-algorithm-select"
-							@update:modelValue="algorithm = $event ? $event.id : (algorithmOptions[0] ? algorithmOptions[0].id : '')" />
-
-						<NcButton
-							variant="primary"
-							:disabled="!query.trim() || loading || !algorithm"
-							@click="performSearch">
-							<template #icon>
-								<Magnify :size="20" />
-							</template>
-							{{ t('astrolabe', 'Search') }}
-						</NcButton>
-					</div>
-
-					<!-- Advanced Options Toggle -->
-					<NcButton
-						variant="tertiary"
-						class="mcp-advanced-toggle"
-						@click="showAdvanced = !showAdvanced">
-						<template #icon>
-							<ChevronDown v-if="!showAdvanced" :size="20" />
-							<ChevronUp v-else :size="20" />
-						</template>
-						{{ showAdvanced ? t('astrolabe', 'Hide advanced') : t('astrolabe', 'Advanced options') }}
-					</NcButton>
-
-					<!-- Advanced Options -->
-					<div v-show="showAdvanced" class="mcp-advanced-options">
-						<div class="mcp-advanced-grid">
-							<div class="mcp-option-group">
-								<label>{{ t('astrolabe', 'Document Types') }}</label>
-								<div class="mcp-checkbox-grid">
-									<NcCheckboxRadioSwitch
-										v-for="docType in docTypeOptions"
-										:key="docType.id"
-										:modelValue="selectedDocTypes.includes(docType.id)"
-										type="checkbox"
-										@update:modelValue="toggleDocType(docType.id, $event)">
-										{{ docType.label }}
-									</NcCheckboxRadioSwitch>
-								</div>
-							</div>
-
-							<div class="mcp-option-group">
-								<label>{{ t('astrolabe', 'Result Limit') }}</label>
-								<NcTextField
-									v-model="limit"
-									type="number"
-									:min="1"
-									:max="100" />
-							</div>
-
-							<div class="mcp-option-group">
-								<label for="mcp-granularity">{{ t('astrolabe', 'Results per document') }}</label>
-								<select id="mcp-granularity" v-model="granularity" class="mcp-select">
-									<option value="chunk">
-										{{ t('astrolabe', 'Best passages — a long document may appear several times') }}
-									</option>
-									<!-- Dense-only search cannot group passages by document:
-										 the server answers that combination with a 422. -->
-									<option value="document" :disabled="algorithm === 'semantic'">
-										{{ t('astrolabe', 'One row per document') }}
-									</option>
-								</select>
-							</div>
-
-							<div class="mcp-option-group">
-								<label for="mcp-minimum-relevance">{{ t('astrolabe', 'Minimum relevance') }}: {{ relevanceApplies ? minRelevance + '%' : t('astrolabe', 'n/a') }}</label>
-								<input
-									id="mcp-minimum-relevance"
-									v-model.number="minRelevance"
-									type="range"
-									min="0"
-									max="100"
-									step="5"
-									class="mcp-score-slider"
-									:disabled="!relevanceApplies"
-									aria-describedby="mcp-minimum-relevance-hint">
-								<p id="mcp-minimum-relevance-hint" class="mcp-option-hint">
-									{{ relevanceApplies
-										? t('astrolabe', 'Hides results below this relevance. The server applies it before cutting the page, so a filtered search still returns a full page.')
-										: t('astrolabe', 'Exact phrase search finds every document containing the phrase, unranked, so relevance does not apply.') }}
-								</p>
-							</div>
-
-							<div class="mcp-option-group">
-								<label for="mcp-modified-after">{{ t('astrolabe', 'Modified after') }}</label>
-								<input
-									id="mcp-modified-after"
-									v-model="modifiedAfter"
-									type="datetime-local"
-									class="mcp-date-input">
-							</div>
-
-							<div class="mcp-option-group">
-								<label for="mcp-modified-before">{{ t('astrolabe', 'Modified before') }}</label>
-								<input
-									id="mcp-modified-before"
-									v-model="modifiedBefore"
-									type="datetime-local"
-									class="mcp-date-input">
-							</div>
-
-							<div class="mcp-option-group">
-								<label>{{ t('astrolabe', 'Folders (files)') }}</label>
-								<NcButton
-									variant="secondary"
-									class="mcp-folder-pick-btn"
-									:disabled="!pathFilterApplicable"
-									@click="pickFolders">
-									<template #icon>
-										<FolderSearch :size="20" />
-									</template>
-									{{ pathPrefixes.length
-										? t('astrolabe', 'Add folders…')
-										: t('astrolabe', 'Choose folders…') }}
-								</NcButton>
-								<!-- Selected folders are surfaced as removable chips in the
-									 shared active-filters bar below (same pattern as the date
-									 range), so they're not duplicated inline here. -->
-								<span v-if="!pathFilterApplicable" class="mcp-path-hint">
-									{{ t('astrolabe', 'Select the Files type to filter by folder') }}
-								</span>
-							</div>
-						</div>
-
-						<NcNoteCard v-if="dateRangeError" type="warning" class="mcp-date-error">
-							<div>{{ dateRangeError }}</div>
-						</NcNoteCard>
-					</div>
-
-					<!-- Active filter chips (ADR-027) -->
-					<div v-if="activeFilters.length > 0" class="mcp-active-filters">
-						<span
-							v-for="chip in activeFilters"
-							:key="chip.key"
-							class="mcp-filter-chip">
-							{{ chip.label }}
-							<button
-								type="button"
-								class="mcp-filter-chip-close"
-								:aria-label="t('astrolabe', 'Remove filter')"
-								@click="removeFilter(chip)">
-								<Close :size="16" />
-							</button>
-						</span>
-					</div>
-				</div>
+				<SearchForm
+					v-model:query="query"
+					v-model:algorithm="algorithm"
+					v-model:selectedDocTypes="selectedDocTypes"
+					v-model:limit="limit"
+					v-model:granularity="granularity"
+					v-model:minRelevance="minRelevance"
+					v-model:modifiedAfter="modifiedAfter"
+					v-model:modifiedBefore="modifiedBefore"
+					v-model:pathPrefixes="pathPrefixes"
+					v-model:dateRangeError="dateRangeError"
+					:algorithmOptions="algorithmOptions"
+					:docTypeOptions="docTypeOptions"
+					:relevanceApplies="relevanceApplies"
+					:loading="loading"
+					@search="performSearch(false)" />
 
 				<!-- Loading State -->
 				<div v-if="loading" class="mcp-loading">
@@ -322,102 +172,18 @@
 						@select="viewChunk" />
 
 					<div class="mcp-results-list">
-						<div
+						<SearchResultItem
 							v-for="(result, index) in filteredResults"
 							:key="result.id || index"
-							class="mcp-result-item"
-							:class="'mcp-doc-type-' + (result.doc_type || 'unknown')">
-							<div class="mcp-result-header">
-								<span class="mcp-result-type">{{ result.doc_type || 'unknown' }}</span>
-								<div class="mcp-result-actions">
-									<NcButton
-										v-if="!isImageHit(result)"
-										variant="tertiary"
-										:aria-label="t('astrolabe', 'Show Chunk')"
-										@click="viewChunk(result)">
-										<template #icon>
-											<Eye :size="18" />
-										</template>
-										{{ t('astrolabe', 'Show Chunk') }}
-									</NcButton>
-									<NcButton
-										v-if="result.doc_type === 'file'"
-										variant="tertiary"
-										@click="mcpApp = { fileId: parseInt(result.id, 10), chunkIndex: result.chunk_index ?? null }">
-										{{ t('astrolabe', 'Open in App') }}
-									</NcButton>
-									<NcButton
-										v-if="sarCollecting"
-										variant="tertiary"
-										class="mcp-add-to-sar"
-										:disabled="inSar(result)"
-										@click="addToSar(result)">
-										<template #icon>
-											<PlaylistCheck v-if="inSar(result)" :size="18" />
-											<PlaylistPlus v-else :size="18" />
-										</template>
-										{{ inSar(result) ? t('astrolabe', 'In SAR') : t('astrolabe', 'Add to SAR') }}
-									</NcButton>
-								</div>
-							</div>
-							<a
-								:href="getDocumentUrl(result)"
-								class="mcp-result-title"
-								@click.prevent="navigateToDocument(result)">
-								{{ result.title || t('astrolabe', 'Untitled') }}
-								<OpenInNew :size="14" class="mcp-external-icon" />
-							</a>
-							<!-- An image hit matched what the picture shows, not a passage of
-								text: it has no chunk to view, so show the picture itself. -->
-							<a
-								v-if="isImageHit(result) && !brokenPreviews[result.id]"
-								:href="getDocumentUrl(result)"
-								class="mcp-result-preview"
-								tabindex="-1"
-								aria-hidden="true"
-								@click.prevent="navigateToDocument(result)">
-								<!-- Decorative: the title link beside it names the same file. -->
-								<img
-									:src="imagePreviewUrl(result)"
-									alt=""
-									loading="lazy"
-									@error="brokenPreviews[result.id] = true">
-							</a>
-							<!--
-								Relevance. The bar is drawn for every source because
-								all of them are monotone in whatever ordered the
-								results; the NUMBER is shown only when the server
-								says the value is a calibrated probability. Showing
-								a percentage for `fusion_ordinal` would be the same
-								mistake as the old score badge, with a better
-								number behind it.
-							-->
-							<div v-if="typeof result.relevance === 'number' && result.relevance_source !== 'exact_match'" class="mcp-relevance">
-								<div
-									class="mcp-relevance-bar"
-									role="meter"
-									aria-valuemin="0"
-									aria-valuemax="100"
-									:aria-valuenow="relevancePercent(result)"
-									:title="relevanceTitle(result)"
-									:aria-label="relevanceTitle(result)">
-									<div
-										class="mcp-relevance-fill"
-										:style="{ width: relevancePercent(result) + '%' }" />
-								</div>
-								<span v-if="relevanceIsCalibrated(result)" class="mcp-relevance-value">
-									{{ relevancePercent(result) }}%
-								</span>
-							</div>
-							<div class="mcp-result-metadata">
-								<span v-if="result.chunk_index !== undefined && result.total_chunks">
-									{{ t('astrolabe', 'Chunk {chunk}/{total}', { chunk: result.chunk_index + 1, total: result.total_chunks }) }}
-								</span>
-								<span v-if="result.page_number && result.page_count" class="mcp-metadata-separator">
-									· {{ t('astrolabe', 'Page {page}/{total}', { page: result.page_number, total: result.page_count }) }}
-								</span>
-							</div>
-						</div>
+							:result="result"
+							:relevancePercent="relevancePercent(result)"
+							:sarCollecting="sarCollecting"
+							:inSar="inSar(result)"
+							:previewBroken="!!brokenPreviews[result.id]"
+							@view="viewChunk"
+							@openApp="mcpApp = $event"
+							@addToSar="addToSar"
+							@previewError="brokenPreviews[$event.id] = true" />
 					</div>
 					<NcButton
 						v-if="sarCollecting && sarHasMore"
@@ -497,7 +263,7 @@
 <script>
 import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
-import { FilePickerType, getFilePickerBuilder, showError } from '@nextcloud/dialogs'
+import { showError } from '@nextcloud/dialogs'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
@@ -505,25 +271,14 @@ import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcAppSidebar from '@nextcloud/vue/components/NcAppSidebar'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcTextArea from '@nextcloud/vue/components/NcTextArea'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ChartBox from 'vue-material-design-icons/ChartBox.vue'
-import ChevronDown from 'vue-material-design-icons/ChevronDown.vue'
-import ChevronUp from 'vue-material-design-icons/ChevronUp.vue'
-import Close from 'vue-material-design-icons/Close.vue'
 import Cog from 'vue-material-design-icons/Cog.vue'
-import Eye from 'vue-material-design-icons/Eye.vue'
-import FolderSearch from 'vue-material-design-icons/FolderSearch.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
-import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
-import PlaylistCheck from 'vue-material-design-icons/PlaylistCheck.vue'
 import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
 import ShieldAccount from 'vue-material-design-icons/ShieldAccount.vue'
 import DocumentViewer from './components/DocumentViewer.vue'
@@ -531,9 +286,11 @@ import IndexStatus from './components/IndexStatus.vue'
 import McpAppHost from './components/McpAppHost.vue'
 import SarCasePanel from './components/SarCasePanel.vue'
 import SarCases from './components/SarCases.vue'
+import SearchForm from './components/SearchForm.vue'
+import SearchResultItem from './components/SearchResultItem.vue'
 import SearchResultsPlot from './components/SearchResultsPlot.vue'
-import { documentUrl } from './utils/documentUrl.js'
 import { hasUncalibrated as anyUncalibrated, scoreRange as computeScoreRange, displayRelevance, relevancePredicate, UNCALIBRATED } from './utils/relevance.js'
+import { pathFilterApplicable, toRfc3339 } from './utils/searchFilters.js'
 
 // The active SAR case is a per-browser convenience; the case itself is on the
 // server. Storage can be unavailable (private windows), so both are guarded.
@@ -576,32 +333,23 @@ export default {
 		NcAppContent,
 		NcAppSidebar,
 		NcButton,
-		NcTextField,
-		NcTextArea,
-		NcSelect,
 		NcLoadingIcon,
 		NcNoteCard,
 		NcEmptyContent,
-		NcCheckboxRadioSwitch,
 		DocumentViewer,
 		IndexStatus,
 		SarCasePanel,
 		SarCases,
+		SearchForm,
+		SearchResultItem,
 		SearchResultsPlot,
 		McpAppHost,
 		NcCounterBubble,
-		PlaylistCheck,
 		PlaylistPlus,
 		ShieldAccount,
 		Magnify,
 		ChartBox,
 		Cog,
-		ChevronDown,
-		ChevronUp,
-		OpenInNew,
-		Eye,
-		Close,
-		FolderSearch,
 	},
 
 	data() {
@@ -629,7 +377,6 @@ export default {
 			algorithm: defaultAlgorithm,
 			// Query types the server can serve; gates algorithmOptions below.
 			supportedSearchTypes,
-			showAdvanced: false,
 			selectedDocTypes: [],
 			// ADR-027 modified-date range filter. Bound to native
 			// <input type="datetime-local"> (local wall-clock); serialized to
@@ -673,7 +420,6 @@ export default {
 			results: [],
 			algorithmUsed: '',
 			searched: false,
-			expandedExcerpts: {},
 			// Visualization state
 			// Admin-controlled gate (initial state from PageController). When
 			// false the Plotly panel is hidden and search skips PCA. Defaults
@@ -777,61 +523,6 @@ export default {
 			return all.filter((opt) => this.enabledDocTypes.includes(opt.id))
 		},
 
-		selectedAlgorithmOption() {
-			return this.algorithmOptions.find((opt) => opt.id === this.algorithm) || this.algorithmOptions[0]
-		},
-
-		// The path filter only makes sense for file results: file_path is only
-		// indexed for files, so applying it while searching non-file types would
-		// silently return nothing. Applicable when Files is selected or when no
-		// doc-type filter is set (cross-app search includes files).
-		pathFilterApplicable() {
-			return this.selectedDocTypes.length === 0 || this.selectedDocTypes.includes('file')
-		},
-
-		// ADR-027: active structured filters rendered as closable chips, so the
-		// user always sees what is narrowing their results even with the
-		// advanced panel collapsed.
-		activeFilters() {
-			const chips = []
-			for (const id of this.selectedDocTypes) {
-				const opt = this.docTypeOptions.find((o) => o.id === id)
-				chips.push({
-					key: 'doc:' + id,
-					label: opt ? opt.label : id,
-					kind: 'doc',
-					value: id,
-				})
-			}
-			if (this.modifiedAfter) {
-				chips.push({
-					key: 'after',
-					label: this.t('astrolabe', 'After {date}', { date: this.formatFilterDate(this.modifiedAfter) }),
-					kind: 'after',
-				})
-			}
-			if (this.modifiedBefore) {
-				chips.push({
-					key: 'before',
-					label: this.t('astrolabe', 'Before {date}', { date: this.formatFilterDate(this.modifiedBefore) }),
-					kind: 'before',
-				})
-			}
-			// One chip per selected folder; only surface them when they will
-			// actually apply (files in scope).
-			if (this.pathFilterApplicable) {
-				for (const folder of this.pathPrefixes) {
-					chips.push({
-						key: `path:${folder}`,
-						label: this.t('astrolabe', 'Folder: {path}', { path: folder }),
-						kind: 'path',
-						value: folder,
-					})
-				}
-			}
-			return chips
-		},
-
 		// Score RANGE (both ends) over this page -- see utils/relevance.js for
 		// why the slider is relative-to-top wherever the value is not
 		// comparable across queries (RRF ~0.033 max, DBSF can go negative).
@@ -860,14 +551,6 @@ export default {
 		// apply it absolutely to the same raw value.
 		hasUncalibrated() {
 			return anyUncalibrated(this.results)
-		},
-
-		// Only the calibrated source is a probability. `fusion_ordinal` orders
-		// results honestly but is NOT one, and rendering it as a percentage
-		// would recreate the exact bug this whole change exists to remove --
-		// just with a better-behaved number behind it.
-		relevanceIsCalibrated() {
-			return (r) => r.relevance_source === 'cross_encoder_calibrated'
 		},
 
 		// The cut the slider applies, and the one thing it must agree with is
@@ -977,14 +660,6 @@ export default {
 	methods: {
 		// ADR-042 image hit: matched by what the picture shows, so it has no
 		// excerpt or chunk offsets.
-		isImageHit(result) {
-			return result.doc_type === 'file' && result.metadata?.match === 'image'
-		},
-
-		imagePreviewUrl(result) {
-			return generateUrl('/core/preview') + '?' + new URLSearchParams({ fileId: String(result.id), x: '256', y: '256', a: '1' })
-		},
-
 		handleUrlParameters() {
 			// Parse URL parameters
 			const urlParams = new URLSearchParams(window.location.search)
@@ -1054,63 +729,6 @@ export default {
 			}
 		},
 
-		toggleDocType(docTypeId, checked) {
-			if (checked && !this.selectedDocTypes.includes(docTypeId)) {
-				this.selectedDocTypes.push(docTypeId)
-			} else if (!checked) {
-				const index = this.selectedDocTypes.indexOf(docTypeId)
-				if (index > -1) {
-					this.selectedDocTypes.splice(index, 1)
-				}
-			}
-		},
-
-		// Convert a native datetime-local value ("2026-01-01T00:00", local
-		// wall-clock) to an RFC 3339 / ISO 8601 UTC string ("2026-01-01T…Z").
-		// Returns '' for empty/invalid input so callers can omit the bound.
-		toRfc3339(localValue) {
-			if (!localValue) {
-				return ''
-			}
-			const date = new Date(localValue)
-			if (Number.isNaN(date.getTime())) {
-				return ''
-			}
-			return date.toISOString()
-		},
-
-		// Short, locale-aware label for a filter chip from a datetime-local value.
-		formatFilterDate(localValue) {
-			const date = new Date(localValue)
-			if (Number.isNaN(date.getTime())) {
-				return localValue
-			}
-			return date.toLocaleString()
-		},
-
-		// Remove a single active filter when its chip's close button is clicked.
-		removeFilter(chip) {
-			if (chip.kind === 'doc') {
-				this.toggleDocType(chip.value, false)
-			} else if (chip.kind === 'after') {
-				this.modifiedAfter = ''
-			} else if (chip.kind === 'before') {
-				this.modifiedBefore = ''
-			} else if (chip.kind === 'path') {
-				this.removeFolder(chip.value)
-			}
-			this.dateRangeError = null
-		},
-
-		// Remove a single selected folder from the path filter.
-		removeFolder(folder) {
-			this.pathPrefixes = this.pathPrefixes.filter((p) => p !== folder)
-		},
-
-		// Open the native Nextcloud folder picker and merge the chosen
-		// directories into the path filter. Picking from the user's own Files
-		// tree means every value is a valid, server-side path, so the filter
-		// can't silently match nothing because of a typo.
 		sarCaseUrl(suffix = '') {
 			return generateUrl('/apps/astrolabe/api/v1/sar/cases/{id}', { id: this.activeSarCase.id }) + suffix
 		},
@@ -1302,26 +920,6 @@ export default {
 			}
 		},
 
-		async pickFolders() {
-			const picker = getFilePickerBuilder(this.t('astrolabe', 'Select folders to search'))
-				.setMultiSelect(true)
-				.setMimeTypeFilter(['httpd/unix-directory'])
-				.setType(FilePickerType.Choose)
-				.allowDirectories(true)
-				.build()
-
-			// pick() rejects on cancel (normal — map to null, leaving the
-			// selection untouched). It resolves to the selected path(s): an array
-			// under multi-select, a single string otherwise; the guard below
-			// normalizes both into an array.
-			const picked = await picker.pick().catch(() => null)
-			const paths = Array.isArray(picked) ? picked : [picked]
-			const cleaned = paths
-				.map((p) => (p || '').trim())
-				.filter(Boolean)
-			this.pathPrefixes = [...new Set([...this.pathPrefixes, ...cleaned])]
-		},
-
 		/**
 		 * Run the search, or with `more` fetch the next page of a case search.
 		 *
@@ -1338,8 +936,8 @@ export default {
 			// ADR-027: validate the modified-date range client-side so an
 			// inverted range is caught in the browser, not after a round-trip.
 			// The server-side guard remains the authoritative backstop.
-			const modifiedAfter = this.toRfc3339(this.modifiedAfter)
-			const modifiedBefore = this.toRfc3339(this.modifiedBefore)
+			const modifiedAfter = toRfc3339(this.modifiedAfter)
+			const modifiedBefore = toRfc3339(this.modifiedBefore)
 			if (modifiedAfter && modifiedBefore
 				&& new Date(modifiedAfter) > new Date(modifiedBefore)) {
 				this.dateRangeError = this.t('astrolabe', '"Modified after" must be on or before "Modified before".')
@@ -1363,7 +961,6 @@ export default {
 				this.searched = true
 				this.coordinates = []
 				this.queryCoords = []
-				this.expandedExcerpts = {}
 				this.sarNextOffset = 0
 				this.sarLastQuery = queryText
 			}
@@ -1424,7 +1021,7 @@ export default {
 				// it can't zero out a non-file search. Folders are joined with a
 				// newline (which can't appear in a POSIX path, unlike a comma) and
 				// the backend ORs them together.
-				if (this.pathFilterApplicable && this.pathPrefixes.length) {
+				if (pathFilterApplicable(this.selectedDocTypes) && this.pathPrefixes.length) {
 					params.path_prefixes = this.pathPrefixes.join('\n')
 				}
 
@@ -1535,34 +1132,6 @@ export default {
 			this.performSearch()
 		},
 
-		toggleExcerpt(index) {
-			this.expandedExcerpts[index] = !this.expandedExcerpts[index]
-		},
-
-		truncateExcerpt(text, maxLength = 150) {
-			if (!text || text.length <= maxLength) {
-				return text
-			}
-			return text.substring(0, maxLength).trim() + '...'
-		},
-
-		// Tooltip for the relevance bar. Says plainly what the number is and,
-		// for the sources that are not probabilities, what it is not -- the bar
-		// alone would otherwise read as a confidence to anyone who has seen one
-		// before.
-		relevanceTitle(result) {
-			// this.t, not a bare t(): App.vue never imports it — main.js wires
-			// it onto globalProperties. A bare call would resolve only via
-			// Nextcloud's legacy l10n global, and since this runs from the
-			// template for every rendered row, its absence would throw during
-			// render rather than just return an untranslated string.
-			const pct = this.relevancePercent(result)
-			if (this.relevanceIsCalibrated(result)) {
-				return this.t('astrolabe', 'Relevance {pct}% — an estimated probability this result is relevant to your query. Relative to what was found: search always returns its best matches, even when nothing in your files answers the question.', { pct })
-			}
-			return this.t('astrolabe', 'Relevance {pct}% — ranks results against each other, but is not a probability on this server. A reranker configured on the server would make it a calibrated score.', { pct })
-		},
-
 		// Uncalibrated rows are normalised across this page's range (see
 		// displayRelevance); others show their own value, clamped rather than
 		// trusting the [0,1] contract: an out-of-range value
@@ -1570,15 +1139,6 @@ export default {
 		// >100% bar, which looks like a UI bug rather than a data problem.
 		relevancePercent(result) {
 			return Math.round(displayRelevance(result, this.uncalibratedRange) * 100)
-		},
-
-		getDocumentUrl(result) {
-			return documentUrl(result, generateUrl)
-		},
-
-		navigateToDocument(result) {
-			const url = this.getDocumentUrl(result)
-			window.open(url, '_blank')
 		},
 
 		goToSettings() {
@@ -1594,156 +1154,6 @@ export default {
 
 <style scoped lang="scss">
 @use './styles/section.scss';
-
-// Search card
-.mcp-search-card {
-	background: var(--color-background-hover);
-	border-radius: var(--border-radius-large);
-	padding: 20px;
-	margin-bottom: 24px;
-}
-
-.mcp-search-row {
-	display: flex;
-	gap: 12px;
-	align-items: flex-end;
-	flex-wrap: wrap;
-}
-
-.mcp-search-input {
-	width: 100%;
-	margin-bottom: 12px;
-
-	// `.mcp-search-input` lands on NcTextArea's wrapper div, so reach the real
-	// <textarea> to bound how far the vertical drag handle can grow it.
-	:deep(textarea) {
-		max-height: 320px;
-	}
-}
-
-.mcp-algorithm-select {
-	min-width: 150px;
-}
-
-.mcp-advanced-toggle {
-	margin-top: 12px;
-}
-
-.mcp-advanced-options {
-	margin-top: 16px;
-	padding-top: 16px;
-	border-top: 1px solid var(--color-border);
-}
-
-.mcp-advanced-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-	gap: 20px;
-}
-
-.mcp-option-group {
-	label {
-		display: block;
-		font-weight: 600;
-		margin-bottom: 8px;
-		color: var(--color-text-maxcontrast);
-	}
-}
-
-// Explanatory line under a control. Two of the relevance controls are easy to
-// confuse -- one filters the search, the other hides rows already returned --
-// so each says which it is rather than relying on the label alone.
-.mcp-option-hint {
-	margin: 6px 0 0;
-	font-size: 0.85em;
-	line-height: 1.4;
-	color: var(--color-text-maxcontrast);
-}
-
-.mcp-select {
-	width: 100%;
-	min-height: 34px;
-	padding: 4px 8px;
-	border: 2px solid var(--color-border-maxcontrast);
-	border-radius: var(--border-radius-large);
-	background-color: var(--color-main-background);
-	color: var(--color-main-text);
-}
-
-.mcp-checkbox-grid {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 8px;
-}
-
-// ADR-027 modified-date range inputs + folder picker + active-filter chips
-.mcp-date-input {
-	width: 100%;
-	padding: 6px 8px;
-	border: 2px solid var(--color-border-maxcontrast);
-	border-radius: var(--border-radius-large, 8px);
-	background-color: var(--color-main-background);
-	color: var(--color-main-text);
-
-	&:focus,
-	&:hover {
-		border-color: var(--color-primary-element);
-	}
-
-	&:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-}
-
-.mcp-path-hint {
-	display: block;
-	margin-top: 4px;
-	font-size: 0.8em;
-	color: var(--color-text-maxcontrast);
-}
-
-.mcp-date-error {
-	margin-top: 12px;
-}
-
-.mcp-active-filters {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	margin-top: 12px;
-}
-
-.mcp-filter-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	padding: 2px 4px 2px 12px;
-	border-radius: 16px;
-	background-color: var(--color-primary-element-light);
-	color: var(--color-primary-element-light-text);
-	font-size: 0.85em;
-}
-
-.mcp-filter-chip-close {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
-	padding: 0;
-	border: none;
-	border-radius: 50%;
-	background-color: transparent;
-	color: inherit;
-	cursor: pointer;
-
-	&:hover,
-	&:focus-visible {
-		background-color: var(--color-primary-element);
-		color: var(--color-primary-element-text);
-	}
-}
 
 // Loading and error states
 .mcp-slow-hint {
@@ -1805,158 +1215,6 @@ export default {
 	gap: 12px;
 }
 
-.mcp-result-item {
-	padding: 16px;
-	background: var(--color-background-hover);
-	border-radius: var(--border-radius-large);
-	border-inline-start: 4px solid var(--color-primary-element);
-	transition: transform 0.15s, box-shadow 0.15s;
-
-	&:hover {
-		transform: translateX(4px);
-		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-	}
-}
-
-.mcp-result-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 8px;
-}
-
-.mcp-result-type {
-	padding: 2px 8px;
-	border-radius: 10px;
-	font-size: 11px;
-	font-weight: 600;
-	text-transform: uppercase;
-	background: var(--color-primary-element-light);
-	color: var(--color-primary-element);
-}
-
-// Document type colors
-.mcp-doc-type-note {
-	border-inline-start-color: #1565c0;
-	.mcp-result-type { background: #e3f2fd; color: #1565c0; }
-}
-
-.mcp-doc-type-file {
-	border-inline-start-color: #2e7d32;
-	.mcp-result-type { background: #e8f5e9; color: #2e7d32; }
-}
-
-.mcp-doc-type-deck_card {
-	border-inline-start-color: #ef6c00;
-	.mcp-result-type { background: #fff3e0; color: #ef6c00; }
-}
-
-.mcp-doc-type-calendar {
-	border-inline-start-color: #c2185b;
-	.mcp-result-type { background: #fce4ec; color: #c2185b; }
-}
-
-.mcp-doc-type-contact {
-	border-inline-start-color: #7b1fa2;
-	.mcp-result-type { background: #f3e5f5; color: #7b1fa2; }
-}
-
-.mcp-doc-type-news_item {
-	border-inline-start-color: #00838f;
-	.mcp-result-type { background: #e0f7fa; color: #00838f; }
-}
-
-.mcp-doc-type-mail_message {
-	border-inline-start-color: #5e35b1;
-	.mcp-result-type { background: #ede7f6; color: #5e35b1; }
-}
-
-.mcp-result-title {
-	font-weight: 600;
-	font-size: 15px;
-	color: var(--color-main-text);
-	margin-bottom: 6px;
-	line-height: 1.4;
-	text-decoration: none;
-	display: block;
-
-	&:hover {
-		color: var(--color-primary-element);
-	}
-}
-
-.mcp-result-preview {
-	display: inline-block;
-	margin-bottom: 6px;
-}
-
-.mcp-result-preview img {
-	display: block;
-	max-width: 256px;
-	max-height: 256px;
-	border-radius: var(--border-radius-large);
-}
-
-a.mcp-result-title {
-	cursor: pointer;
-}
-
-.mcp-relevance {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 6px;
-}
-
-.mcp-relevance-bar {
-	flex: 0 0 96px;
-	height: 4px;
-	border-radius: 2px;
-	background: var(--color-background-darker);
-	overflow: hidden;
-}
-
-.mcp-relevance-fill {
-	height: 100%;
-	border-radius: 2px;
-	background: var(--color-primary-element);
-}
-
-.mcp-relevance-value {
-	font-size: 0.8em;
-	color: var(--color-text-maxcontrast);
-	font-variant-numeric: tabular-nums;
-}
-
-.mcp-result-metadata {
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-	margin-bottom: 6px;
-	line-height: 1.4;
-}
-
-.mcp-result-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.mcp-external-icon {
-	opacity: 0.5;
-	margin-inline-start: 4px;
-	vertical-align: middle;
-}
-
-.mcp-result-title:hover .mcp-external-icon {
-	opacity: 1;
-}
-
-.mcp-score-slider {
-	width: 100%;
-	margin-top: 8px;
-	accent-color: var(--color-primary-element);
-}
-
 // Navigation footer
 .app-navigation-entry__settings {
 	height: auto !important;
@@ -1965,21 +1223,6 @@ a.mcp-result-title {
 	padding: 3px;
 	padding-top: 0 !important;
 	margin: 0 3px;
-}
-
-@media (max-width: 768px) {
-	.mcp-search-row {
-		flex-direction: column;
-		align-items: stretch;
-	}
-
-	.mcp-algorithm-select {
-		min-width: 100%;
-	}
-
-	.mcp-checkbox-grid {
-		grid-template-columns: 1fr;
-	}
 }
 </style>
 

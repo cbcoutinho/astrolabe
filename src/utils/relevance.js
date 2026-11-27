@@ -7,6 +7,12 @@
 // cut on it is meaningless -- amazon.rerank-v1 puts good hits around 0.2.
 export const UNCALIBRATED = 'uncalibrated'
 
+// Only the calibrated source is a probability. `fusion_ordinal` orders results
+// honestly but is NOT one, and rendering it as a percentage would recreate the
+// exact bug the relevance work exists to remove -- just with a better-behaved
+// number behind it.
+export const isCalibrated = (r) => r.relevance_source === 'cross_encoder_calibrated'
+
 // For uncalibrated rows the cut and bars follow this, not `relevance`; the
 // server derives that from the same signal (a clamp), so the two agree in order.
 //
