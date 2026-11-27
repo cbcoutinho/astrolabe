@@ -6,17 +6,17 @@ name: Pact record deployment
 # tells the broker what `production` now contains.
 #
 # Trigger: called by bump-version.yml after the release job publishes. It
-# deliberately does NOT trigger on `push: tags: v*` — bump-version pushes tags
-# with GITHUB_TOKEN, and tags pushed with GITHUB_TOKEN do not trigger
-# workflows. It was originally wired that way and so only ever ran on the
-# hand-pushed v0.39.2 tag; `production` stayed empty for every later release.
+# deliberately does NOT trigger on `push: tags: v*`: that would fire before the
+# publish succeeded and record the bump commit's SHA. (It was originally wired
+# that way while tags were pushed with GITHUB_TOKEN, which triggers nothing, so
+# `production` stayed empty for every release after the hand-pushed v0.39.2.)
 #
 # Version identity: as a called workflow, ${{ github.sha }} is the caller's
 # triggering commit — the main commit that prompted the bump. That is the SHA
 # pact.yml published consumer pacts and provider verification results under.
-# The "bump: version ..." commit is pushed with GITHUB_TOKEN, so pact.yml never
-# runs on it and the broker has no pacts for it; recording it (or the tag
-# string) would leave can-i-deploy red.
+# Record that SHA, not the "bump: version ..." commit or the tag string: the
+# bump commit's pact.yml run races this job, so the broker may not have its
+# pacts yet, and the tag string has none at all.
 #
 # workflow_dispatch exists for a one-off bootstrap or repair: pass the main
 # commit that preceded the release's bump commit (the bump commit's parent).

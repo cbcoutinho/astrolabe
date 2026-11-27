@@ -79,11 +79,29 @@ jobs:
       # rejected non-fast-forward against the `main` the first attempt already
       # moved. The tag had to be pushed by hand. Atomically, a rejected tag
       # leaves `main` untouched and a re-run simply works.
+      #
+      # It goes over SSH with BUMP_DEPLOY_KEY: the default-branch ruleset only
+      # lets that deploy key push directly (GitHub Actions can't be a bypass actor
+      # on a personal account; homelab-terraform github-bump-deploy-keys.tf).
+      # Unlike GITHUB_TOKEN, a deploy-key tag push fires release.yml's
+      # `push: tags` trigger, so the tag is re-made annotated with the
+      # "bump-version pipeline" marker and release.yml skips marked tags —
+      # the release already runs below via workflow_call.
       - name: Push tags
         if: steps.bump.outputs.bumped == 'true'
         env:
           TAG: ${{ steps.bump.outputs.tag }}
-        run: git push --atomic origin "HEAD:refs/heads/main" "refs/tags/${TAG}"
+          BUMP_DEPLOY_KEY: ${{ secrets.BUMP_DEPLOY_KEY }}
+        run: |
+          # Fail before rewriting the tag rather than with an opaque ssh error.
+          [ -n "$BUMP_DEPLOY_KEY" ] || { echo "::error::BUMP_DEPLOY_KEY secret is not set"; exit 1; }
+          git tag -f -a "$TAG" -m "bump-version pipeline" HEAD
+          d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
+          printf '%s\n' "$BUMP_DEPLOY_KEY" > "$d/key"; chmod 600 "$d/key"
+          # GitHub's published host key (gh api meta .ssh_keys)
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$d/known_hosts"
+          GIT_SSH_COMMAND="ssh -i $d/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$d/known_hosts" \
+            git push --atomic "git@github.com:${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/main" "refs/tags/${TAG}"
 
       - name: Summary
         run: |
@@ -110,10 +128,10 @@ jobs:
     permissions:
       contents: write
 
-  # Called here rather than on `push: tags` because tags pushed with
-  # GITHUB_TOKEN do not trigger workflows (the same reason `release` is a
-  # workflow_call). Gated on `release` too: the record asserts "this version is
-  # in production", which is only true once the app store publish succeeded.
+  # Called here rather than on `push: tags` so it runs only after `release`
+  # and records the triggering commit's SHA (see pact-record-deployment.yml).
+  # Gated on `release` too: the record asserts "this version is in production",
+  # which is only true once the app store publish succeeded.
   pact-record-deployment:
     needs: [bump-version, release]
     if: needs.bump-version.outputs.bumped == 'true'
